@@ -48,7 +48,8 @@ public sealed record InstalledAppsLists(
             return new EmptyListNote(
                 EmptyListCause.Hidden,
                 "No stale entries in the list Windows shows",
-                $"{Count(hidden, "stale entry is", "stale entries are")} hidden. Turn on Show entries Windows hides to list hidden entries too.");
+                $"{Counted.Of(hidden, "stale entry is", "stale entries are")} hidden. "
+                + "Turn on Show entries Windows hides to list hidden entries too.");
         }
 
         if (!string.IsNullOrEmpty(filter) && reading.Entries.Any(e => e.IsStale))
@@ -76,8 +77,9 @@ public sealed record InstalledAppsLists(
         var hidden = reading.Entries.Count - listed.Count;
         var hiddenStale = reading.Entries.Count(e => !e.IsListed && e.IsStale);
 
-        var headline = $"{Count(stale, "stale entry", "stale entries")} and {Count(listed.Count - stale, "installed program", "installed programs")} "
-            + $"in the list Windows shows. {Count(hidden, "more entry is", "more entries are")} hidden"
+        var headline = $"{Counted.Of(stale, "stale entry", "stale entries")} and "
+            + $"{Counted.Of(listed.Count - stale, "installed program", "installed programs")} "
+            + $"in the list Windows shows. {Counted.Of(hidden, "more entry is", "more entries are")} hidden"
             + (hiddenStale > 0 ? $", {hiddenStale} of them stale." : ".");
 
         return reading.RefusedScopes.Count == 0
@@ -92,6 +94,4 @@ public sealed record InstalledAppsLists(
         || entry.Publisher?.Contains(filter, StringComparison.CurrentCultureIgnoreCase) == true
         || entry.Key.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)
         || entry.Command.Text.Contains(filter, StringComparison.OrdinalIgnoreCase);
-
-    private static string Count(int count, string one, string many) => count == 1 ? $"1 {one}" : $"{count} {many}";
 }

@@ -49,7 +49,7 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
         _volumes = volumes;
     }
 
-    public IReadOnlyList<string> KindNames { get; } = [.. Kinds.Select(ScanTuningText.MediaName)];
+    public IReadOnlyList<string> KindNames { get; } = (string[])[.. Kinds.Select(ScanTuningText.MediaName)];
 
     /// <summary>Index into the route combo box, ordered to match <see cref="ScanRoute"/>.</summary>
     public int RouteIndex
@@ -191,7 +191,7 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
     private void DescribeDrives() =>
         LiveList.Show(
             Drives,
-            [.. _drives.Select(drive => new DriveLine(drive.Drive, ScanTuningText.Describe(drive, Scanning)))],
+            (DriveLine[])[.. _drives.Select(drive => new DriveLine(drive.Drive, ScanTuningText.Describe(drive, Scanning)))],
             line => line.Drive);
 
     private ScanPreferences Scanning => _preferences.Current.Scanning;

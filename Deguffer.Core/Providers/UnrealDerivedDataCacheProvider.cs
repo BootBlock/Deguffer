@@ -246,7 +246,7 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
                 + $"{ZenServer} is running, and removing a Zen store's data under the server using it "
                 + "is not safe. Close "
                 + "the Unreal Editor, and stop Zen if it is set to keep running, then scan again to "
-                + $"include {(held.Count == 1 ? "it" : "them")}."));
+                + $"include {Counted.Form(held.Count, "it", "them")}."));
         }
 
         var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);

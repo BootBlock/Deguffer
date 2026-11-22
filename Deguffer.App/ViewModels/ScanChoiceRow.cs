@@ -38,7 +38,7 @@ public sealed partial class ScanChoiceRow : ObservableObject
         {
             if (value != _isChosen)
             {
-                _owner.Choose([Provider], value);
+                _owner.Choose((ICleanupProvider[])[Provider], value);
             }
         }
     }

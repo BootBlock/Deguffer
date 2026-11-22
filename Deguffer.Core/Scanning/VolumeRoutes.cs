@@ -135,11 +135,14 @@ internal sealed class VolumeRoutes(
                 ? await RaceAsync(asked, questions, keeps, driveLetter, building, running, ct).ConfigureAwait(false)
                 : FromIndex((await WaitAloneAsync(driveLetter, building, ct).ConfigureAwait(false)).Index, questions);
 
+            // The paths the table answered, reported together once its answers are in rather than one at a time.
+            var finished = new List<int>(questions.Count);
+
             for (var j = 0; j < questions.Count; j++)
             {
                 if (answered[j] is { } answer)
                 {
-                    running.Report(questions[j].Index, answer[0].Size);
+                    finished.Add(questions[j].Index);
                     results[questions[j].Index] = answer;
                 }
                 else
@@ -149,6 +152,8 @@ internal sealed class VolumeRoutes(
                     Walk(Declined(building.Result), questions[j].Index);
                 }
             }
+
+            running.Report(finished, i => results[i][0].Size);
         }
 
         foreach (var (reason, indexes) in walks)

@@ -130,7 +130,8 @@ internal static class SourceTreePlanNotes
     /// because they could not be confirmed" from a pluralised noun with a fixed pronoun, which is
     /// the sort of thing a developer never sees on a machine with more than one.
     /// </summary>
-    private static string Declined(int count, string directoryNames, string subject) => count == 1
-        ? $"Left 1 directory named {directoryNames} alone because it could not be confirmed as {subject}."
-        : $"Left {count} directories named {directoryNames} alone because they could not be confirmed as {subject}.";
+    private static string Declined(int count, string directoryNames, string subject) => Counted.Form(
+        count,
+        $"Left 1 directory named {directoryNames} alone because it could not be confirmed as {subject}.",
+        $"Left {count:N0} directories named {directoryNames} alone because they could not be confirmed as {subject}.");
 }

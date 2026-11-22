@@ -119,11 +119,12 @@ public sealed record CloseReport
 
             if (Moved > 0)
             {
-                sentence += Moved == 1
-                    ? " One of its windows had gone, or was no longer reported as this program's, by "
-                      + "the moment of posting, and received nothing."
-                    : $" {Moved} of its windows had gone, or were no longer reported as this "
-                      + "program's, by the moment of posting, and received nothing.";
+                sentence += Counted.Form(
+                    Moved,
+                    " One of its windows had gone, or was no longer reported as this program's, by "
+                    + "the moment of posting, and received nothing.",
+                    $" {Moved:N0} of its windows had gone, or were no longer reported as this "
+                    + "program's, by the moment of posting, and received nothing.");
             }
 
             return Verification.Passed
@@ -193,5 +194,5 @@ public sealed record CloseReport
     /// How many windows were asked, in words rather than as an "(s)": the count is the whole point of
     /// the sentence, and a program with three documents open asks about each in its own words.
     /// </summary>
-    private string Asked() => Windows == 1 ? "Its window was asked." : $"Each of its {Windows} windows was asked.";
+    private string Asked() => Counted.Form(Windows, "Its window was asked.", $"Each of its {Windows:N0} windows was asked.");
 }

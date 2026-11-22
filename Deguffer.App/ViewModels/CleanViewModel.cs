@@ -253,7 +253,7 @@ public sealed partial class CleanViewModel : ObservableObject
             if (SetProperty(ref _order, StorageRowOrder.Known(value)))
             {
                 var comparer = StorageRowOrder.Comparer(_order);
-                LiveList.Show(Findings, [.. Findings.OrderBy(OrderedRowOf, comparer)], row => row);
+                LiveList.Show(Findings, (FindingViewModel[])[.. Findings.OrderBy(OrderedRowOf, comparer)], row => row);
             }
         }
     }
@@ -760,7 +760,7 @@ public sealed partial class CleanViewModel : ObservableObject
             {
                 results = await Task.Run(
                     () => _planner.ExecuteAsync(
-                        [.. authorised, .. proving], confirmations, requireTypedPhrase, reporters, ct),
+                        (Finding[])[.. authorised, .. proving], confirmations, requireTypedPhrase, reporters, ct),
                     CancellationToken.None);
             }
             finally

@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Deguffer.Core.Choosing;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.Text;
 using Deguffer.Core.Viewing;
 
 namespace Deguffer.App.ViewModels;
@@ -35,7 +36,7 @@ public sealed partial class ItemListViewModel : ObservableObject, IDisposable
         Row = row;
         _ordered = ItemGroups.Of(row.Steps, step => step.Step);
         IsGrouped = _ordered.Any(group => group.Name is not null);
-        _headings = [.. _ordered.Select(group => new ItemGroupViewModel(row, group.Name))];
+        _headings = (ItemGroupViewModel[])[.. _ordered.Select(group => new ItemGroupViewModel(row, group.Name))];
 
         Present();
 
@@ -94,9 +95,9 @@ public sealed partial class ItemListViewModel : ObservableObject, IDisposable
     /// Said whenever the search hides a ticked item, because every one of them is still in the clean,
     /// and the shorter list on screen is exactly what would let a reader believe otherwise.
     /// </summary>
-    public string HiddenSelectionLabel => HiddenSelected == 1
-        ? "1 selected item is hidden by the search, and it is still in the clean."
-        : $"{HiddenSelected} selected items are hidden by the search, and they are still in the clean.";
+    public string HiddenSelectionLabel =>
+        $"{Counted.Of(HiddenSelected, "selected item is", "selected items are")} hidden by the search, "
+        + $"and {Counted.Form(HiddenSelected, "it is", "they are")} still in the clean.";
 
     public bool HasHiddenSelection => HiddenSelected > 0;
 
@@ -121,8 +122,8 @@ public sealed partial class ItemListViewModel : ObservableObject, IDisposable
             _headings[at].Show(each[at] ?? []);
         }
 
-        LiveList.Show(ShownItems, [.. each.SelectMany(items => items ?? [])], step => step);
-        LiveList.Show(Shown, [.. _headings.Where((_, at) => each[at] is not null)], heading => heading);
+        LiveList.Show(ShownItems, (StepViewModel[])[.. each.SelectMany(items => items ?? [])], step => step);
+        LiveList.Show(Shown, (ItemGroupViewModel[])[.. _headings.Where((_, at) => each[at] is not null)], heading => heading);
         OnPropertyChanged(nameof(HasNoMatches));
 
         // Each heading works out its own checkbox as it is shown, so what is left is the list's own.

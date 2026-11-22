@@ -349,9 +349,10 @@ public static class TempRoots
         // doing what the row says it does, and only the user can change it.
         return new PlanNote(
             PlanNoteSeverity.Warning,
-            (refused.Count == 1
-                ? "This machine points a temporary-folder setting at a folder Deguffer will not empty: "
-                : "This machine points temporary-folder settings at folders Deguffer will not empty: ")
+            Counted.Form(
+                refused.Count,
+                "This machine points a temporary-folder setting at a folder Deguffer will not empty: ",
+                "This machine points temporary-folder settings at folders Deguffer will not empty: ")
             + string.Join(" ", declined));
     }
 }

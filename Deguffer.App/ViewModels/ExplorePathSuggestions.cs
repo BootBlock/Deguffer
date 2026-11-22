@@ -79,7 +79,7 @@ public sealed class ExplorePathSuggestions
                 // Checked after each answer: an answer that lands as the reader types on is for text
                 // that is no longer in the box.
                 ct.ThrowIfCancellationRequested();
-                LiveList.Show(Rows, [.. suggestions.Select(suggestion => new PathSuggestionRow(suggestion))], row => row.Path);
+                LiveList.Show(Rows, (PathSuggestionRow[])[.. suggestions.Select(suggestion => new PathSuggestionRow(suggestion))], row => row.Path);
             }
         }
         catch (OperationCanceledException)

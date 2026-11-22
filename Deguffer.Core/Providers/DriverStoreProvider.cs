@@ -321,7 +321,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
             PlanNoteSeverity.Information,
             "Windows' own cleanup decides which older driver packages to remove, and keeps the newest "
             + "version of each driver and every driver a device is using. The figure is the "
-            + $"{DriverPackageNotes.Count(folders.Count, "older package")} Deguffer found with a newer version beside them, so Windows may "
+            + $"{Counted.Of(folders.Count, "older package", "older packages")} Deguffer found with a newer version beside them, so Windows may "
             + "remove a little more or less."));
 
         if (measured.Note is { } scanNote)

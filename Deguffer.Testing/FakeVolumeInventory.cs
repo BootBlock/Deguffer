@@ -86,6 +86,10 @@ public sealed class FakeVolumeInventory : IVolumeInventory
     /// <summary>
     /// Pretend the volume at <paramref name="rootPath"/> has been taken away. With
     /// <see cref="With"/> after it, the same volume read again with other figures.
+    ///
+    /// <para>That replacement is two steps, so a reading under way on another thread can find no
+    /// volume between them. A test with one under way moves the free space through
+    /// <see cref="FreeNow"/> instead.</para>
     /// </summary>
     public FakeVolumeInventory Without(string rootPath)
     {
@@ -213,7 +217,8 @@ public sealed class FakeVolumeInventory : IVolumeInventory
     /// The space of the volume <see cref="MountPointOf"/> answers for <paramref name="path"/>, as that
     /// volume stands at the call. A test that replaces the volume through <see cref="Without"/> and
     /// <see cref="With"/> is the machine's free space moving under a caller, which is what a clean
-    /// read either side of a run needs.
+    /// read either side of a run needs. <see cref="FreeNow"/> moves it without touching
+    /// <see cref="Volumes"/>, for a caller that also reads the list, or reads it on another thread.
     /// </summary>
     public (long Total, long Free)? SpaceOf(string path) =>
         MountPointOf(path) is { } mountPoint

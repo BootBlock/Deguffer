@@ -105,7 +105,7 @@ public sealed class StorageSizeChanges
         var largest = points.Count > 0 ? points.Max(point => point.Bytes) : 0;
 
         return
-        [
+        (ProviderSizeRow[])[
             .. points.Select((point, at) => new ProviderSizeRow(
                 Local(point.TakenUtc),
                 FreeSpace.Format(point.Size),

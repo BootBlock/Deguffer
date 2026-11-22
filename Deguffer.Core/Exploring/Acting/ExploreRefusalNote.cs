@@ -47,7 +47,8 @@ public static class ExploreRefusalNote
     /// which a large selection takes long enough over to be seen waiting. Said rather than left
     /// blank, because a blank note reads as nothing standing in the way.
     /// </summary>
-    public static string Asking(int count) => count == 1
-        ? "Deguffer is working out whether it may remove this."
-        : $"Deguffer is working out which of these {count} items it may remove.";
+    public static string Asking(int count) => Counted.Form(
+        count,
+        "Deguffer is working out whether it may remove this.",
+        $"Deguffer is working out which of these {count:N0} items it may remove.");
 }

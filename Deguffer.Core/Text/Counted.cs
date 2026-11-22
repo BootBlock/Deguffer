@@ -1,3 +1,5 @@
+using System.Numerics;
+
 namespace Deguffer.Core.Text;
 
 /// <summary>
@@ -6,5 +8,16 @@ namespace Deguffer.Core.Text;
 /// </summary>
 public static class Counted
 {
-    public static string Of(UInt128 count, string one, string many) => $"{count.ToString("N0", null)} {(count == 1 ? one : many)}";
+    /// <summary>"1 copy", "0 copies" or "1,234 copies".</summary>
+    public static string Of<T>(T count, string one, string many)
+        where T : IBinaryInteger<T> =>
+        $"{count.ToString("N0", null)} {Form(count, one, many)}";
+
+    /// <summary>
+    /// The word or phrase that agrees with <paramref name="count"/> where the count is not written beside
+    /// it: "is" or "are", "it" or "them", or a sentence whose singular words the number differently.
+    /// </summary>
+    public static string Form<T>(T count, string one, string many)
+        where T : IBinaryInteger<T> =>
+        count == T.One ? one : many;
 }

@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using Deguffer.App.Shell;
 using Deguffer.Core.Execution;
 using Deguffer.Core.InstalledApps;
+using Deguffer.Core.Text;
 using Deguffer.Core.Viewing;
 using Deguffer.Core.Working;
 using Microsoft.UI.Xaml.Controls;
@@ -293,9 +294,10 @@ public sealed partial class InstalledAppsActions : ObservableObject
     }
 
     private void ShowWaiting(UninstallStep step) => Show(
-        step.Count == 1
-            ? $"Waiting for the uninstaller of '{step.Item.Entry.Name}' to finish…"
-            : $"Waiting for the uninstaller of '{step.Item.Entry.Name}' to finish ({step.Number} of {step.Count})…",
+        Counted.Form(
+            step.Count,
+            $"Waiting for the uninstaller of '{step.Item.Entry.Name}' to finish…",
+            $"Waiting for the uninstaller of '{step.Item.Entry.Name}' to finish ({step.Number} of {step.Count})…"),
         InfoBarSeverity.Informational);
 
     /// <summary>Stop watching the uninstaller running, and start no more of the queue.</summary>

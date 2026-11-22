@@ -67,9 +67,10 @@ internal static class BundleRule
 
         return answers.FirstOrDefault(a => a.Verdict?.Standing is EntryStanding.Installed) is { Verdict: not null } installed ? installed
             : answers.FirstOrDefault(a => a.Verdict is not null) is { Verdict: not null } unproven ? unproven
-            : Gone.Proven(codes.Count == 1
-                ? "Windows Installer does not know the product this bundle installed"
-                : $"Windows Installer knows none of the {codes.Count} products this bundle installed");
+            : Gone.Proven(Counted.Form(
+                codes.Count,
+                "Windows Installer does not know the product this bundle installed",
+                $"Windows Installer knows none of the {codes.Count:N0} products this bundle installed"));
     }
 
     /// <summary>

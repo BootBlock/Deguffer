@@ -166,7 +166,7 @@ internal sealed class ListViewRows : IListRows
             e.CollectionChange == CollectionChange.ItemInserted
             && e.Index < sender.Count
             && sender[(int)e.Index] is ICollectionViewGroup { Group: { } group }
-                ? [group]
+                ? (object[])[group]
                 : [];
 
         Changed?.Invoke(arrived, Kind(e.CollectionChange));
@@ -193,7 +193,7 @@ internal sealed class ListViewRows : IListRows
     {
         IReadOnlyList<object> arrived =
             e.CollectionChange == CollectionChange.ItemInserted && e.Index < sender.Count && Row(sender[(int)e.Index]) is { } row
-                ? [row]
+                ? (object[])[row]
                 : [];
 
         Changed?.Invoke(arrived, Kind(e.CollectionChange));

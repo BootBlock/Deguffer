@@ -26,7 +26,7 @@ public sealed record ClosePrompt(string Title, string Consequence, string CloseW
         var (it, finishes) = RunningActionText.Agreement(running);
 
         return new ClosePrompt(
-            $"Close Deguffer while {what} {(running.Count == 1 ? "is" : "are")} running?",
+            $"Close Deguffer while {what} {Counted.Form(running.Count, "is", "are")} running?",
 
             $"Closing Deguffer now stops {what} part-way. Deguffer then cannot check what was changed "
             + $"or tell you what was done. Deguffer can close by itself as soon as {it} {finishes}.",

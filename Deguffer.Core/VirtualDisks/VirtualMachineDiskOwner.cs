@@ -86,7 +86,7 @@ public abstract record VirtualMachineDiskOwner(VirtualMachineRecord Machine, Mac
             null => $"Whether the machine has {Snapshot}s could not be read. Delete any it no longer needs first: "
                 + $"{DeleteSnapshots} {Compact}",
 
-            int count => $"The machine has {Count(count)}, and this disk is part of their chain, so never delete it "
+            int count => $"The machine has {Counted.Of(count, Snapshot, $"{Snapshot}s")}, and this disk is part of their chain, so never delete it "
                 + $"by itself. To make the machine smaller, delete the {Snapshot}s it no longer needs first: "
                 + $"{DeleteSnapshots} {Compact}",
         };
@@ -96,6 +96,4 @@ public abstract record VirtualMachineDiskOwner(VirtualMachineRecord Machine, Mac
 
     public sealed override string RouteInOneSentence(VirtualDisk disk) =>
         $"Deleting it breaks the machine, and the supported way to make it smaller is {RouteClause}.";
-
-    private string Count(int count) => count == 1 ? $"1 {Snapshot}" : $"{count} {Snapshot}s";
 }

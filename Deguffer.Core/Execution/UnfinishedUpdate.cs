@@ -68,7 +68,7 @@ internal static class UnfinishedUpdate
 
         return running.Count > 0
             ? $"Windows is installing an update now ({string.Join(", ", running)} "
-              + $"{(running.Count == 1 ? "is" : "are")} running), and these may be part of it. Scan again "
+              + $"{Counted.Form(running.Count, "is", "are")} running), and these may be part of it. Scan again "
               + "once it has finished."
             : null;
     }

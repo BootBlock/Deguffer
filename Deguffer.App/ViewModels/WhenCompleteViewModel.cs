@@ -25,7 +25,7 @@ public sealed partial class WhenCompleteViewModel : ObservableObject
         _preferences = preferences;
         _session = session;
         _offered = WhenCleanComplete.Offered(session.CanSleep, session.CanHibernate);
-        Labels = [.. _offered.Select(WhenCleanComplete.Label)];
+        Labels = (string[])[.. _offered.Select(WhenCleanComplete.Label)];
 
         // Not written back. A stored choice this machine does not offer is shown as Do nothing and
         // left on disk, so switching hibernation back on brings it back.

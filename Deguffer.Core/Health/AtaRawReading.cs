@@ -1,5 +1,4 @@
 using Deguffer.Core.Health.Parsing;
-using Deguffer.Core.Text;
 
 namespace Deguffer.Core.Health;
 
