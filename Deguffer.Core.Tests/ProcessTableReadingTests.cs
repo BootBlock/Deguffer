@@ -156,7 +156,7 @@ public sealed class ProcessTableReadingTests : IDisposable
         Assert.Equal(2, calls.ListCount);
     }
 
-    /// <summary>A read that failed is not kept: the next question reads again, as before a reading was a task.</summary>
+    /// <summary>A read that failed is not kept: the next question reads again.</summary>
     [Fact]
     public void AFailedReadIsNotKept()
     {
@@ -182,7 +182,9 @@ public sealed class ProcessTableReadingTests : IDisposable
                 WhileOpening = () =>
                 {
                     _opening.Set();
-                    _release.Wait(Patience);
+                    // Longer than any test waits, so a test whose asker is held behind the read times
+                    // out while the read is still held, rather than after it gave up.
+                    _release.Wait(Patience * 3);
                 },
             })
             .With(new FakeListedProcess { Id = 4601, Name = "shell" });

@@ -281,12 +281,12 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
     ///
     /// <para><b>The lock hands out the reading, and nobody reads under it.</b> The reading is a task,
     /// started by the first to ask (a planning pass starts it at its top, through
-    /// <see cref="ReadingAsync"/>), and everyone who asks while it runs waits for that one task. Read
-    /// under the lock, as it once was, every other asker held a thread on the lock for the whole
-    /// read, and <see cref="Invalidate"/> and <see cref="Reach"/> waited behind it too.</para>
+    /// <see cref="ReadingAsync"/>), and everyone who asks while it runs waits for that one task. A read
+    /// under the lock would hold every other asker on the lock for the whole read, and
+    /// <see cref="Invalidate"/> and <see cref="Reach"/> behind it too.</para>
     ///
     /// <para><b>A reading that failed or was stopped is not kept</b>, so the next question reads
-    /// again, as it did when a failed read was never stored. One stopped by the token of whoever
+    /// again rather than being handed the same failure. One stopped by the token of whoever
     /// started it, and not by this asker's, is read again for this asker.</para>
     /// </summary>
     private async Task<(ProcessTable Table, LiveTreeMatch Match, long Number)> SnapshotAsync(CancellationToken ct)

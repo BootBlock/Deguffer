@@ -101,10 +101,11 @@ internal static class RunningProcessTable
     /// <para>Each read is a handful of kernel calls (an open, a memory read, an image path and a
     /// command line), and one after another a table of 774 processes took 65 to 99 ms on one machine,
     /// and 151 to 219 ms inside a planning pass. The calls wait on the kernel rather than on one
-    /// disk, so the bound is the processors, never more than eight, because past that the
-    /// table is a few milliseconds and more threads only contend with the rows planning beside it.</para>
+    /// disk, so the bound is the processors, and never more than eight, the number of rows a pass
+    /// plans at once (<see cref="Execution.CleanupPlanner.ProvidersAtOnce"/>), whose own work the read
+    /// runs beside.</para>
     /// </summary>
-    internal static readonly int ProcessesAtOnce = Math.Clamp(Environment.ProcessorCount, 1, 8);
+    internal static readonly int ProcessesAtOnce = Math.Clamp(Environment.ProcessorCount, 1, Execution.CleanupPlanner.ProvidersAtOnce);
 
     public static ProcessTable Read(IProcessTableCalls calls, CancellationToken ct = default) =>
         Read(calls, ProcessesAtOnce, ct);
