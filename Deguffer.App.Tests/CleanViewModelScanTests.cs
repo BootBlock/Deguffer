@@ -35,13 +35,21 @@ public class CleanViewModelScanTests
 
     /// <summary>
     /// §5.5: while a provider measures, the bar names it with the bytes it has counted so far, as the
-    /// planner reports them, so a long walk shows something moving.
+    /// planner reports them, so a long walk shows something moving. The planner posts the line by time,
+    /// so the clock moves an interval while the provider is still being checked, and the bar shows the
+    /// latest figure.
     /// </summary>
     [Fact]
     public void TheBarShowsWhatAProviderHasCountedWhileItIsChecked()
     {
-        var cache = new FakeCleanupProvider("cache") { Counted = [1024, 3 * 1024] };
-        using var page = new StoragePage([cache]);
+        var clock = new ManualTimeProvider();
+        var cache = new FakeCleanupProvider("cache")
+        {
+            Counted = [1024, 3 * 1024],
+            // Longer than the interval the planner posts its line at, which is Core's own.
+            WhilePlanning = () => clock.Advance(TimeSpan.FromSeconds(1)),
+        };
+        using var page = new StoragePage([cache], time: clock);
         var statuses = new List<string>();
         page.ViewModel.PropertyChanged += (_, changed) =>
         {
@@ -53,7 +61,6 @@ public class CleanViewModelScanTests
 
         page.Scan();
 
-        Assert.Contains($"Checking cache ({FreeSpace.Format(1024)} counted so far)…", statuses);
         Assert.Contains($"Checking cache ({FreeSpace.Format(3 * 1024)} counted so far)…", statuses);
     }
 

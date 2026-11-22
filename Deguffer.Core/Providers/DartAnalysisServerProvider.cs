@@ -142,12 +142,12 @@ public sealed class DartAnalysisServerProvider : CleanupProviderBase
         }
 
         var walk = CacheLevelWalk.Under(Levels, _root, ct);
-
-        var spared = await walk.SurvivorsAsync(_declarations, ct).ConfigureAwait(false);
-
-        List<PlanNote> notes = [.. walk.Notes, .. spared.Select(CacheLevelWalk.SparedNote)];
+        var sparing = walk.SurvivorsAsync(_declarations, ct);
 
         var (steps, measured) = await PlanDeletionsAsync(walk.Targets, keep, ct).ConfigureAwait(false);
+        var spared = await sparing.ConfigureAwait(false);
+
+        List<PlanNote> notes = [.. walk.Notes, .. spared.Select(CacheLevelWalk.SparedNote)];
 
         if (measured.Note is { } scanNote)
         {

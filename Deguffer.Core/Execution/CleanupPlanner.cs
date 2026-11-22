@@ -257,7 +257,7 @@ public sealed class CleanupPlanner
         ProtectionScope scope)
     {
         // Every row that offers an entry of a temporary folder under the name of the tool that wrote
-        // it, built first so the "Temporary files" row can leave those entries to them.
+        // it, built and listed first so the "Temporary files" row can leave those entries to them.
         // They share one listing of each folder they examine, on the reasoning of the shared discoveries
         // CreateDefault builds: the caches, installer downloads and logs rows each start from the
         // temporary folders themselves, which hold tens of thousands of entries on a developer's machine,
@@ -396,13 +396,14 @@ public sealed class CleanupPlanner
             new FileHistoryProvider(environment, preferences: preferences, scanner: scanner),
             new CloudLocalCopiesProvider(CloudFiles.Default, environment, scanner: scanner, tuning: tuning),
             new DropboxCacheProvider(environment, scanner: scanner),
+            installerDownloads,
+            toolLogs,
             new TempDirectoryProvider(
                 environment,
                 liveTrees: liveTrees,
                 preferences: preferences,
                 tenants: [nuget, toolCaches, installerDownloads, toolLogs, testBrowsers, afterEffects, claudeSnapshots, microsoftSymbols, otherSymbols],
                 scanner: scanner),
-            installerDownloads,
             new DeliveryOptimizationProvider(environment, scanner: scanner),
             new PreviousWindowsInstallationProvider(handlers, environment, scanner: scanner),
             new UpgradeDiscardedFilesProvider(handlers, environment, scanner: scanner),
@@ -418,7 +419,6 @@ public sealed class CleanupPlanner
             new BattleNetLogProvider(environment, scanner: scanner),
             new VsCodeLogProvider(environment, declarations: declarations, scanner: scanner),
             new ClaudeCodeMcpLogProvider(environment, scanner: scanner),
-            toolLogs,
             new ClaudeCodeFileHistoryProvider(environment, sessions: claudeSessions, scanner: scanner),
             new ClaudeCodeConversationProvider(environment, projects: claudeProjects, sessions: claudeSessions, scanner: scanner, scope: scope),
             new VirtualDiskProvider(SystemDirectories.Current, environment, scanner: scanner),
@@ -557,7 +557,7 @@ public sealed class CleanupPlanner
             // The account's folders are followed to their mounts once for the pass.
             var terms = new PassTerms(registrars, AnotherAccountPlan.For(_account, _volumes), keep);
 
-            using var pass = new PlanningPass(providers, terms, _volumes, clock, start, ct);
+            using var pass = new PlanningPass(providers, terms, _volumes, _time, clock, start, ct);
             return await pass.RunAsync(status, found, timed).ConfigureAwait(false);
         }
         finally

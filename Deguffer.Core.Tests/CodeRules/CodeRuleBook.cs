@@ -173,6 +173,13 @@ internal static class CodeRuleBook
             "Await it, or hand it to the type that records a fault, so a failure is never lost.",
             "_ = ViewModel.RefreshAsync();"),
         new(
+            "survivors-are-awaited-after-measuring",
+            Pattern(@"\bawait\s+[\w.?!]*\b(?:SurvivorsAsync|UnofferedAsync)\s*\("),
+            SourceView.Code,
+            [Core],
+            "Start the question as a task where the walk exists, measure, then await it where the plan reads it: the first one in a pass reads every row's declarations (G4).",
+            "var spared = await walk.SurvivorsAsync(_declarations, ct);"),
+        new(
             "selection-is-not-an-enum-ordinal",
             Pattern(@"(?:(?<![\w)\]]\s*)|\breturn\s+)\(\s*[A-Z]\w*\s*\)\s*[\w.]*\.\s*SelectedIndex\b|\bSelectedIndex\s*=\s*\(\s*int\s*\)"),
             SourceView.Code,

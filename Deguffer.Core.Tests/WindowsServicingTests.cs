@@ -95,7 +95,9 @@ public sealed class WindowsServicingTests
     [InlineData(@"C:")]
     public void TheRealHostRefusesAnythingButTheTopOfADrive(string volume)
     {
-        var outcome = DiskCleanupHandlers.Default.Run(NeverRegistered, volume, CancellationToken.None);
+        using var mayPurge = new PurgeDecision();
+        mayPurge.Decide(true);
+        var outcome = DiskCleanupHandlers.Default.Run(NeverRegistered, volume, mayPurge, CancellationToken.None);
 
         Assert.False(outcome.Ran);
         Assert.Contains("not the top of a drive", outcome.Message, StringComparison.Ordinal);

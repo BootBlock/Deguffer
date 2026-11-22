@@ -208,7 +208,7 @@ public sealed class PlanExecutor(
         CancellationToken ct)
     {
         var step = run.Plan.Steps[index];
-        var clock = new StepClock(_time);
+        var clock = new StepClock(_time, _fileSystem);
         StepOutcome outcome;
 
         // A step that does not act from its start marks the part of itself that does. See ActsFromItsStart.
