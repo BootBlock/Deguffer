@@ -15,14 +15,33 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTenant
 {
+    /// <summary>NuGet's locations as the memory gives them, for the plan, Explore and the duplicate search.</summary>
     private readonly PassMemo<Task<NuGetLocals>> _resolvedLocals = new();
 
+    /// <summary>NuGet's locations asked of NuGet now, for the temporary-folder row's claim.</summary>
+    private readonly PassMemo<Task<NuGetLocals>> _askedLocals = new();
+
+    private readonly ISystemDirectories _systemDirectories;
+    private readonly ToolAnswerMemory _memory;
+
+    /// <param name="environment">The profile, the PATH and the variables <c>dotnet</c> is started with.</param>
+    /// <param name="runner">Starts <c>dotnet</c>.</param>
+    /// <param name="inspector">Tells whether Visual Studio, MSBuild or the compiler server is running.</param>
+    /// <param name="scanner">Measures the caches.</param>
+    /// <param name="volumes">The volumes a location NuGet reports may be reached through.</param>
+    /// <param name="systemDirectories">Where the machine-wide NuGet configuration is.</param>
+    /// <param name="memory">
+    /// Where NuGet's answer about its locations is kept while nothing it read has changed: the memory
+    /// for <paramref name="runner"/> when null, which is the process-wide one for the real runner.
+    /// </param>
     public NuGetCacheProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
-        IVolumeInventory? volumes = null)
+        IVolumeInventory? volumes = null,
+        ISystemDirectories? systemDirectories = null,
+        ToolAnswerMemory? memory = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
@@ -30,6 +49,8 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
             scanner,
             volumes: volumes)
     {
+        _systemDirectories = systemDirectories ?? SystemDirectories.Current;
+        _memory = memory ?? ToolAnswerMemory.For(runner);
     }
 
     public override string Id => "nuget";
@@ -132,21 +153,22 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
         Task.FromResult(Environment.FindExecutable("dotnet") is not null);
 
     /// <summary>
-    /// The locals NuGet reports are configuration — <c>NUGET_PACKAGES</c>, <c>NUGET_HTTP_CACHE_PATH</c>
-    /// and a <c>NuGet.Config</c> edit all move them, and a globalPackagesFolder can change between one
-    /// scan and the next. Keeping the resolved list across an invalidation would measure locations
-    /// NuGet has stopped using and miss the ones it now does.
+    /// The locals NuGet reports are configuration: <c>NUGET_PACKAGES</c>, <c>NUGET_HTTP_CACHE_PATH</c>
+    /// and a <c>NuGet.Config</c> edit all move them between one scan and the next, so the pass's answers
+    /// are forgotten. The memory behind them keeps NuGet's answer only while everything NuGet read to
+    /// give it (<see cref="NuGetInputs"/>) reads the same, and the claim asks NuGet afresh regardless.
     /// </summary>
     public override void InvalidateCaches()
     {
         _resolvedLocals.Forget();
+        _askedLocals.Forget();
         base.InvalidateCaches();
     }
 
     /// <summary>
     /// NuGet's list of its cache locations, asked as the pass begins: <c>dotnet nuget</c> starts the .NET
-    /// SDK and loads NuGet's command assemblies before it answers, which is most of this row's wait. The
-    /// temporary-folder row asks for the same list.
+    /// SDK and loads NuGet's command assemblies before it answers, which is most of this row's wait
+    /// wherever the memory cannot answer.
     /// </summary>
     public override Task BeginPass(PassStart start) =>
         start.Ask(ct => Environment.FindExecutable("dotnet") is { } dotnet ? ResolveLocalsAsync(dotnet, ct) : Task.CompletedTask);
@@ -160,6 +182,10 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
     /// reports the temporary folder the way its own process sees it, which on a profile with a long
     /// folder name is the 8.3 short form, and <c>NUGET_SCRATCH</c> may name it through a letter
     /// <c>subst</c> made, or another mount of its volume.</para>
+    ///
+    /// <para><b>Asked of NuGet afresh, whatever the memory holds.</b> A claim spares an entry from the
+    /// temporary-folder row's path-based deletion, so an input the memory missed would move what that
+    /// row deletes (§5.2) rather than misstate a figure.</para>
     /// </summary>
     public async Task<IReadOnlyList<string>> ClaimedEntriesAsync(
         IReadOnlyList<string> folders,
@@ -172,7 +198,7 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
             return [];
         }
 
-        var locals = (await ResolveLocalsAsync(dotnet, ct).ConfigureAwait(false)).Paths;
+        var locals = (await AskLocalsAfreshAsync(dotnet, ct).ConfigureAwait(false)).Paths;
         var holders = locals
             .Select(local => (Local: local, Parent: Path.GetDirectoryName(local)))
             .Where(local => local.Parent is not null)
@@ -324,37 +350,26 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
             .Select(child => (child.Path, child.Reason));
     }
 
-    private Task<NuGetLocals> ResolveLocalsAsync(string dotnet, CancellationToken ct) =>
-        _resolvedLocals.Get(() => ListLocalsAsync(dotnet, ct));
-
     /// <summary>
-    /// Ask NuGet where its caches are. Output lines look like
-    /// <c>global-packages: C:\Users\me\.nuget\packages\</c>.
+    /// The plan only sends NuGet its own clear (§5.1), so it may plan from a remembered answer: a missed
+    /// input there misstates the figure and the survivors it asserts, and never moves what is removed.
     /// </summary>
-    private async Task<NuGetLocals> ListLocalsAsync(string dotnet, CancellationToken ct)
+    private Task<NuGetLocals> ResolveLocalsAsync(string dotnet, CancellationToken ct) =>
+        _resolvedLocals.Get(() => _memory.AskAsync(LocalsQuestion(dotnet), ct));
+
+    private Task<NuGetLocals> AskLocalsAfreshAsync(string dotnet, CancellationToken ct) =>
+        _askedLocals.Get(() => _memory.AskAfreshAsync(LocalsQuestion(dotnet), ct));
+
+    private ToolQuestion<NuGetLocals> LocalsQuestion(string dotnet)
     {
-        var outcome = await Runner.RunAsync(dotnet, "nuget locals all --list", ToolRun.Query, ct).ConfigureAwait(false);
+        var inputs = NuGetInputs.Of(dotnet, Environment, _systemDirectories);
 
-        var parsed = new List<string>();
-        if (outcome.Succeeded)
-        {
-            foreach (var line in outcome.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-            {
-                var separator = line.IndexOf(':');
-                if (separator < 0)
-                {
-                    continue;
-                }
-
-                var value = line[(separator + 1)..].Trim();
-                if (Path.IsPathRooted(value))
-                {
-                    parsed.Add(value.TrimEnd('\\', '/'));
-                }
-            }
-        }
-
-        return parsed.Count > 0 ? new(parsed, Answered: true) : new(DefaultLocals(), Answered: false);
+        return new ToolQuestion<NuGetLocals>(
+            $"nuget locals all --list|{dotnet}",
+            Environment.ToolEnvironment,
+            _ => inputs,
+            static locals => locals.Answered,
+            askCt => NuGetLocals.AskAsync(Runner, dotnet, DefaultLocals(), askCt));
     }
 
     /// <summary>Documented defaults, used only when NuGet declines to tell us.</summary>
@@ -365,13 +380,4 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
         Path.Combine(Environment.LocalAppData, "NuGet", "plugins-cache"),
         Path.Combine(Environment.TempPath, "NuGetScratch"),
     ];
-
-    /// <summary>Where NuGet keeps its caches, and whether NuGet itself is what said so.</summary>
-    /// <param name="Paths">Every location, in the order NuGet listed them. Never empty.</param>
-    /// <param name="Answered">
-    /// False when <c>nuget locals all --list</c> failed or listed no rooted path, in which case
-    /// <paramref name="Paths"/> are the documented defaults, and the plan says so: see
-    /// <see cref="AskedLocation"/> for why the difference reaches the user.
-    /// </param>
-    private sealed record NuGetLocals(IReadOnlyList<string> Paths, bool Answered);
 }

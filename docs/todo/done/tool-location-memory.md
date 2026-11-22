@@ -1,7 +1,7 @@
 # Remembering where a tool keeps its cache
 
-> **Status:** ✅ COMPLETE — every stage below landed for #447. PlatformIO joins under #1053 once
-> #591 has changed what its query reads.
+> **Status:** ✅ COMPLETE — every stage below landed for #447, and uv and NuGet joined under #1059.
+> PlatformIO joins under #1053 once #591 has changed what its query reads.
 
 ## The decision
 
@@ -46,7 +46,11 @@ of these tools again (`scan-progress.md` §4: conda about 0.9-1.0 s, npm 0.4-0.6
   ask afresh when they plan, and store the fresh answer. Only their Explore declarations and their
   `CleanedPlacesAsync` read the memory. A missed input there cannot move a deletion (§5.2).
 - **Rows that run the tool's own command** (§5.1) may plan from the memory: a missed input there only
-  misstates the figure.
+  misstates the figure. uv is the exception (#1059): its plan checks the cache against uv's tools and
+  interpreters before it sends `uv cache clean`, which removes the whole cache folder, so a missed
+  input could let a moved cache past that check. Its plan asks afresh.
+- **An answer that spares something from another row's deletion** asks afresh too: NuGet's claim on
+  `NuGetScratch`, which the Temporary files row then leaves alone (#1059).
 
 ## Inventories
 
@@ -63,8 +67,12 @@ inherits Deguffer's own start-up environment, which the fingerprint compares who
 | pnpm | the shim; `node.exe`; `node_modules\pnpm\package.json`; Corepack's home listing | `%LOCALAPPDATA%\pnpm\config\{rc, config.yaml, auth.ini}` (or under `%XDG_CONFIG_HOME%`); `~\.npmrc`; `.npmrc`, `pnpm-workspace.yaml` and `package.json` in each folder up | `globalconfig` (asked beside `store path` on a miss) |
 | Yarn 1 | the shim; `node.exe`; `node_modules\yarn\package.json`; Corepack's home listing | `.yarnrc`, `.npmrc` and `package.json` in each folder up; `~\.yarnrc`, `~\.npmrc`; `%LOCALAPPDATA%\Yarn\Config`; `~\.config\yarn`; `%YARN_CONFIG%` | `yarn-path` (asked beside `yarn -v`) |
 | Yarn Berry | as Yarn 1 | `.yarnrc.yml` (or `%YARN_RC_FILENAME%`), `package.json` and `yarn.lock` in each folder up; `~\.yarnrc.yml` | `yarnPath` (asked beside `yarn -v`) |
+| uv (#1059) | the executable; the presence of `%APPDATA%\uv\data` (the legacy state folder) | `uv.toml` and `pyproject.toml` in each folder up; `uv.toml` in `%APPDATA%\uv`, under both the `APPDATA` uv is started with and the account's own; `%SYSTEMDRIVE%\ProgramData\uv\uv.toml`; `%UV_CONFIG_FILE%` | |
+| NuGet (#1059) | the `dotnet` host; the `sdk` listing beside it; `global.json` in each folder up | `NuGet.Config` in each folder up; `%APPDATA%\NuGet\NuGet.Config`; the `%APPDATA%\NuGet\config` and `%ProgramFiles(x86)%\NuGet\Config` listings | |
 
-PlatformIO joins under #1053, once #591 has changed what its query reads.
+uv's sources were observed with uv 0.11 against a fake profile: it reads `APPDATA` and `SYSTEMDRIVE`
+from its environment, and ignores `XDG_CONFIG_HOME` on Windows. PlatformIO joins under #1053, once
+#591 has changed what its query reads.
 
 ## Stages
 

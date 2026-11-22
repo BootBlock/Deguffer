@@ -14,19 +14,35 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 public sealed class UvCacheProvider : CleanupProviderBase
 {
+    /// <summary>uv's answers as the memory gives them, for Explore and the duplicate search.</summary>
     private readonly PassMemo<Task<UvStorage>> _storage = new();
 
+    /// <summary>uv's answers asked of uv now, for the plan.</summary>
+    private readonly PassMemo<Task<UvStorage>> _askedStorage = new();
+
+    private readonly ToolAnswerMemory _memory;
+
+    /// <param name="environment">The profile, the PATH and the variables uv is started with.</param>
+    /// <param name="runner">Starts uv.</param>
+    /// <param name="inspector">Tells whether uv is running.</param>
+    /// <param name="scanner">Measures the cache.</param>
+    /// <param name="memory">
+    /// Where uv's answers about its folders are kept while nothing it read has changed: the memory for
+    /// <paramref name="runner"/> when null, which is the process-wide one for the real runner.
+    /// </param>
     public UvCacheProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        ToolAnswerMemory? memory = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner)
     {
+        _memory = memory ?? ToolAnswerMemory.For(runner);
     }
 
     public override string Id => "uv";
@@ -147,12 +163,14 @@ public sealed class UvCacheProvider : CleanupProviderBase
 
     /// <summary>
     /// Every folder uv reports is configuration, which <c>UV_CACHE_DIR</c>, <c>UV_TOOL_DIR</c> and
-    /// <c>UV_PYTHON_INSTALL_DIR</c> can move between one scan and the next. Keeping them across an
-    /// invalidation would measure and protect locations uv has stopped using.
+    /// <c>UV_PYTHON_INSTALL_DIR</c> can move between one scan and the next, so the pass's answers are
+    /// forgotten. The memory behind them keeps uv's answers only while everything uv read to give them
+    /// (<see cref="UvInputs"/>) reads the same, and the plan asks uv afresh regardless.
     /// </summary>
     public override void InvalidateCaches()
     {
         _storage.Forget();
+        _askedStorage.Forget();
         base.InvalidateCaches();
     }
 
@@ -161,7 +179,7 @@ public sealed class UvCacheProvider : CleanupProviderBase
     /// cannot check the cache against the other two until all three uv processes have answered.
     /// </summary>
     public override Task BeginPass(PassStart start) =>
-        start.Ask(ct => Environment.FindExecutable("uv") is { } uv ? ResolveStorageAsync(uv, ct) : Task.CompletedTask);
+        start.Ask(ct => Environment.FindExecutable("uv") is { } uv ? AskStorageAfreshAsync(uv, ct) : Task.CompletedTask);
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
@@ -171,7 +189,7 @@ public sealed class UvCacheProvider : CleanupProviderBase
             return EmptyPlan("uv is not installed on this machine.");
         }
 
-        var storage = await ResolveStorageAsync(uv, ct).ConfigureAwait(false);
+        var storage = await AskStorageAfreshAsync(uv, ct).ConfigureAwait(false);
         var located = storage.Cache;
         var cacheDirectory = located.Path;
 
@@ -229,27 +247,60 @@ public sealed class UvCacheProvider : CleanupProviderBase
         };
     }
 
+    /// <summary>
+    /// uv's answers as the memory holds them while nothing uv read has changed, for what Explore refuses
+    /// and what a duplicate search leaves to uv.
+    /// </summary>
     private Task<UvStorage> ResolveStorageAsync(string uv, CancellationToken ct) =>
-        _storage.Get(() => AskStorageAsync(uv, ct));
+        _storage.Get(() => AskStorageAsync(uv, _memory.AskAsync, ct));
+
+    /// <summary>
+    /// uv's answers asked of uv now, once a pass, and then remembered: for the plan, whose check of the
+    /// cache against uv's own folders (<see cref="UvStorage.CacheConflict"/>) is what keeps
+    /// <c>uv cache clean</c>, which removes the whole cache folder, from taking the tools and
+    /// interpreters with it. An input the memory missed would let a moved cache past that check (§5.2)
+    /// rather than misstate a figure.
+    /// </summary>
+    private Task<UvStorage> AskStorageAfreshAsync(string uv, CancellationToken ct) =>
+        _askedStorage.Get(() => AskStorageAsync(uv, _memory.AskAfreshAsync, ct));
 
     /// <summary>
     /// The three folders uv can report, asked at once, and the documented layout behind each. The
     /// legacy state folder is probed only to choose the default, so a refusal keeps both candidates.
     /// </summary>
-    private async Task<UvStorage> AskStorageAsync(string uv, CancellationToken ct)
+    /// <param name="ask">How each folder is asked: the memory's answer where it still holds, or uv now.</param>
+    private async Task<UvStorage> AskStorageAsync(
+        string uv,
+        Func<ToolQuestion<AskedLocation>, CancellationToken, Task<AskedLocation>> ask,
+        CancellationToken ct)
     {
+        // One reading for the block the answers are compared by and the variables naming uv's
+        // configuration, so the two can never describe different moments.
+        var variables = Environment.ToolEnvironment;
+        var inputs = UvInputs.Of(uv, Environment, variables);
         var stateRoots = UvStorage.StateRootsFor(
             RoamingRoot, LongPath.ProbeDirectory(UvStorage.LegacyStateRoot(RoamingRoot)));
-        var cache = AskAsync(uv, "cache dir", DefaultCacheDirectory, ct);
-        var tools = AskAsync(uv, "tool dir", Path.Combine(stateRoots[0], "tools"), ct);
-        var python = AskAsync(uv, "python dir", Path.Combine(stateRoots[0], "python"), ct);
+        var cache = AskOneAsync("cache dir", DefaultCacheDirectory);
+        var tools = AskOneAsync("tool dir", Path.Combine(stateRoots[0], "tools"));
+        var python = AskOneAsync("python dir", Path.Combine(stateRoots[0], "python"));
 
         await Task.WhenAll(cache, tools, python).ConfigureAwait(false);
 
         return new UvStorage(await cache, await tools, await python, stateRoots, LocalRoot, RoamingRoot);
+
+        // One question per folder, so a uv that answers one and not another still has the ones it gave
+        // kept. The default a failed query falls back to is never kept.
+        Task<AskedLocation> AskOneAsync(string query, string fallback) => ask(
+            new ToolQuestion<AskedLocation>(
+                $"{query} --color never|{uv}",
+                variables,
+                _ => inputs,
+                static located => located.Answered,
+                askCt => QueryAsync(uv, query, fallback, askCt)),
+            ct);
     }
 
-    private async Task<AskedLocation> AskAsync(string uv, string query, string fallback, CancellationToken ct)
+    private async Task<AskedLocation> QueryAsync(string uv, string query, string fallback, CancellationToken ct)
     {
         // --color never because uv colourises a path when it thinks it is writing to a terminal, and
         // the escape sequences would land inside the parsed path.

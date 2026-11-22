@@ -84,8 +84,18 @@ is used only to measure what the command will free. Where NuGet gives no answer,
 the documented defaults, and NuGet's own command still clears wherever its caches really are. A
 location it cannot reach is named in the plan and left out of the figure.
 
+Deguffer remembers where NuGet said its caches are until one of these changes, and then asks again:
+the `dotnet.exe` it runs, the SDKs installed beside it, a `global.json` or `NuGet.Config` in the
+folder Deguffer runs tools in or any folder above it, `%APPDATA%\NuGet\NuGet.Config`, the files in
+`%APPDATA%\NuGet\config` and `%ProgramFiles(x86)%\NuGet\Config`, and any environment variable. These
+are the sources NuGet's
+[configuration guide](https://learn.microsoft.com/nuget/consume-packages/configuring-nuget-behavior)
+lists, and the files that choose which SDK answers.
+
 `NuGetScratch` sits in a temporary folder, and this row claims it, so
-[Windows temporary folders](#windows-temporary-folders) leaves it to NuGet.
+[Windows temporary folders](#windows-temporary-folders) leaves it to NuGet. For that claim Deguffer
+asks NuGet again on every scan, whatever it remembers, because the claim decides what the other row
+deletes.
 
 A clean that you cancel while this command runs is left to finish. NuGet takes a package folder that
 holds its `.nupkg.metadata` file as installed, so a clean stopped part-way could leave a half-removed
@@ -372,6 +382,14 @@ location, and uv's own command still clears wherever its cache really is.
 
 It asks `uv tool dir` and `uv python dir` in the same pass, because the variables above can move the
 tools and interpreters anywhere. Where uv gives no answer, it uses the layout above.
+
+Explore and the duplicate search use what Deguffer remembers uv said, until one of these changes: the
+`uv.exe` it runs, a `uv.toml` or `pyproject.toml` in the folder Deguffer runs tools in or any folder
+above it, `uv.toml` in `%APPDATA%\uv`, `%SYSTEMDRIVE%\ProgramData\uv\uv.toml`, the file
+`UV_CONFIG_FILE` names, whether `%APPDATA%\uv\data` exists, and any environment variable. These are
+the sources uv's [configuration guide](https://docs.astral.sh/uv/concepts/configuration-files/)
+lists. The plan asks uv again on every scan, because its check of the cache against uv's own folders,
+below, decides whether the clean runs at all.
 
 If the cache is set to one of uv's own folders, or to a folder that holds one, Deguffer offers nothing
 and says why: uv's clean removes the whole cache directory, so it would take the tools, interpreters,
