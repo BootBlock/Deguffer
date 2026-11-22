@@ -36,7 +36,7 @@ namespace Deguffer.Benchmark;
 /// </param>
 /// <param name="Trees">
 /// How many trees the clean route builds, or how many empty folders the protect route builds and
-/// records. One for every other route.
+/// records or the verify route builds and proves standing. One for every other route.
 /// </param>
 /// <param name="Drive">
 /// For a route that reads the table, the volume it reads: the letter of <paramref name="Path"/>, or
@@ -102,8 +102,8 @@ internal sealed record BenchmarkRequest(
     public const int DefaultTrees = 500;
 
     /// <summary>
-    /// The protect route's folders when told nothing about them: about as many as each Claude Code row
-    /// was measured protecting on a machine with that data, 3,800 to 5,200 paths.
+    /// The protect and verify routes' folders when told nothing about them: about as many as each Claude
+    /// Code row was measured protecting on a machine with that data, 3,800 to 5,200 paths.
     /// </summary>
     public const int DefaultProtectedFolders = 5000;
 
@@ -147,7 +147,7 @@ internal sealed record BenchmarkRequest(
 
         if (named is not { } route)
         {
-            error = "The route must be table, index, explore, explorefolder, walk, measure, explorewalk, sources, links, folders, duplicates, remove, clean, protect, race, scan or plan.";
+            error = "The route must be table, index, explore, explorefolder, walk, measure, explorewalk, sources, links, folders, duplicates, remove, clean, protect, verify, race, scan or plan.";
             return null;
         }
 
@@ -174,7 +174,7 @@ internal sealed record BenchmarkRequest(
         var trees = route switch
         {
             Route.Clean => DefaultTrees,
-            Route.Protect => DefaultProtectedFolders,
+            Route.Protect or Route.Verify => DefaultProtectedFolders,
             _ => 1,
         };
         var filesPerTree = DefaultFilesPerTree;
@@ -236,7 +236,7 @@ internal sealed record BenchmarkRequest(
                 "--fanout" when route is Route.Remove => TryNumber(value, 1, TreeShape.MaximumFanout, out fanout),
                 "--trees" when route is Route.Clean => TryNumber(value, 1, MaximumTrees, out trees),
                 "--files-per-tree" when route is Route.Clean => TryNumber(value, 0, MaximumFilesPerTree, out filesPerTree),
-                "--folders" when route is Route.Protect => TryNumber(value, 1, MaximumTrees, out trees),
+                "--folders" when route is Route.Protect or Route.Verify => TryNumber(value, 1, MaximumTrees, out trees),
                 "--listed" when route is Route.Protect => TryOnOff(value, out listed),
                 "--build" when route is Route.Race => TryDrive(value, out build),
                 "--racer" when route is Route.Race => TryRacer(value, out racer),
@@ -263,7 +263,7 @@ internal sealed record BenchmarkRequest(
                     $"For remove, --files takes a number from 0 to {TreeShape.MaximumFiles}, --depth from 0 to " +
                     $"{TreeShape.MaximumDepth} and --fanout from 1 to {TreeShape.MaximumFanout}, and --read-only takes nothing. " +
                     $"For clean, --trees takes a number from 1 to {MaximumTrees} and --files-per-tree from 0 to {MaximumFilesPerTree}. " +
-                    $"For protect, --folders takes a number from 1 to {MaximumTrees} and --listed takes on or off. " +
+                    $"For protect, --folders takes a number from 1 to {MaximumTrees} and --listed takes on or off. For verify, --folders takes the same. " +
                     "For race, --build takes a drive letter, --racer takes sources or walk, --before-part a command, " +
                     "and --build-priority yield or normal. " +
                     $"For duplicates, --checksum takes {string.Join(", ", ChecksumAlgorithms.Offered.Select(Token))} and --cache cold or warm. " +

@@ -348,7 +348,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         CancellationToken ct = default) =>
         // On a thread of the proof's own, never the pool's, which watches the token itself. See ListWorkers.
         WorkerThreads.Shared.RunAsync(
-            () => PlanVerifier.Verify(plan, runReach, residue, ct, _cloud, _protection, _machine, _profiles),
+            () => PlanVerifier.Verify(plan, runReach, residue, ct, _cloud, _protection, _machine, _profiles, Scanner.Tuning),
             CancellationToken.None);
 
     /// <summary>A plan with nothing to do, and the reason the user is shown.</summary>

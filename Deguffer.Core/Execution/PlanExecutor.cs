@@ -145,7 +145,7 @@ public sealed class PlanExecutor(
                 $"The executor for '{plan.ProviderId}' was given no way to carry out a {unroutable.GetType().Name}.");
         }
 
-        var runResidue = residue ?? RunResidue.Begin([plan]);
+        var runResidue = residue ?? await RunResidue.BeginAsync([plan], scanner.Tuning).ConfigureAwait(false);
         var started = _time.GetTimestamp();
 
         // What each step's use check held back, one list a step so the steps running at once share
@@ -197,7 +197,7 @@ public sealed class PlanExecutor(
                     _cloud,
                     _protection,
                     _volumes,
-                    _profiles),
+                    _profiles, scanner.Tuning),
                 CancellationToken.None).ConfigureAwait(false),
         };
     }

@@ -451,6 +451,19 @@ public sealed class BenchmarkRequestTests
         Assert.Equal(BenchmarkRequest.DefaultProtectedFolders, BenchmarkRequest.Parse(["protect", @"C:\new"], out _)!.Trees);
     }
 
+    [Fact]
+    public void TheVerifyRoutesFoldersCanBeChosen()
+    {
+        var request = BenchmarkRequest.Parse(["verify", @"C:\new", "--folders", "7"], out var error);
+
+        Assert.Null(error);
+        Assert.Equal(Route.Verify, request!.Route);
+        Assert.Equal(7, request.Trees);
+        Assert.True(Route.Verify.Builds());
+        Assert.False(Route.Verify.ReadsTable());
+        Assert.Equal(BenchmarkRequest.DefaultProtectedFolders, BenchmarkRequest.Parse(["verify", @"C:\new"], out _)!.Trees);
+    }
+
     /// <summary>The protect route asks the disk about each folder unless told to record them from a listing.</summary>
     [Fact]
     public void TheProtectRouteRecordsFromAListingOnlyWhenAsked()
@@ -480,6 +493,10 @@ public sealed class BenchmarkRequestTests
     [InlineData("protect", "--folders", "0")]
     [InlineData("protect", "--folders", "100001")]
     [InlineData("protect", "--listed", "yes")]
+    [InlineData("verify", "--folders", "0")]
+    [InlineData("verify", "--folders", "100001")]
+    [InlineData("verify", "--listed", "on")]
+    [InlineData("verify", "--trees", "4")]
     [InlineData("clean", "--folders", "4")]
     [InlineData("clean", "--listed", "on")]
     [InlineData("walk", "--files", "10")]

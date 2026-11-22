@@ -5,7 +5,7 @@
 1446 Deguffer.App/ViewModels/CleanViewModel.cs
 917 Deguffer.App/ViewModels/ExploreViewModel.cs
 745 Deguffer.App/Views/ExplorePage.xaml.cs
-739 Deguffer.Core/Execution/CleanupPlanner.cs
+730 Deguffer.Core/Execution/CleanupPlanner.cs
 551 Deguffer.Core/Execution/CleanupStep.cs
 1063 Deguffer.Core/Execution/PlanExecutor.cs
 559 Deguffer.Core/Exploring/Acting/ExploreActionPolicy.cs

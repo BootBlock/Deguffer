@@ -49,39 +49,58 @@ internal static class DiskBoundWork
         ScanTuner tuning,
         ListingBudget budget,
         Func<string, T> work,
+        CancellationToken ct) =>
+        Each(paths, path => path, tuning, budget, work, ct);
+
+    /// <summary>
+    /// <paramref name="work"/> applied to each of <paramref name="items"/> on this thread and its helpers,
+    /// in their order, each counted against the volume of the path <paramref name="pathOf"/> names for
+    /// it. For a list whose items are more than their paths, where two items may name one path.
+    /// </summary>
+    /// <param name="tuning">What the walks of each volume run with. See <see cref="IDirectoryScanner.Tuning"/>.</param>
+    /// <param name="budget">The budget every item takes its slot in: the seam a test holds a volume's slots through.</param>
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was cancelled.</exception>
+    internal static TResult[] Each<TItem, TResult>(
+        IReadOnlyList<TItem> items,
+        Func<TItem, string> pathOf,
+        ScanTuner tuning,
+        ListingBudget budget,
+        Func<TItem, TResult> work,
         CancellationToken ct)
     {
-        if (paths.Count == 0)
+        if (items.Count == 0)
         {
             return [];
         }
 
-        var limits = new int[paths.Count];
+        var paths = new string[items.Count];
+        var limits = new int[items.Count];
         var byVolume = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-        for (var index = 0; index < paths.Count; index++)
+        for (var index = 0; index < items.Count; index++)
         {
-            var root = Path.GetPathRoot(paths[index]) ?? paths[index];
+            var path = paths[index] = pathOf(items[index]);
+            var root = Path.GetPathRoot(path) ?? path;
 
             if (!byVolume.TryGetValue(root, out var limit))
             {
-                limit = tuning.For(paths[index]).Walk.Threads;
+                limit = tuning.For(path).Walk.Threads;
                 byVolume[root] = limit;
             }
 
             limits[index] = limit;
         }
 
-        var results = new T[paths.Count];
+        var results = new TResult[items.Count];
 
         ListWorkers.Run(
-            paths.Count,
+            items.Count,
             byVolume.Values.Max(),
             index =>
             {
                 // Extended, as a walk's listings are, so both count against the same volume.
                 using var slot = budget.Take(LongPath.Extended(paths[index]), limits[index]);
-                results[index] = work(paths[index]);
+                results[index] = work(items[index]);
             },
             ct);
 

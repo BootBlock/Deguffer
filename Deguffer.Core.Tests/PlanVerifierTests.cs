@@ -1,5 +1,6 @@
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
@@ -683,7 +684,7 @@ public sealed class PlanVerifierTests : IDisposable
     /// took it, even though the folder holding it is standing and the run was working inside it.
     /// </summary>
     [Fact]
-    public void AKeptEntryGoneBeforeTheRunBeganWasRemovedFromOutside()
+    public async Task AKeptEntryGoneBeforeTheRunBeganWasRemovedFromOutside()
     {
         var scratch = _temp.CreateDirectory("scratch");
         var live = _temp.CreateDirectory("scratch", "kitprobe");
@@ -691,7 +692,7 @@ public sealed class PlanVerifierTests : IDisposable
 
         Directory.Delete(live);
 
-        var residue = RunResidue.Begin([plan]);
+        var residue = await RunResidue.BeginAsync([plan], ScanTuner.Shipped);
         residue.RecordLeftAlone(scratch, []);
 
         var check = Verify(plan, runReach: null, residue).Checks.Single();
@@ -706,13 +707,13 @@ public sealed class PlanVerifierTests : IDisposable
     /// while the run was under way, when the run may have taken it, so it stays the alarm.
     /// </summary>
     [Fact]
-    public void AKeptEntryStandingWhenTheRunBeganThatWentIsStillAFailure()
+    public async Task AKeptEntryStandingWhenTheRunBeganThatWentIsStillAFailure()
     {
         var scratch = _temp.CreateDirectory("scratch");
         var live = _temp.CreateDirectory("scratch", "kitprobe");
         var plan = Plan([new ClearDirectoryStep(scratch, "Scratch files") { Spared = [live] }], Protect(live));
 
-        var residue = RunResidue.Begin([plan]);
+        var residue = await RunResidue.BeginAsync([plan], ScanTuner.Shipped);
 
         Directory.Delete(live);
         residue.RecordLeftAlone(scratch, []);
@@ -725,7 +726,7 @@ public sealed class PlanVerifierTests : IDisposable
     /// for a step that named the entry itself and for a tool's own command whose reach nobody can state.
     /// </summary>
     [Fact]
-    public void AnEntryGoneBeforeTheRunBeganWasRemovedFromOutsideWhateverTheRunReached()
+    public async Task AnEntryGoneBeforeTheRunBeganWasRemovedFromOutsideWhateverTheRunReached()
     {
         var scratch = _temp.CreateDirectory("scratch");
         var live = _temp.CreateDirectory("scratch", "kitprobe");
@@ -733,7 +734,7 @@ public sealed class PlanVerifierTests : IDisposable
 
         Directory.Delete(live);
 
-        var residue = RunResidue.Begin([plan]);
+        var residue = await RunResidue.BeginAsync([plan], ScanTuner.Shipped);
         var named = new RunReach([scratch, live], [], Unbounded: false);
         var unbounded = new RunReach([scratch], [], Unbounded: true);
 

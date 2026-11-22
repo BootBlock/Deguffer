@@ -93,6 +93,13 @@ internal enum Route
     Protect,
 
     /// <summary>
+    /// Build many empty folders in a new folder once, and prove each standing as §5.6 proves the paths
+    /// a plan protects after its removals, several checked at once: what the result of a clean that
+    /// protects one path for each item of the user's data waits on.
+    /// </summary>
+    Verify,
+
+    /// <summary>
     /// Walk one folder, through the walk route or the sources route, while the index of a volume is
     /// built, started at the same moment, as Auto races the two in a scan, and each of the two alone,
     /// so the result says how much each slows the other. The build is of the folder's own volume
@@ -131,7 +138,7 @@ internal static class RouteFacts
     /// Whether the route builds what it times in a folder it creates, so its target must not exist
     /// yet, where every other route's must.
     /// </summary>
-    public static bool Builds(this Route route) => route.Removes() || route is Route.Protect;
+    public static bool Builds(this Route route) => route.Removes() || route is Route.Protect or Route.Verify;
 
     /// <summary>
     /// Whether the route walks with the values given on the command line. The links route walks with
@@ -172,7 +179,7 @@ internal static class RouteFacts
         Route.Clean => "steps",
         Route.Sources => "candidates",
         Route.Links => "files",
-        Route.Protect => "paths",
+        Route.Protect or Route.Verify => "paths",
         Route.Plan => "providers",
         _ => "records",
     };
