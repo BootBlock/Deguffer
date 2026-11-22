@@ -535,7 +535,9 @@ Deliberate points, and the traps that come with them:
   "Deguffer has not been told where to look" are opposite in what they ask of the user, and only the
   second is something they can act on. A list that hides the first kind by default must never hide
   the second, because build output is usually the largest thing here and that row is the only place
-  the app says so.
+  the app says so. Those rows all say the same thing, one per provider, so they are folded into one
+  group below the list, closed by default. Closed, the group still counts them and says where to
+  add a source folder, under any filter.
 - **Tier 3 says plainly what is unrecoverable**, and by default it is confirmed before deletion.
   *Saying* it is not negotiable. *How hard the confirmation is to give* is the user's to set, and
   the two are separate. Typing a provider's name for every emptied Recycle Bin is transcription

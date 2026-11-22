@@ -336,6 +336,16 @@
                 </Setter>
             </Style>
 
+            <!-- A Storage row's container, in the list and in the group folded below it. The row
+                 draws its own padding and divider, and its own controls are the tab stops, so the
+                 container adds no space and is not a stop of its own. -->
+            <Style x:Key="FindingRowContainer" TargetType="ListViewItem">
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="MinHeight" Value="0" />
+                <Setter Property="IsTabStop" Value="False" />
+            </Style>
+
             <!-- The hairline between findings, and between a page's regions. -->
             <Style x:Key="Divider" TargetType="Border">
                 <Setter Property="Height" Value="1" />

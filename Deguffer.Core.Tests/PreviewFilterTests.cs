@@ -7,8 +7,9 @@ using Deguffer.Testing;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// Which rows of the Storage preview are drawn. Each filter hides exactly the rows saying one thing,
-/// and a row it hides can carry nothing ticked.
+/// Where each row of the Storage preview is drawn. Each filter hides exactly the rows saying one
+/// thing, a row waiting for a source folder goes to the folded group whatever the filters say, and a
+/// row put out of sight either way can carry nothing ticked.
 /// </summary>
 public sealed class PreviewFilterTests
 {
@@ -17,15 +18,15 @@ public sealed class PreviewFilterTests
     [Fact]
     public void TheNotInstalledFilterHidesOnlyAToolThatIsNotThere()
     {
-        Assert.False(Defaults.Lists(FindingStatus.ToolchainMissing));
-        Assert.True((Defaults with { ShowNotInstalled = true }).Lists(FindingStatus.ToolchainMissing));
+        Assert.Equal(PreviewPlace.Hidden, Defaults.Place(FindingStatus.ToolchainMissing));
+        Assert.Equal(PreviewPlace.Listed, (Defaults with { ShowNotInstalled = true }).Place(FindingStatus.ToolchainMissing));
     }
 
     [Fact]
     public void TheAlreadyClearFilterHidesOnlyARowThatIsClear()
     {
-        Assert.False(Defaults.Lists(FindingStatus.AlreadyClear));
-        Assert.True((Defaults with { ShowAlreadyClear = true }).Lists(FindingStatus.AlreadyClear));
+        Assert.Equal(PreviewPlace.Hidden, Defaults.Place(FindingStatus.AlreadyClear));
+        Assert.Equal(PreviewPlace.Listed, (Defaults with { ShowAlreadyClear = true }).Place(FindingStatus.AlreadyClear));
     }
 
     /// <summary>
@@ -35,16 +36,28 @@ public sealed class PreviewFilterTests
     [Fact]
     public void EachFilterAnswersOnlyForItsOwnState()
     {
-        Assert.False(new PreviewFilter(ShowNotInstalled: true, ShowAlreadyClear: false).Lists(FindingStatus.AlreadyClear));
-        Assert.False(new PreviewFilter(ShowNotInstalled: false, ShowAlreadyClear: true).Lists(FindingStatus.ToolchainMissing));
+        Assert.Equal(PreviewPlace.Hidden, new PreviewFilter(ShowNotInstalled: true, ShowAlreadyClear: false).Place(FindingStatus.AlreadyClear));
+        Assert.Equal(PreviewPlace.Hidden, new PreviewFilter(ShowNotInstalled: false, ShowAlreadyClear: true).Place(FindingStatus.ToolchainMissing));
     }
 
     /// <summary>
-    /// Every other state has something to say, so no filter hides it. The row waiting for a folder is
-    /// the one §7 names: absent like a missing tool, and the one row the user can act on.
+    /// A row waiting for a source folder goes to the folded group under every combination of the
+    /// filters. Hiding it with "not installed" would lose the row §7 names as one setting away from
+    /// the largest reclaimable thing on the disk, and listing it put one row per provider saying the
+    /// same thing above the rows that report something.
     /// </summary>
     [Theory]
-    [InlineData(FindingStatus.AwaitingSourceFolders)]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void ARowWaitingForASourceFolderIsAlwaysFoldedIntoItsGroup(bool showNotInstalled, bool showAlreadyClear) =>
+        Assert.Equal(
+            PreviewPlace.AwaitingSourceFolders,
+            new PreviewFilter(showNotInstalled, showAlreadyClear).Place(FindingStatus.AwaitingSourceFolders));
+
+    /// <summary>Every other state has something to say, so no filter hides it.</summary>
+    [Theory]
     [InlineData(FindingStatus.UnreadableRoot)]
     [InlineData(FindingStatus.NotExamined)]
     [InlineData(FindingStatus.RecentContentHeldBack)]
@@ -58,17 +71,20 @@ public sealed class PreviewFilterTests
     [InlineData(FindingStatus.ReadyToClean)]
     [InlineData(FindingStatus.NeedsElevation)]
     public void NoFilterHidesARowWithSomethingToSay(FindingStatus status) =>
-        Assert.True(Defaults.Lists(status));
+        Assert.Equal(PreviewPlace.Listed, Defaults.Place(status));
 
     /// <summary>
-    /// The safety half. Both filters are on by default, so a row they hide must hold no step that can
-    /// be ticked, or a selected row could be taken out of sight and still cleaned. Asserted across
-    /// every step shape that measures zero, for both tokens.
+    /// The safety half. Both filters are on by default and the folded group starts closed, so a row
+    /// put out of sight either way must hold no step that can be ticked, or a selected row could be
+    /// taken out of sight and still cleaned. Asserted for every kind of row the planner makes, waiting
+    /// for a folder or not and present or not, across step shapes that measure zero and ones with something
+    /// to remove, for both tokens. Across these, a row is out of sight exactly when nothing in it can
+    /// be ticked.
     /// </summary>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ARowTheFiltersHideHoldsNothingThatCanBeTicked(bool isElevated)
+    public void ARowPutOutOfSightHoldsNothingThatCanBeTicked(bool isElevated)
     {
         var empty = new DeleteDirectoryStep(@"C:\Users\testuser\AppData\Local\Fake\Cache", "Cached files");
         var shapes = new CleanupStep[][]
@@ -77,24 +93,26 @@ public sealed class PreviewFilterTests
             [empty],
             [empty with { RequiresElevation = true }],
             [empty with { Estimated = new ScanSize(4096, 0) }],
+            [empty with { Estimated = ScanSize.FromLengths(4096) }],
         };
 
         foreach (var steps in shapes)
         {
-            var finding = new Finding(new FakeCleanupProvider("fake"), IsPresent: true, new CleanupPlan
+            foreach (var (present, awaiting) in new[] { (true, false), (true, true), (false, true) })
             {
-                ProviderId = "fake",
-                ProviderName = "Fake",
-                Tier = SafetyTier.RegenerableCache,
-                WhatHappensOnNextUse = "Rebuilt.",
-                Steps = steps,
-            });
+                var finding = new Finding(new FakeCleanupProvider("fake"), present, new CleanupPlan
+                {
+                    ProviderId = "fake",
+                    ProviderName = "Fake",
+                    Tier = SafetyTier.RegenerableCache,
+                    WhatHappensOnNextUse = "Rebuilt.",
+                    Steps = steps,
+                }, awaiting);
 
-            var status = finding.ToStatus(isElevated);
+                var listed = Defaults.Place(finding.ToStatus(isElevated)) == PreviewPlace.Listed;
 
-            Assert.Equal(FindingStatus.AlreadyClear, status);
-            Assert.False(Defaults.Lists(status));
-            Assert.DoesNotContain(steps, step => StepChoice.CanBeSelected(step, isKept: false, isElevated));
+                Assert.Equal(steps.Any(step => StepChoice.CanBeSelected(step, isKept: false, isElevated)), listed);
+            }
         }
     }
 }
