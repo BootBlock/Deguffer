@@ -170,6 +170,7 @@ public sealed class UseRecheckTests : IDisposable
                 },
                 runReach: null,
                 residue: null,
+                activity: null,
                 progress: null,
                 underway: null,
                 ct: CancellationToken.None);

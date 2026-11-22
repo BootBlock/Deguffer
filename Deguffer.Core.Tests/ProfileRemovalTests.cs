@@ -242,7 +242,7 @@ public sealed class ProfileRemovalTests : IDisposable
         var plan = await Provider().PlanAsync();
         var executor = new PlanExecutor(new FakeProcessRunner(), Scanning.ParallelEnumerationScanner.Default, RefusalRecord.For(_environment));
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => executor.ExecuteAsync(plan, null, null, null, underway: null, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => executor.ExecuteAsync(plan, null, null, null, null, underway: null, CancellationToken.None));
         Assert.Empty(_profiles.Removed);
     }
 }

@@ -578,6 +578,122 @@ public sealed class ComponentStoreProviderTests : IDisposable
     }
 
     /// <summary>
+    /// In one clean of both rows the cleanup's analysis after its command and the reset's before its own
+    /// read the same store with nothing run between them, so the reset starts from the cleanup's finish
+    /// rather than spend a minute or more asking DISM again. The figures say which analysis each used:
+    /// the reset's reclaim is the cleanup's after-figure less the reset's own.
+    /// </summary>
+    [Fact]
+    public async Task TheResetStartsFromTheCleanupsFinishWhereNothingRanBetweenThem()
+    {
+        Analyses(null, 21 * Gigabyte, 21 * Gigabyte, 19 * Gigabyte, 18 * Gigabyte);
+        var (cleanup, reset, cleanupPlan, resetPlan) = await BothRowsPlanned();
+        var clean = new RunActivity();
+
+        var cleaned = await cleanup.ExecuteAsync(cleanupPlan, activity: clean);
+        var wasReset = await reset.ExecuteAsync(resetPlan, activity: clean);
+
+        Assert.Equal(2 * Gigabyte, cleaned.BytesReclaimed);
+        Assert.Equal(1 * Gigabyte, wasReset.BytesReclaimed);
+        Assert.Equal(
+            ["analyse", "analyse", "clean", "analyse", "reset", "analyse"],
+            _runner.Invocations.Select(call => Called(call.Arguments)));
+    }
+
+    /// <summary>
+    /// Anything that acts between the rows could have changed the store, so the reset asks afresh: a
+    /// removal, or another tool's command. The cleanup's after-figure would otherwise credit the reset
+    /// with what happened in between.
+    /// </summary>
+    [Theory]
+    [InlineData("removal")]
+    [InlineData("command")]
+    public async Task TheResetAsksAfreshWhereAnythingActedBetweenTheRows(string between)
+    {
+        Analyses(null, 21 * Gigabyte, 21 * Gigabyte, 19 * Gigabyte, 18 * Gigabyte, 17 * Gigabyte);
+        var (cleanup, reset, cleanupPlan, resetPlan) = await BothRowsPlanned();
+        var clean = new RunActivity();
+
+        await cleanup.ExecuteAsync(cleanupPlan, activity: clean);
+        var acted = await Between(between, clean);
+        var wasReset = await reset.ExecuteAsync(resetPlan, activity: clean);
+
+        Assert.True(Assert.Single(acted.Steps).Succeeded, Assert.Single(acted.Steps).Message);
+        Assert.Equal(1 * Gigabyte, wasReset.BytesReclaimed);
+        Assert.Equal(
+            ["analyse", "analyse", "clean", "analyse", "analyse", "reset", "analyse"],
+            _runner.Invocations.Select(call => Called(call.Arguments)));
+    }
+
+    /// <summary>
+    /// An analysis that gave no figure is no saving to keep, and the next may give one, so the reset asks
+    /// afresh after a cleanup whose after-analysis failed.
+    /// </summary>
+    [Fact]
+    public async Task TheResetAsksAfreshWhereTheCleanupsAnalysisAfterwardsFailed()
+    {
+        var analyses = 0;
+        _runner.Replying(Dism, arguments => IsAnalysis(arguments)
+            ? ++analyses == 3
+                ? new CommandOutcome(unchecked((int)0x800F0806), "Error: 0x800f0806", string.Empty)
+                : new CommandOutcome(0, Report(analyses < 3 ? 21 * Gigabyte : (22 - analyses) * Gigabyte), string.Empty)
+            : new CommandOutcome(0, "The operation completed successfully.", string.Empty));
+        var (cleanup, reset, cleanupPlan, resetPlan) = await BothRowsPlanned();
+        var clean = new RunActivity();
+
+        await cleanup.ExecuteAsync(cleanupPlan, activity: clean);
+        var wasReset = await reset.ExecuteAsync(resetPlan, activity: clean);
+
+        Assert.Equal(1 * Gigabyte, wasReset.BytesReclaimed);
+        Assert.Equal(5, _runner.Invocations.Count(call => IsAnalysis(call.Arguments)));
+    }
+
+    /// <summary>Both rows over one analysis, planned in one pass as the planner plans them.</summary>
+    private async Task<(ComponentStoreCleanupProvider Cleanup, ComponentStoreResetBaseProvider Reset, CleanupPlan CleanupPlan, CleanupPlan ResetPlan)> BothRowsPlanned()
+    {
+        var analysis = new ComponentStoreAnalysis(_system, _runner, OwnServicingCalls.For(_servicing));
+        var cleanup = Cleanup(analysis);
+        var reset = Reset(analysis);
+
+        return (cleanup, reset, await cleanup.PlanAsync(), await reset.PlanAsync());
+    }
+
+    /// <summary>A plan of another row's, run in the same clean between the two component store rows.</summary>
+    private Task<CleanupResult> Between(string kind, RunActivity clean)
+    {
+        var tool = Path.Combine(_temp.Path, "tool.exe");
+        var cache = _temp.CreateDirectory("cache");
+        _temp.CreateFile(64, "cache", "entry.bin");
+
+        CleanupStep step = kind == "command"
+            ? new RunCommandStep(tool, "clean", "Another tool's own eviction command") { WhenCancelled = CancelledCommand.Ended, MeasuredPaths = [cache] }
+            : new DeleteDirectoryStep(cache, "Another tool's cache");
+
+        return new PlanExecutor(
+                new FakeProcessRunner().Responding(tool, "clean", string.Empty),
+                ParallelEnumerationScanner.Default,
+                RefusalRecord.For(_environment))
+            .ExecuteAsync(
+                new CleanupPlan
+                {
+                    ProviderId = "another",
+                    ProviderName = "Another",
+                    Tier = SafetyTier.RegenerableCache,
+                    WhatHappensOnNextUse = "Rebuilt.",
+                    Steps = [step],
+                },
+                runReach: null,
+                residue: null,
+                clean,
+                progress: null,
+                underway: null,
+                CancellationToken.None);
+    }
+
+    private static string Called(string arguments) =>
+        IsAnalysis(arguments) ? "analyse" : IsCleanup(arguments) && arguments.Contains("/ResetBase", StringComparison.Ordinal) ? "reset" : "clean";
+
+    /// <summary>
     /// The start figure is Windows' own immediately before the command, so a store that grew grew while
     /// the command ran, and the run says so rather than blaming the time since the scan.
     /// </summary>

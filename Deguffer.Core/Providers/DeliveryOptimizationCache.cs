@@ -53,5 +53,5 @@ internal sealed class DeliveryOptimizationCache : IToolMeasurement
     /// <summary>Asks Windows what the cache holds, off the caller's thread, and says why where it would not answer.</summary>
     public Task<DeliveryOptimizationReading> ReadAsync(CancellationToken ct) => Task.Run(() => _status.Read(ct), ct);
 
-    public async Task<long?> MeasureAsync(MeasuredWhen when, CancellationToken ct) => (await ReadAsync(ct).ConfigureAwait(false)).Bytes;
+    public async Task<long?> MeasureAsync(MeasuredWhen when, RunActivity run, CancellationToken ct) => (await ReadAsync(ct).ConfigureAwait(false)).Bytes;
 }

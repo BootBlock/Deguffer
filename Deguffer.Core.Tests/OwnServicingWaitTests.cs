@@ -48,7 +48,7 @@ public sealed class OwnServicingWaitTests : IDisposable
     };
 
     private Task<CleanupResult> ExecuteAsync(CancellationToken ct = default) =>
-        Executor().ExecuteAsync(Prepared(), runReach: null, residue: null, progress: null, underway: null, ct);
+        Executor().ExecuteAsync(Prepared(), runReach: null, residue: null, activity: null, progress: null, underway: null, ct);
 
     /// <summary>The plan, with its folder on the disk.</summary>
     private CleanupPlan Prepared()

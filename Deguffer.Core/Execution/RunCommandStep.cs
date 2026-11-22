@@ -57,6 +57,13 @@ public sealed record RunCommandStep(string FileName, string Arguments, string Wh
     public override bool ActsForCallingAccount => ReadsCallingAccountSettings;
 
     /// <summary>
+    /// What comes before the command, its checks, its look and its tool's measurement, only reads, and
+    /// that measurement is what a reading kept from an earlier step may stand for, so the run marks the
+    /// command alone as acting.
+    /// </summary>
+    public override bool ActsFromItsStart => false;
+
+    /// <summary>
     /// The locations we expect the command to clear. The command remains the authority on *what*
     /// gets removed, which is the whole point of §5.1. NuGet's own clear reached two locations that
     /// were not under <c>.nuget</c> at all, so this list is a probe, never a target.

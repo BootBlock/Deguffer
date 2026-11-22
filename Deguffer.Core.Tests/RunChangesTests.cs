@@ -246,6 +246,7 @@ public sealed class RunChangesTests
             CleanupPlan plan,
             RunReach? runReach = null,
             RunResidue? residue = null,
+            RunActivity? activity = null,
             IProgress<double>? progress = null,
             IProgress<CommandUnderway?>? underway = null,
             CancellationToken ct = default) =>
