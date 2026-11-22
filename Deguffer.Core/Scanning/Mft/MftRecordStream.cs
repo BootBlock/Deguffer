@@ -59,6 +59,11 @@ internal static class MftRecordStream
     /// first pass stopped at a region it could not read, because a caller that keeps going has a
     /// use for every record that was read. They are handed on one at a time, in record order.</para>
     ///
+    /// <para>The lists such records keep outside the table are read once the first pass has ended,
+    /// or while it reads, as <see cref="TableTuning.ListReads"/> says (<see cref="MftListReadAhead"/>).
+    /// Only when they are read changes: the records handed on, and what each holds, are the
+    /// same.</para>
+    ///
     /// <para>A table that wants more extension records than it holds is not one NTFS wrote: each
     /// extension record belongs to one base record, so the wants of a healthy table sum to fewer
     /// than its records. Such a table is treated as one that could not be read in full. Holding
@@ -93,7 +98,12 @@ internal static class MftRecordStream
         var bitmap = MftBitmapReader.TryRead(source, count);
         timings?.End(MftBuildStage.BitmapRead);
 
-        using var pass = new MftReadPass(source, count, tuning, bitmap, onRecord, onProgress, ct);
+        // Declared before the pass, so it is disposed after it: a pass that throws, or is
+        // abandoned, still leaves no list read in flight.
+        using var lists = tuning.ListReads is AttributeListReads.BesideFirstPass
+            ? new MftListReadAhead(source, tuning.ListReadsInFlight, most: count, ct)
+            : null;
+        using var pass = new MftReadPass(source, count, tuning, bitmap, new MftRecordHandOff(count, bitmap, onRecord, lists), onProgress, ct);
         var first = pass.Run();
         timings?.End(MftBuildStage.FirstPass);
 
@@ -102,7 +112,9 @@ internal static class MftRecordStream
             return false;
         }
 
-        var listsResolved = MftExtensionReader.TryResolve(source, first, count - first.Wanted, tuning.ListReadsInFlight, pass.SpareBuffer, ct);
+        var listsLanded = lists?.Finish() ?? false;
+        var listsResolved = MftExtensionReader.TryResolve(
+            source, first, count - first.Wanted, tuning.ListReadsInFlight, listsLanded, pass.SpareBuffer, ct);
         var wholeTable = first.WholeTable & listsResolved;
         timings?.End(MftBuildStage.ExtensionLists);
 

@@ -108,6 +108,10 @@ internal static class Usage
         --list-reads-in-flight N
                                Table routes only. How many reads of the attribute lists kept
                                outside the table are outstanding at once, 1 to 32.
+        --list-reads after|beside
+                               Table routes only. Whether those lists are read once the first
+                               pass over the table has ended, or while it reads. The default is
+                               after, as a scan reads them on a drive of unknown kind.
         --build <drive>        Race only. The volume whose index is built beside the walk.
                                The default is the folder's own.
         --racer sources|walk   Race only. Whether the folder is searched for build outputs, as

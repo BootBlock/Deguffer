@@ -1011,22 +1011,5 @@ public class MftExploreReaderTests
 
     private static CallbackProgress<ExploreProgress> Counting(List<long> done) => new(report => done.Add(report.Done));
 
-    private static List<int> Reachable(ExploreTree tree)
-    {
-        var reached = new List<int>();
-        var pending = new Stack<int>();
-        pending.Push(tree.RootNode);
-
-        while (pending.TryPop(out var node))
-        {
-            reached.Add(node);
-
-            foreach (var child in tree.ChildrenOf(node))
-            {
-                pending.Push(child);
-            }
-        }
-
-        return reached;
-    }
+    private static List<int> Reachable(ExploreTree tree) => TreeNodes.Reachable(tree);
 }

@@ -24,7 +24,11 @@ internal enum MftHandOn
 /// <para>Called from every parse thread at once, each with a different record.</para>
 /// </summary>
 /// <param name="count">How many records the table holds, which bounds what it can want.</param>
-internal sealed class MftRecordHandOff(int count, MftBitmap? bitmap, MftRecordHandler onRecord)
+/// <param name="lists">
+/// Where a record held back with its list kept outside the table goes as soon as it is held back,
+/// to have its list read beside the pass. Null where the lists are read after the pass.
+/// </param>
+internal sealed class MftRecordHandOff(int count, MftBitmap? bitmap, MftRecordHandler onRecord, MftListReadAhead? lists)
 {
     private readonly List<MftDeferredRecord> _deferred = [];
     private readonly List<MftExtensionRecord> _extensions = [];
@@ -84,6 +88,11 @@ internal sealed class MftRecordHandOff(int count, MftBitmap? bitmap, MftRecordHa
             lock (_deferred)
             {
                 _deferred.Add(continued);
+            }
+
+            if (continued.PendingList is not null)
+            {
+                lists?.Add(continued);
             }
 
             return MftHandOn.Done;

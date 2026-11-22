@@ -31,8 +31,21 @@ public sealed class ScanTuningTests
         Assert.Equal(TableTuning.Default.ReadsInFlight, tuning.Table.ReadsInFlight);
         Assert.Equal(Math.Min(Environment.ProcessorCount, 4), tuning.Table.ParseThreads);
         Assert.Equal(TableTuning.MaximumListReadsInFlight, tuning.Table.ListReadsInFlight);
+        Assert.Equal(AttributeListReads.AfterFirstPass, tuning.Table.ListReads);
         Assert.Equal(MediaScanPreferences.Auto, tuning.Chosen);
     }
+
+    /// <summary>
+    /// The lists kept outside the table are read beside the first pass only where that was measured
+    /// to pay, on NVMe. A kind not measured, a spinning disk above all, keeps them until the pass has
+    /// ended, where they cannot compete with its reads.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(EveryKindOfDrive))]
+    public void AutoReadsTheListsBesideTheFirstPassOnlyOnNvme(StorageMedia media) =>
+        Assert.Equal(
+            media is StorageMedia.Nvme ? AttributeListReads.BesideFirstPass : AttributeListReads.AfterFirstPass,
+            VolumeTuning.Resolve(ScanPreferences.Default, media).Table.ListReads);
 
     /// <summary>
     /// The attribute lists kept outside the table are read 32 at once on every kind, never one at a

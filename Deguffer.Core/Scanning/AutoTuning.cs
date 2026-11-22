@@ -147,6 +147,24 @@ internal static class AutoTuning
     public static int TableListReadsInFlight(StorageMedia media) => TableTuning.MaximumListReadsInFlight;
 
     /// <summary>
+    /// Beside the first pass on NVMe, and after it, the conservative value, everywhere else.
+    ///
+    /// <para>MEASUREMENTS</para>
+    ///
+    /// <para>No spinning disk was available. There every list read beside the pass is a seek away
+    /// from where the table is being read, and the drive serves the table's reads in order only while
+    /// nothing else is waiting, so the overlap could cost more than it saves (#363). Nor was a SATA
+    /// SSD whose table is worth measuring, so both keep the lists until the pass has ended. Not a
+    /// setting: what is read is the same either way, and only a measurement can say which is faster
+    /// on a kind of drive.</para>
+    /// </summary>
+    public static AttributeListReads TableListReads(StorageMedia media) => media switch
+    {
+        StorageMedia.Nvme => AttributeListReads.BesideFirstPass,
+        _ => TableTuning.Default.ListReads,
+    };
+
+    /// <summary>
     /// <c>min(processors, 4)</c>, for the machine rather than a kind of drive.
     ///
     /// <para>Measured on the 1.8 TB NVMe volume, the reads, not the parse, set the pace once the

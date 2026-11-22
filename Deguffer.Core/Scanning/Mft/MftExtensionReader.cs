@@ -9,8 +9,9 @@ namespace Deguffer.Core.Scanning.Mft;
 /// record holding something the scan needs holds as it reads it, so an extension record it reached
 /// is never read again: every wanted one is collected, sorted by record number, and merged against
 /// what was kept.
-/// The disk is read again only for the attribute lists kept outside the table, and for a wanted
-/// record the first pass never reached because it stopped first.</para>
+/// The disk is read again only for the attribute lists kept outside the table, where they were not
+/// already read beside the first pass (<see cref="MftListReadAhead"/>), and for a wanted record the
+/// first pass never reached because it stopped first.</para>
 ///
 /// <para>Bytes only, like <see cref="MftRecordStream"/>. What a record that could not be completed
 /// means is for the caller to decide, and each <see cref="MftDeferredRecord"/> already says which
@@ -31,6 +32,11 @@ internal static class MftExtensionReader
     /// first pass's own.
     /// </param>
     /// <param name="readsInFlight">How many reads of the lists kept outside the table are outstanding at once, at most.</param>
+    /// <param name="listsLanded">
+    /// Whether every list kept outside the table was already read beside the first pass and landed
+    /// (<see cref="MftListReadAhead"/>), so none is read here. Each is followed all the same, in the
+    /// order a read here would hand it on, so the budget is spent alike either way.
+    /// </param>
     /// <param name="batch">
     /// A buffer of whole records to read a record the first pass never reached into, lent by the
     /// caller so the second pass reuses the first pass's pooled buffer rather than renting another.
@@ -40,11 +46,25 @@ internal static class MftExtensionReader
         MftFirstPass first,
         long budget,
         int readsInFlight,
+        bool listsLanded,
         Span<byte> batch,
         CancellationToken ct)
     {
-        // The first pass's own wants may already have spent it, and then no list is read at all.
-        if (budget >= 0)
+        // The first pass's own wants may already have spent it, and then no list is followed at all.
+        if (budget >= 0 && listsLanded)
+        {
+            foreach (var record in MftAttributeListReader.InReadOrder(first.Deferred))
+            {
+                record.FollowLanded();
+                budget -= record.Segments.Count;
+
+                if (budget < 0)
+                {
+                    break;
+                }
+            }
+        }
+        else if (budget >= 0)
         {
             MftAttributeListReader.Read(source, first.Deferred, readsInFlight, (record, entries) =>
             {

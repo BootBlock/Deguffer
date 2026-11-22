@@ -3,7 +3,8 @@ namespace Deguffer.Core.Scanning.Mft;
 /// <summary>
 /// How hard a pass over the file table drives the disk and the processor: how many bytes each read
 /// asks for, how many reads are outstanding at once, how many threads parse what arrives, and how
-/// many reads of the attribute lists kept outside the table are outstanding at once.
+/// many reads of the attribute lists kept outside the table are outstanding at once, and whether
+/// those reads wait for the first pass to end.
 ///
 /// <para>The values change how fast the table is read, never what is read. Every record in use is
 /// still read and numbered by its place in the table, and a short read still ends the pass rather
@@ -20,7 +21,8 @@ namespace Deguffer.Core.Scanning.Mft;
 /// clusters, and a read, of one list or of several close together, is never more than
 /// <see cref="MftAttributeList.MaximumLength"/> rounded up to whole clusters, so each is at most the
 /// larger of that and a cluster: 8 MiB at the largest depth on a volume of 4 KiB clusters,
-/// and 64 MiB on one of 2 MiB clusters.</para>
+/// and 64 MiB on one of 2 MiB clusters. Read beside the first pass
+/// (<see cref="AttributeListReads.BesideFirstPass"/>), they are held while it runs as well.</para>
 /// </summary>
 public sealed record TableTuning
 {
@@ -54,13 +56,19 @@ public sealed record TableTuning
 
     /// <summary>
     /// What the table was read with before these could be set: 1,024 records of 1 KiB, one read at a
-    /// time, parsed on the thread that read them, and one list at a time. A kind of drive nobody has
+    /// time, parsed on the thread that read them, and one list at a time once the first pass has
+    /// ended. A kind of drive nobody has
     /// measured gets the read size and reads in flight, and the machine's parse threads: see
     /// <see cref="AutoTuning"/>.
     /// </summary>
     public static readonly TableTuning Default = new(1024 * 1024, readsInFlight: 1, parseThreads: 1, listReadsInFlight: 1);
 
-    public TableTuning(int readBytes, int readsInFlight, int parseThreads, int listReadsInFlight)
+    public TableTuning(
+        int readBytes,
+        int readsInFlight,
+        int parseThreads,
+        int listReadsInFlight,
+        AttributeListReads listReads = AttributeListReads.AfterFirstPass)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(readBytes, MinimumReadBytes);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(readBytes, MaximumReadBytes);
@@ -71,10 +79,16 @@ public sealed record TableTuning
         ArgumentOutOfRangeException.ThrowIfLessThan(listReadsInFlight, MinimumListReadsInFlight);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(listReadsInFlight, MaximumListReadsInFlight);
 
+        if (!Enum.IsDefined(listReads))
+        {
+            throw new ArgumentOutOfRangeException(nameof(listReads), listReads, "Not a time the lists can be read at.");
+        }
+
         ReadBytes = readBytes;
         ReadsInFlight = readsInFlight;
         ParseThreads = parseThreads;
         ListReadsInFlight = listReadsInFlight;
+        ListReads = listReads;
     }
 
     /// <summary>How many bytes of records each read asks for, at most, before it is cut to whole records and sectors.</summary>
@@ -94,6 +108,12 @@ public sealed record TableTuning
     /// reorders and overlaps small reads only when it is given several at once.
     /// </summary>
     public int ListReadsInFlight { get; }
+
+    /// <summary>
+    /// Whether the lists kept outside the table are read once the first pass has ended, or while it
+    /// reads. Only how soon they are read: never which are read, nor what is made of them.
+    /// </summary>
+    public AttributeListReads ListReads { get; }
 
     /// <summary>How many records of <paramref name="bytesPerRecord"/> one read asks for.</summary>
     public int RecordsPerRead(int bytesPerRecord) => Math.Max(1, ReadBytes / bytesPerRecord);

@@ -269,6 +269,16 @@ public sealed class BenchmarkRequestTests
         Assert.Equal(2, request.Runs);
     }
 
+    /// <summary>
+    /// The lists kept outside the table can be read beside the first pass or after it, so the two can
+    /// be timed against each other on one drive.
+    /// </summary>
+    [Theory]
+    [InlineData("after", AttributeListReads.AfterFirstPass)]
+    [InlineData("beside", AttributeListReads.BesideFirstPass)]
+    public void WhenTheListsAreReadCanBeChosen(string value, AttributeListReads listReads) =>
+        Assert.Equal(listReads, BenchmarkRequest.Parse(["table", "C", "--list-reads", value], out _)!.Table.ListReads);
+
     /// <summary>A table route not told otherwise reads as a scan of a drive of unknown kind does.</summary>
     [Fact]
     public void ATableRouteNotToldOtherwiseRunsAsAScanOfAnUnknownDriveDoes() =>
@@ -282,6 +292,8 @@ public sealed class BenchmarkRequestTests
     [InlineData("--list-reads-in-flight", "0")]
     [InlineData("--list-reads-in-flight", "33")]
     [InlineData("--list-reads-in-flight")]
+    [InlineData("--list-reads", "during")]
+    [InlineData("--list-reads")]
     [InlineData("--parse-threads", "0")]
     [InlineData("--parse-threads", "65")]
     [InlineData("--parse-threads")]
@@ -297,6 +309,7 @@ public sealed class BenchmarkRequestTests
     [InlineData("--reads-in-flight", "4")]
     [InlineData("--parse-threads", "4")]
     [InlineData("--list-reads-in-flight", "4")]
+    [InlineData("--list-reads", "beside")]
     public void TheWalkTakesNoTableValue(params string[] rest)
     {
         Assert.Null(BenchmarkRequest.Parse(["walk", @"C:\", .. rest], out var error));

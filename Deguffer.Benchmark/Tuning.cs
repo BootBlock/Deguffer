@@ -71,7 +71,7 @@ internal static class Tuning
             return string.Create(
                 CultureInfo.InvariantCulture,
                 $"{table.ReadBytes / 1024} KiB reads, {table.ReadsInFlight} in flight, parsed on {table.ParseThreads} threads, " +
-                $"{table.ListReadsInFlight} list reads in flight");
+                $"{table.ListReadsInFlight} list reads in flight {ListReads(table)}");
         }
 
         if (route is Route.Folders)
@@ -120,8 +120,12 @@ internal static class Tuning
             CultureInfo.InvariantCulture,
             $"{walked}, {Listing(walk)}, raced against the index of {char.ToUpperInvariant(drive)}:, {relation.Describe()}, " +
             $"{table.ReadBytes / 1024} KiB reads {priority}, {table.ReadsInFlight} in flight, parsed on {table.ParseThreads} threads, " +
-            $"{table.ListReadsInFlight} list reads in flight, {between}");
+            $"{table.ListReadsInFlight} list reads in flight {ListReads(table)}, {between}");
     }
+
+    private static string ListReads(TableTuning table) => table.ListReads is AttributeListReads.BesideFirstPass
+        ? "beside the first pass"
+        : "after the first pass";
 
     private static string Listing(WalkTuning walk) => string.Create(
         CultureInfo.InvariantCulture,

@@ -40,19 +40,11 @@ internal static class MftAttributeListReader
     {
         var lists = new List<(MftDeferredRecord Record, IReadOnlyList<DataRun> Runs, int Length)>();
 
-        foreach (var record in deferred)
+        foreach (var record in InReadOrder(deferred))
         {
-            if (record.PendingList is { } list)
-            {
-                lists.Add((record, list.Runs, list.Length));
-            }
+            var (runs, length) = record.PendingList!.Value;
+            lists.Add((record, runs, length));
         }
-
-        // A list with no runs is never pending, so every one has a first cluster. Ties are damage,
-        // and broken by record so the order is the same on every run.
-        lists.Sort(static (a, b) => a.Runs[0].StartCluster != b.Runs[0].StartCluster
-            ? a.Runs[0].StartCluster.CompareTo(b.Runs[0].StartCluster)
-            : a.Record.Self.Record.CompareTo(b.Record.Self.Record));
 
         var clusterBytes = source.BytesPerCluster;
         var plan = MftListReadPlanner.Plan(lists.ConvertAll(static l => (l.Runs, l.Length)), clusterBytes);
@@ -120,6 +112,34 @@ internal static class MftAttributeListReader
                 ((IDisposable?)buffer)?.Dispose();
             }
         }
+    }
+
+    /// <summary>
+    /// The records of <paramref name="deferred"/> whose lists are still pending, in the order
+    /// <see cref="Read"/> hands them on: by the first cluster of each list.
+    /// </summary>
+    public static List<MftDeferredRecord> InReadOrder(IReadOnlyList<MftDeferredRecord> deferred)
+    {
+        var pending = new List<MftDeferredRecord>();
+
+        foreach (var record in deferred)
+        {
+            if (record.PendingList is not null)
+            {
+                pending.Add(record);
+            }
+        }
+
+        // A list with no runs is never pending, so every one has a first cluster. Ties are damage,
+        // and broken by record so the order is the same on every run.
+        pending.Sort(static (a, b) =>
+        {
+            var (aStart, bStart) = (a.PendingList!.Value.Runs[0].StartCluster, b.PendingList!.Value.Runs[0].StartCluster);
+
+            return aStart != bStart ? aStart.CompareTo(bStart) : a.Self.Record.CompareTo(b.Self.Record);
+        });
+
+        return pending;
     }
 
     /// <summary>Read one list by its own runs into <paramref name="buffer"/> from <paramref name="offset"/>.</summary>

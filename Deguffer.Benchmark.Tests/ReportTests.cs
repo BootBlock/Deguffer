@@ -191,13 +191,16 @@ public sealed class ReportTests
 
     /// <summary>
     /// The same for a table route, whose values are the reads, the parse threads and the reads of the
-    /// attribute lists kept outside the table.
+    /// attribute lists kept outside the table, and when those are read.
     /// </summary>
-    [Fact]
-    public void ATableRoutesValuesAreTheOnesItRanWith() =>
+    [Theory]
+    [InlineData(AttributeListReads.AfterFirstPass, "after the first pass")]
+    [InlineData(AttributeListReads.BesideFirstPass, "beside the first pass")]
+    public void ATableRoutesValuesAreTheOnesItRanWith(AttributeListReads listReads, string when) =>
         Assert.Equal(
-            "2048 KiB reads, 8 in flight, parsed on 3 threads, 24 list reads in flight",
-            Deguffer.Benchmark.Tuning.Describe(Route.Index, WalkTuning.Default, new TableTuning(2048 * 1024, 8, 3, 24), snapshots: true, LinkRead.Name, BenchmarkRequest.DefaultTree, trees: 1));
+            $"2048 KiB reads, 8 in flight, parsed on 3 threads, 24 list reads in flight {when}",
+            Deguffer.Benchmark.Tuning.Describe(
+                Route.Index, WalkTuning.Default, new TableTuning(2048 * 1024, 8, 3, 24, listReads), snapshots: true, LinkRead.Name, BenchmarkRequest.DefaultTree, trees: 1));
 
     /// <summary>
     /// A race names the priority its build read at, because a result read at one priority says
