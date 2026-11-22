@@ -1,4 +1,5 @@
 using Deguffer.Core.Exploring.Layout;
+using Microsoft.Graphics.Canvas;
 using Microsoft.UI.Composition;
 using Windows.Graphics;
 
@@ -31,8 +32,11 @@ internal sealed class ExploreMiniature(MapGraphics graphics, Action changed)
     /// <paramref name="screenHeight"/>, in the drawing's own pixels to each device-independent one. A
     /// map too small for an overview keeps none.
     /// </summary>
-    /// <param name="pixels">The drawing as painted on the CPU, or null for one just shaded on the GPU.</param>
-    public void Copy(byte[]? pixels, int width, int height, double screenWidth, double screenHeight)
+    /// <param name="canvas">
+    /// The drawing, whole on the GPU canvas it was shaded on or went up into, or null where the device
+    /// was lost on the way, and no copy is made of it.
+    /// </param>
+    public void Copy(CanvasBitmap? canvas, int width, int height, double screenWidth, double screenHeight)
     {
         if (MapOverview.Size(screenWidth, screenHeight) is not { } shown)
         {
@@ -44,11 +48,7 @@ internal sealed class ExploreMiniature(MapGraphics graphics, Action changed)
             Math.Max(1, (int)Math.Round(width * shown.Width / screenWidth)),
             Math.Max(1, (int)Math.Round(height * shown.Height / screenHeight)));
 
-        var shrunk = pixels is null
-            ? graphics.ShrinkShaded(_surface, width, height, size)
-            : graphics.Shrink(_surface, pixels, width, height, size);
-
-        if (shrunk is not { } surface)
+        if (canvas is null || graphics.Shrink(_surface, canvas, width, height, size) is not { } surface)
         {
             return;
         }

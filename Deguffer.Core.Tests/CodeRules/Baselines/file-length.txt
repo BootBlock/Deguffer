@@ -1,6 +1,6 @@
 # Product files past 500 lines when the rule came in, at their length then. A file may shrink, and
 # its line is lowered when it does; it never grows. Never add a line: split the file instead.
-590 Deguffer.App/Controls/ExploreLayers.cs
+571 Deguffer.App/Controls/ExploreLayers.cs
 802 Deguffer.App/Controls/ExploreZoom.cs
 1399 Deguffer.App/ViewModels/CleanViewModel.cs
 917 Deguffer.App/ViewModels/ExploreViewModel.cs

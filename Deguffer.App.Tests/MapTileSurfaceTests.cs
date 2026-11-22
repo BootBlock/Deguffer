@@ -45,7 +45,8 @@ public sealed class MapTileSurfaceTests
 
     /// <summary>
     /// Shaded, and not skipped: <see cref="MapGraphics.Shade(CompositionDrawingSurface, CushionQuads, TileColour)"/>
-    /// draws nothing on a device that cannot run the shaders, so the canvas it shaded is asked for too.
+    /// draws nothing on a device that cannot run the shaders, so the canvas it says it shaded on is
+    /// asked for too.
     /// </summary>
     [Theory]
     [MemberData(nameof(Tiles))]
@@ -57,9 +58,9 @@ public sealed class MapTileSurfaceTests
         {
             var surface = graphics.PlainSurface(null, width, height);
 
-            graphics.Shade(surface, Quads(width, height), Ground);
+            var shaded = graphics.Shade(surface, Quads(width, height), Ground);
 
-            return (surface.SizeInt32, graphics.ShrinkShaded(null, width, height, new SizeInt32(1, 1)) is not null);
+            return (surface.SizeInt32, shaded is not null);
         });
 
         Assert.True(shaded);

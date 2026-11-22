@@ -97,9 +97,6 @@ internal sealed class CushionRenderer : IDisposable
     /// </summary>
     public bool OnSoftware { get; }
 
-    /// <summary>The bitmap the last canvas was shaded into, at its corner, or null before the first.</summary>
-    public CanvasBitmap? Shaded => _bitmap;
-
     /// <summary>
     /// A renderer on <paramref name="device"/> with <paramref name="shaders"/>, or null where the device
     /// cannot run them: one below Direct3D feature level 10, which the CPU paints for instead.

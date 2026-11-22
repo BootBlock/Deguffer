@@ -1067,7 +1067,7 @@ public sealed class ExploreMap : UserControl
 
     private void Redraw() => Redraw(Motion.Instant);
 
-    /// <param name="fade">How the new drawing comes in over the old. See <see cref="ExploreLayers.Replacement"/>.</param>
+    /// <param name="fade">How the new drawing comes in over the old. See <see cref="ExploreLanding.Replacement"/>.</param>
     /// <param name="travelsFrom">The drawing on screen the new drawing's shapes travel from, or null where no move is owed.</param>
     private void Redraw(Motion fade, ExploreSurface? travelsFrom = null)
     {
@@ -1201,7 +1201,7 @@ public sealed class ExploreMap : UserControl
     /// Show <paramref name="viewport"/> of <paramref name="painting"/>: the drawing kept of it, at
     /// once, where there is one, and otherwise a redraw of it, which lands over the picture on screen.
     /// </summary>
-    /// <param name="fade">How a new drawing comes in over the one on screen. See <see cref="ExploreLayers.Replacement"/>.</param>
+    /// <param name="fade">How a new drawing comes in over the one on screen. See <see cref="ExploreLanding.Replacement"/>.</param>
     /// <param name="travelsFrom">The drawing on screen a new drawing's shapes travel from, or null where no move is owed.</param>
     private void Request(ExplorePainting painting, MapViewport viewport, Motion fade, ExploreSurface? travelsFrom)
     {
@@ -1765,7 +1765,7 @@ public sealed class ExploreMap : UserControl
         _generation = _graphics.Device.Generation;
 
         LandStep();
-        _canvas.Cancel();
+        _canvas.Renew();
         _flight.Departing.Renew();
         _flight.Pictures.Renew();
 

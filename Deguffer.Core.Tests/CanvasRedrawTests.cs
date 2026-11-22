@@ -1,4 +1,5 @@
 using Deguffer.Core.Exploring.Rendering;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 

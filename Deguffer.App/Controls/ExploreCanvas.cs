@@ -64,6 +64,9 @@ internal sealed class ExploreCanvas
 
     private readonly PaintBuffers _buffers = new();
 
+    /// <summary>What each drawing painted in <see cref="_buffers"/> goes up to the GPU through.</summary>
+    private readonly PaintUpload _upload;
+
     /// <summary>
     /// Lays each drawing out and paints it off the UI thread, and puts it on screen a region at a
     /// time. See <see cref="CanvasRedraws"/>.
@@ -100,6 +103,7 @@ internal sealed class ExploreCanvas
         _pointer = pointer;
         _present = present;
         _painting = painting;
+        _upload = new PaintUpload(graphics);
         _redraws = new CanvasRedraws(owner);
 
         _settled = host.DispatcherQueue.CreateTimer();
@@ -191,6 +195,16 @@ internal sealed class ExploreCanvas
     public void Cancel() => _redraws.Cancel();
 
     /// <summary>
+    /// Stop the redraw on its way, and let go of the GPU canvas drawings go up through, for a device that
+    /// has replaced the one it was made on. The next drawing makes it again on the new one.
+    /// </summary>
+    public void Renew()
+    {
+        _redraws.Cancel();
+        _upload.Release();
+    }
+
+    /// <summary>
     /// Stop the redraw on its way and drop every drawing kept, for a map nobody can see. The paint
     /// buffer stays, and so do the layers with their surfaces emptied, so drawing again allocates
     /// neither (G5).
@@ -202,25 +216,27 @@ internal sealed class ExploreCanvas
     }
 
     /// <summary>
-    /// <see cref="Drop"/>, and the buffer the drawings were painted through as well: a map with nothing
-    /// to show holds no memory for it.
+    /// <see cref="Drop"/>, and the buffer the drawings were painted through and their GPU canvas as
+    /// well: a map with nothing to show holds no memory for them.
     /// </summary>
     public void Empty()
     {
         Drop();
         _buffers.Release();
+        _upload.Release();
     }
 
     /// <summary>
     /// The map left the screen. A redraw still landing is stopped, and owed when it is back; one
     /// painting the whole picture under a zoomed drawing is not owed, as it is asked for again when the
-    /// picture next moves. The paint buffer goes with it: at 4K it is 33 MB.
+    /// picture next moves. The paint buffer and its GPU canvas go with it: at 4K each is 33 MB.
     /// </summary>
     public void Leave()
     {
         IsOwed |= Arriving is { IsSettled: false };
         _redraws.Cancel();
         _buffers.Release();
+        _upload.Release();
     }
 
     /// <summary>
@@ -243,7 +259,7 @@ internal sealed class ExploreCanvas
     /// Start a redraw of <paramref name="painting"/> at <paramref name="viewport"/>, which lands over
     /// the picture on screen and is handed to the map as it arrives.
     /// </summary>
-    /// <param name="fade">How the new drawing comes in over the old. See <see cref="ExploreLayers.Replacement"/>.</param>
+    /// <param name="fade">How the new drawing comes in over the old. See <see cref="ExploreLanding.Replacement"/>.</param>
     /// <param name="arrival">What the map will ask of the new drawing as it arrives, worked out on the worker that lays it out.</param>
     public void Draw(ExplorePainting painting, MapViewport viewport, Motion fade, DrawingArrival arrival)
     {
@@ -256,7 +272,7 @@ internal sealed class ExploreCanvas
             width,
             height,
             Focus(viewport, width, height),
-            _flight.Pictures.Replacement(_present, fade));
+            ExploreLanding.Replacement(_flight.Pictures, _present, fade, _upload));
     }
 
     /// <summary>
@@ -284,7 +300,7 @@ internal sealed class ExploreCanvas
             drawing.Width,
             drawing.Height,
             focus: null,
-            _flight.Pictures.Underlay());
+            ExploreLanding.Underlay(_flight.Pictures, _upload));
     }
 
     /// <summary>
