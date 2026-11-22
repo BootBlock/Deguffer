@@ -55,7 +55,7 @@ public sealed partial class CleanViewModel : ObservableObject
     /// Whether the info bar is still showing the sentence the last preview put there.
     ///
     /// Cleared by <see cref="Report"/>, the one writer of <see cref="Status"/>, and set again by
-    /// <see cref="ReportPreviewSummary"/>. That is what lets <see cref="OnRowSelectionChanged"/>
+    /// <see cref="ReportPreviewSummary"/>. That is what lets <see cref="OnSelectionChanged"/>
     /// keep the figures current without overwriting whatever else has since been said — a run
     /// outcome, a §5.6 verification failure, an error. Ticking a checkbox is not a reason to lose
     /// one of those.
@@ -150,6 +150,8 @@ public sealed partial class CleanViewModel : ObservableObject
         Retrim = retrim;
         ScanChoice = scanChoice;
         Sizes = new StorageSizeChanges(sizes, Findings, isElevated);
+        Selection = new StorageSelection(Findings, selections, isElevated, () => IsIdle && IsShowingFindings);
+        Selection.Changed += OnSelectionChanged;
 
         // Asked of the machine for this one path, as the free space above is, rather than read from
         // the volume list, which may not have been read yet.
@@ -278,6 +280,9 @@ public sealed partial class CleanViewModel : ObservableObject
     /// <summary>What Health last found wrong with the drive the free space figure is on.</summary>
     public DriveHealthLine DriveHealth { get; }
 
+    /// <summary>What is ticked across the rows, and the menu entries that tick or clear them all.</summary>
+    public StorageSelection Selection { get; }
+
     /// <summary>
     /// The row whose items are listed in place of the rows, or null while the rows are shown.
     ///
@@ -295,6 +300,8 @@ public sealed partial class CleanViewModel : ObservableObject
 
     /// <summary>The same fact the other way round, because x:Bind has no operators.</summary>
     public bool IsShowingFindings => ShownItems is null;
+
+    partial void OnShownItemsChanged(ItemListViewModel? value) => Selection.RefreshMenu();
 
     /// <summary>
     /// List <paramref name="row"/>'s items in place of the rows.
@@ -385,6 +392,9 @@ public sealed partial class CleanViewModel : ObservableObject
         // The collection did not change, so the subscription above raises nothing. Without this a
         // filter that empties the list leaves the empty state collapsed behind it.
         _listed.Show();
+
+        // Select all ticks only the rows a filter leaves on screen.
+        Selection.RefreshMenu();
     }
 
     /// <summary>A row is drawn unless a filter the user left on hides it. See <see cref="PreviewFilter"/>.</summary>
@@ -508,9 +518,6 @@ public sealed partial class CleanViewModel : ObservableObject
     /// <summary>Whether there is anything in that list, so the card shows it only when there is.</summary>
     public bool HasRunVerificationNotes => RunVerificationNotes.Count > 0;
 
-    [ObservableProperty]
-    public partial string SelectedTotalLabel { get; set; } = FreeSpace.Format(0);
-
     public string FreeSpaceNowLabel => FreeSpaceNow is { } value ? FreeSpace.Format(value) : "—";
 
     public bool HasRunResult => !string.IsNullOrEmpty(RemovedLabel);
@@ -555,7 +562,7 @@ public sealed partial class CleanViewModel : ObservableObject
         OnPropertyChanged(nameof(EmptyStateMessage));
     }
 
-    public bool CanClean => HasPreview && !IsBusy && Findings.Any(f => f.IsSelected);
+    public bool CanClean => HasPreview && !IsBusy && Selection.IsAnyTicked;
 
     [RelayCommand(CanExecute = nameof(CanRun), IncludeCancelCommand = true)]
     private Task PreviewAsync(CancellationToken ct) => ScanAsync(chosen: null, ct);
@@ -877,7 +884,7 @@ public sealed partial class CleanViewModel : ObservableObject
 
         foreach (var row in Findings)
         {
-            row.SelectionChanged -= OnRowSelectionChanged;
+            Selection.Forget(row);
         }
 
         Findings.Clear();
@@ -1097,10 +1104,7 @@ public sealed partial class CleanViewModel : ObservableObject
         // marks the locations it did find missing.
         ScanChoice.Missing.Record(finding.Provider, row.Status);
 
-        // One event for both directions: the row's own checkbox and any step within it. Subscribing
-        // to PropertyChanged(IsSelected) alone would miss a step being unticked while the row stays
-        // ticked, which is the ordinary case for per-item selection.
-        row.SelectionChanged += OnRowSelectionChanged;
+        Selection.Follow(row);
 
         // Rows arrive while a preview is running, when the keep list is not to be changed.
         AllowKeepListChanges(row, !IsBusy);
@@ -1299,21 +1303,13 @@ public sealed partial class CleanViewModel : ObservableObject
     private long? FreeSpaceOfProfile() => _volumes.SpaceOf(_environment.UserProfile)?.Free;
 
     /// <summary>
-    /// One change by the user: retotal, and remember what they chose.
-    ///
-    /// Written on every change rather than at some tidier moment, because there is no reliable
-    /// later one. A scan can be cancelled, a clean rebuilds the rows it changed from what was
-    /// remembered, and the process can be replaced outright by the elevated relaunch — all three
-    /// would lose a choice that was only being held until the end. The write runs on a worker
-    /// (<see cref="SelectionService.Remember"/>), and the close and the relaunch wait for it.
+    /// One change by the user. The bar states what is ticked, so it follows every tick rather than only
+    /// the end of a preview, or its figure would describe ticks the reader has since changed.
     /// </summary>
-    private void OnRowSelectionChanged(FindingViewModel row)
+    private void OnSelectionChanged(object? sender, EventArgs e)
     {
-        _selections.Remember(row.Finding.Provider.Id, row.ToRemembered());
-        UpdateSelectionTotal();
+        CleanCommand.NotifyCanExecuteChanged();
 
-        // The bar states what is ticked, so it has to follow the ticking. Reported only at the end
-        // of a preview, the figure was frozen at preview time and went stale on the first click.
         if (_barShowsPreviewSummary)
         {
             ReportPreviewSummary();
@@ -1388,10 +1384,13 @@ public sealed partial class CleanViewModel : ObservableObject
     /// No keep or release while a preview or a clean is running. The run in progress was built from
     /// the list as it stood, so a keep clicked mid-clean would say an item is protected while the plan
     /// already executing deletes it. A dialog left holding a row from before a rescan stays refused
-    /// too, because only the rows on the page are allowed again.
+    /// too, because only the rows on the page are allowed again. The selection menu is refused for
+    /// the run too, so it never ticks a row a scan is still adding.
     /// </summary>
     partial void OnIsBusyChanged(bool value)
     {
+        Selection.RefreshMenu();
+
         foreach (var row in Findings)
         {
             AllowKeepListChanges(row, !value);
@@ -1412,8 +1411,8 @@ public sealed partial class CleanViewModel : ObservableObject
     {
         Report(PreviewSummary.For(
             Findings.Select(f => f.Status),
-            SelectableTotal,
-            SelectedTotal,
+            Selection.SelectableTotal,
+            Selection.Total,
             ElevateLabel,
             _coverage));
 
@@ -1423,24 +1422,7 @@ public sealed partial class CleanViewModel : ObservableObject
 
     private void UpdateSelectionTotal()
     {
-        SelectedTotalLabel = FreeSpace.Format(SelectedTotal);
+        Selection.Retotal();
         CleanCommand.NotifyCanExecuteChanged();
     }
-
-    /// <summary>
-    /// Sums the selected <em>steps</em> rather than the selected rows. With per-item selection a
-    /// ticked row no longer implies its whole plan will run, so totalling the finding would promise
-    /// back space that the unticked steps within it are not going to release.
-    /// </summary>
-    private ScanSize SelectedTotal =>
-        ReclaimPool.Total(Findings.SelectMany(row => row.SelectedSteps).Select(s => s.Step));
-
-    /// <summary>
-    /// The ceiling <see cref="SelectedTotal"/> can reach: every step the user is free to tick. This
-    /// is what the info bar means by "can be reclaimed", and it is summed the same way the selected
-    /// total is so that the two figures beside each other count the same bytes. Both count space two
-    /// rows share once: see <see cref="ReclaimPool"/>.
-    /// </summary>
-    private ScanSize SelectableTotal =>
-        ReclaimPool.Total(Findings.SelectMany(row => row.SelectableSteps).Select(s => s.Step));
 }

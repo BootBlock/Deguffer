@@ -20,9 +20,11 @@ public class SelectionWriteTests
     /// than hanging the run.
     /// </summary>
     private static Task RememberAsync(SelectionService service, int tick) =>
-        Task.Run(() => service.Remember(
-                "cache",
-                new RememberedSelection(IsSelected: true, new Dictionary<string, bool> { [StepOf(tick)] = true })))
+        Task.Run(() => service.Remember([
+                KeyValuePair.Create(
+                    "cache",
+                    new RememberedSelection(IsSelected: true, new Dictionary<string, bool> { [StepOf(tick)] = true })),
+            ]))
             .WaitAsync(Bound);
 
     private static Task FlushAsync(SelectionService service) => Task.Run(service.Flush).WaitAsync(Bound);
