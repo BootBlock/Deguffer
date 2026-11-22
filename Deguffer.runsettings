@@ -8,8 +8,9 @@
     sequence file it leaves under the project's TestResults folder lists every test that started and
     whether each finished, so a test that never started was waiting on whatever hung. The slowest
     test took 78 s on a heavily loaded machine, so this is about four times the slowest. No dump is
-    written, because a dump of a test host is hundreds of megabytes; pass
-    `--blame-hang-dump-type mini` to `dotnet test` to take one when a hang needs its stacks.
+    written, because a dump of a test host is hundreds of megabytes. To take one when a hang needs
+    its stacks, set HangDumpType below to Mini for that run. An XML comment cannot hold two hyphens
+    in a row, so the equivalent dotnet test option is not written out here.
 
     TestSessionTimeout: the whole run is ended after this long, in milliseconds, whatever its tests
     report. The Core suite takes about three minutes under load.
