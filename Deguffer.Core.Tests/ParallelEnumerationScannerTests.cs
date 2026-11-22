@@ -180,6 +180,26 @@ public class ParallelEnumerationScannerTests
     }
 
     /// <summary>
+    /// Files and absent paths are answered whole before any walk starts, and go on as one figure
+    /// rather than one for each file, so a row offering thousands of files sends one report for them.
+    /// </summary>
+    [Fact]
+    public async Task FilesAnsweredBeforeTheWalkAreReportedOnce()
+    {
+        using var temp = new TempDirectory();
+        var files = Enumerable.Range(0, 40).Select(i => temp.CreateFile(100 + i, $"{i}.jsonl")).ToList();
+
+        var progress = new ProgressRecorder<ScanSize>();
+
+        await Scanner.MeasureManyAsync(
+            [.. files.Select(file => new ScanRequest(file)), new ScanRequest(Path.Combine(temp.Path, "never-created"))],
+            MinimumAge.Off,
+            progress);
+
+        Assert.Equal(Enumerable.Range(0, 40).Sum(i => 100L + i), Assert.Single(progress.Reports).Reclaimable);
+    }
+
+    /// <summary>
     /// A scan cancelled once its walk is under way stops rather than finishing it.
     ///
     /// <para>Cancelled from the first report, which follows the first folder read, not before the
