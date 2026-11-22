@@ -110,6 +110,15 @@ public sealed class FindingStatusTests
         Assert.Equal(FindingStatus.AwaitingSourceFolders, Found(Plan(), present: false, awaiting: true).ToStatus(false));
     }
 
+    /// <summary>
+    /// A row waiting for a folder that holds something to remove anyway says what it holds. The
+    /// waiting state is folded out of sight, and a row out of sight must hold nothing that can be
+    /// ticked, so it is never reached ahead of something to remove.
+    /// </summary>
+    [Fact]
+    public void ARowWaitingForAFolderThatHoldsSomethingToRemoveIsReady() =>
+        Assert.Equal(FindingStatus.ReadyToClean, Found(Plan(Folder(4096)), awaiting: true).ToStatus(isElevated: false));
+
     [Fact]
     public void AnAbsentToolIsNotInstalled() =>
         Assert.Equal(FindingStatus.ToolchainMissing, Found(null, present: false).ToStatus(isElevated: true));

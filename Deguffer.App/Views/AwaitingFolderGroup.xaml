@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+    The Storage rows waiting for a source folder, folded into one group below the list. Closed by
+    default: every one of them says the same thing, and among the rows that report something they
+    would bury them. The closed group still says how many it holds and what to do, so the answer
+    stays on screen as one line. The rows inside are the list's own rows, drawn with its template,
+    its container and its disclosures, so opening the group shows exactly what the list would have.
+
+    The header is quiet on purpose, as the compact rows' disclosures are. The resources below are the
+    group's own: no chrome and no inset around the rows, which draw their own. The header keeps the
+    Expander's own 16 epx inset, which is the inset a row sets, so the title lines up with the
+    checkboxes above it. The rows inside take RowDisclosures, as the list above does, and those are
+    scoped to the inner list so the group's own header is not drawn as a row's.
+-->
+<UserControl
+    x:Class="Deguffer.App.Views.AwaitingFolderGroup"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Deguffer.App.Views"
+    IsTabStop="False">
+
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="ExpanderHeaderBackground" Color="Transparent" />
+        <SolidColorBrush x:Key="ExpanderHeaderBorderBrush" Color="Transparent" />
+        <Thickness x:Key="ExpanderHeaderBorderThickness">0</Thickness>
+        <Thickness x:Key="ExpanderContentPadding">0</Thickness>
+    </UserControl.Resources>
+
+    <Expander HorizontalAlignment="Stretch"
+              HorizontalContentAlignment="Stretch"
+              Background="Transparent"
+              BorderThickness="0"
+              Padding="0"
+              Visibility="{x:Bind Group.HasRows, Mode=OneWay}"
+              AutomationProperties.Name="Waiting for a source folder"
+              AutomationProperties.HelpText="{x:Bind Group.Summary, Mode=OneWay}">
+        <Expander.Header>
+            <StackPanel Padding="0,12" Spacing="4">
+                <TextBlock Text="Waiting for a source folder"
+                           Style="{StaticResource BodyStrongTextBlockStyle}" />
+                <TextBlock Text="{x:Bind Group.Summary, Mode=OneWay}"
+                           Style="{StaticResource CardStatement}" />
+            </StackPanel>
+        </Expander.Header>
+
+        <!-- Sized to its rows rather than scrolled: the list it sits in does the scrolling, and a
+             list inside a list that scrolls on its own traps the mouse wheel. -->
+        <ListView x:Name="RowsList"
+                  ItemsSource="{x:Bind Group.Rows, Mode=OneWay}"
+                  ItemContainerStyle="{StaticResource FindingRowContainer}"
+                  SelectionMode="None"
+                  IsItemClickEnabled="False"
+                  TabNavigation="Local"
+                  ScrollViewer.VerticalScrollMode="Disabled"
+                  ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                  AutomationProperties.Name="Locations waiting for a source folder">
+            <ListView.Resources>
+                <local:RowDisclosures />
+            </ListView.Resources>
+        </ListView>
+    </Expander>
+</UserControl>

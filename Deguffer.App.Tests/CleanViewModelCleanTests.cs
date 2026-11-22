@@ -601,7 +601,7 @@ public class CleanViewModelCleanTests
         cache.Steps = [page.Cache("a", 1024)];
         cache.AfterCleaning = () => cache.Steps = [];
         page.Scan();
-        Assert.True(page.Row("cache").IsListed);
+        Assert.Equal(PreviewPlace.Listed, page.Row("cache").Place);
         var row = page.Row("cache");
         var changes = new List<NotifyCollectionChangedAction>();
         page.ViewModel.Listed.CollectionChanged += (_, e) => changes.Add(e.Action);
@@ -609,11 +609,11 @@ public class CleanViewModelCleanTests
         page.Clean();
 
         Assert.Equal(FindingStatus.AlreadyClear, page.Row("cache").Status);
-        Assert.False(page.Row("cache").IsListed);
+        Assert.Equal(PreviewPlace.Hidden, page.Row("cache").Place);
         Assert.Equal([NotifyCollectionChangedAction.Remove], changes);
         Assert.DoesNotContain(row, page.ViewModel.Listed);
         Assert.Same(row, page.Row("cache"));
-        Assert.Equal("Every row is hidden", page.ViewModel.EmptyStateTitle);
+        Assert.Equal("Every row is hidden", page.ViewModel.EmptyState.Title);
     }
 
     /// <summary>

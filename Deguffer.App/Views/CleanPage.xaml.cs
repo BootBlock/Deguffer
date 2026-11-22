@@ -9,7 +9,6 @@ using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning.Media;
 using Deguffer.Core.Viewing;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
@@ -110,15 +109,7 @@ public sealed partial class CleanPage : Page
         ListAnimation.Play(FindingsList, SystemMotion.Current).Arrived += BarMotion.GrowIn;
         _cleanedRow = new CleanRowSpotlight(FindingsList, ViewModel, SystemMotion.Current);
 
-        // A row's container is what assistive technology lands on, and unnamed it is read out as
-        // the type of the object behind it.
-        FindingsList.ContainerContentChanging += (_, args) =>
-        {
-            if (args.Item is FindingViewModel row)
-            {
-                AutomationProperties.SetName(args.ItemContainer, row.Name);
-            }
-        };
+        FindingRowNames.Follow(FindingsList);
 
         // A scan and its results outlive a trip to Settings; rebuilding the page on the way back
         // would throw away a preview the user has not acted on yet.
@@ -211,8 +202,9 @@ public sealed partial class CleanPage : Page
     private void ShowFindingsAt(ViewDensity density)
     {
         ViewSelector.SelectedIndex = (int)density;
-        FindingsList.ItemTemplate = (DataTemplate)Resources[
-            density == ViewDensity.Compact ? "CompactFinding" : "StandardFinding"];
+        var template = (DataTemplate)Resources[density == ViewDensity.Compact ? "CompactFinding" : "StandardFinding"];
+        FindingsList.ItemTemplate = template;
+        AwaitingGroup.RowTemplate = template;
     }
 
     /// <summary>

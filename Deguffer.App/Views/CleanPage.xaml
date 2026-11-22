@@ -9,23 +9,6 @@
     Background="Transparent">
 
     <Page.Resources>
-        <!--
-            The per-row disclosure, stripped back to a line of text and a chevron. In its default
-            form the Expander is a filled, bordered box with a 64px header, which made the least
-            important thing in each row the loudest thing on the screen. These are the standard
-            Expander theme resources, overridden here so every disclosure on the page is quiet
-            without restyling the control.
-        -->
-        <SolidColorBrush x:Key="ExpanderHeaderBackground" Color="Transparent" />
-        <SolidColorBrush x:Key="ExpanderHeaderBorderBrush" Color="Transparent" />
-        <SolidColorBrush x:Key="ExpanderContentBackground" Color="Transparent" />
-        <SolidColorBrush x:Key="ExpanderContentBorderBrush" Color="Transparent" />
-        <Thickness x:Key="ExpanderHeaderBorderThickness">0</Thickness>
-        <Thickness x:Key="ExpanderContentBorderThickness">0</Thickness>
-        <Thickness x:Key="ExpanderHeaderPadding">0,0,8,0</Thickness>
-        <Thickness x:Key="ExpanderContentPadding">0,4,0,4</Thickness>
-        <x:Double x:Key="ExpanderMinHeight">32</x:Double>
-
         <!-- The compact rows' figure column, one width down the whole list. See CompactFindingRow. -->
         <controls:WidthGroup x:Key="FigureWidths" />
 
@@ -661,22 +644,10 @@
                 <Grid Visibility="{x:Bind ViewModel.IsShowingFindings, Mode=OneWay}">
                     <!-- Says what to do next rather than leaving a blank card that reads as a screen
                          which has already failed. -->
-                    <StackPanel VerticalAlignment="Center"
-                                HorizontalAlignment="Center"
-                                Spacing="6"
-                                Padding="40"
-                                Visibility="{x:Bind ViewModel.HasNothingListed, Mode=OneWay}">
-                        <TextBlock Text="{x:Bind ViewModel.EmptyStateTitle, Mode=OneWay}"
-                                   Style="{StaticResource SectionHeading}"
-                                   FontSize="15"
-                                   HorizontalAlignment="Center" />
-                        <TextBlock Style="{StaticResource SecondaryText}"
-                                   FontSize="13"
-                                   TextAlignment="Center"
-                                   TextWrapping="Wrap"
-                                   MaxWidth="380"
-                                   Text="{x:Bind ViewModel.EmptyStateMessage, Mode=OneWay}" />
-                    </StackPanel>
+                    <controls:EmptyState Glyph="&#xE721;"
+                                         Title="{x:Bind ViewModel.EmptyState.Title, Mode=OneWay}"
+                                         Message="{x:Bind ViewModel.EmptyState.Message, Mode=OneWay}"
+                                         Visibility="{x:Bind ViewModel.EmptyState.IsShown, Mode=OneWay}" />
 
                     <!-- The template is set from the stored preference in code-behind. The shipped
                          default is named here as well, so the list is never left untemplated
@@ -687,22 +658,22 @@
                          list here has: a row arriving fades and slides in, and one leaving fades out
                          as the rows below close up. Nothing on a row is chosen by selecting it, so
                          selection is off, and its own controls are the tab stops rather than the
-                         row's container. -->
+                         row's container. The rows waiting for a source folder are folded into a
+                         group of their own at its foot. -->
                     <ListView x:Name="FindingsList"
                               ItemsSource="{x:Bind ViewModel.Listed}"
                               ItemTemplate="{StaticResource StandardFinding}"
                               SelectionMode="None"
                               IsItemClickEnabled="False"
+                              ItemContainerStyle="{StaticResource FindingRowContainer}"
                               TabNavigation="Local"
                               Padding="0,4">
-                        <ListView.ItemContainerStyle>
-                            <Style TargetType="ListViewItem">
-                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                                <Setter Property="Padding" Value="0" />
-                                <Setter Property="MinHeight" Value="0" />
-                                <Setter Property="IsTabStop" Value="False" />
-                            </Style>
-                        </ListView.ItemContainerStyle>
+                        <ListView.Resources>
+                            <views:RowDisclosures />
+                        </ListView.Resources>
+                        <ListView.Footer>
+                            <views:AwaitingFolderGroup x:Name="AwaitingGroup" Group="{x:Bind ViewModel.AwaitingFolders}" />
+                        </ListView.Footer>
                     </ListView>
                 </Grid>
 

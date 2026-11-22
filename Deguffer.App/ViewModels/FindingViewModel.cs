@@ -174,14 +174,14 @@ public sealed partial class FindingViewModel : ObservableObject
     public partial double SharePercent { get; set; }
 
     /// <summary>
-    /// Whether this row is drawn at all. Owned by the parent for the same reason
+    /// Where this row is drawn, if at all. Owned by the parent for the same reason
     /// <see cref="SharePercent"/> is: it answers a question about the list, not about this finding.
     ///
     /// Hidden rather than never built, so switching the filter needs no rescan and the row keeps
     /// its place in the order it was inserted in.
     /// </summary>
     [ObservableProperty]
-    public partial bool IsListed { get; set; } = true;
+    public partial PreviewPlace Place { get; set; } = PreviewPlace.Listed;
 
     /// <summary>
     /// How far this row's figure moved since the scan before it, or empty where there is no earlier
