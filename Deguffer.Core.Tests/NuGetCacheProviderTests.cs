@@ -14,7 +14,14 @@ public sealed class NuGetCacheProviderTests : IDisposable
     private readonly TempDirectory _temp = new();
     private readonly FakeUserEnvironment _environment;
 
-    public NuGetCacheProviderTests() => _environment = new FakeUserEnvironment(_temp.Path);
+    /// <summary>Where the machine-wide NuGet configuration NuGet's answer depends on is read, never the real machine's.</summary>
+    private readonly FakeSystemDirectories _system;
+
+    public NuGetCacheProviderTests()
+    {
+        _environment = new FakeUserEnvironment(_temp.Path);
+        _system = new FakeSystemDirectories(_temp.CreateDirectory("machine"));
+    }
 
     public void Dispose() => _temp.Dispose();
 
@@ -24,7 +31,7 @@ public sealed class NuGetCacheProviderTests : IDisposable
     [Fact]
     public async Task ReportsNotPresentWithoutTheDotnetSdk()
     {
-        var provider = new NuGetCacheProvider(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory());
+        var provider = new NuGetCacheProvider(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory(), systemDirectories: _system);
 
         Assert.False(await provider.IsPresentAsync());
         Assert.True((await provider.PlanAsync()).IsEmpty);
@@ -36,7 +43,7 @@ public sealed class NuGetCacheProviderTests : IDisposable
     {
         _environment.WithExecutable("dotnet");
         var runner = new FakeProcessRunner().Responding(Dotnet, "locals all --list", string.Empty);
-        var provider = new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory());
+        var provider = new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory(), systemDirectories: _system);
 
         await EarlyStartProof.StartsBeforeItPlansAsync(provider, runner, "locals all --list");
     }
@@ -45,7 +52,7 @@ public sealed class NuGetCacheProviderTests : IDisposable
     public async Task StartsNothingAsThePassBeginsWithoutTheDotnetSdk()
     {
         var runner = new FakeProcessRunner();
-        var provider = new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory());
+        var provider = new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory(), systemDirectories: _system);
 
         await EarlyStartProof.StartsNothingAsync(provider, runner);
     }
@@ -176,7 +183,7 @@ public sealed class NuGetCacheProviderTests : IDisposable
         _environment.WithExecutable("dotnet");
         var runner = new FakeProcessRunner().Responding(
             Dotnet, "locals all --list", $"global-packages: {before_[0]}\nhttp-cache: {before_[1]}");
-        var provider = new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory());
+        var provider = new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory(), systemDirectories: _system);
 
         var planned = await provider.PlanAsync();
         var step = Assert.IsType<RunCommandStep>(Assert.Single(planned.Steps));
@@ -267,7 +274,7 @@ public sealed class NuGetCacheProviderTests : IDisposable
         var runner = new FakeProcessRunner().Responding(Dotnet, "locals all --list", listing);
 
         return new NuGetCacheProvider(
-            _environment, runner, FakeProcessInspector.NothingRunning, volumes: volumes ?? new FakeVolumeInventory()).PlanAsync();
+            _environment, runner, FakeProcessInspector.NothingRunning, volumes: volumes ?? new FakeVolumeInventory(), systemDirectories: _system).PlanAsync();
     }
 
     /// <summary>
@@ -285,7 +292,7 @@ public sealed class NuGetCacheProviderTests : IDisposable
         var runner = new FakeProcessRunner().Responding(
             Dotnet, "locals all --list", $"global-packages: {packages}\\\ntemp: {scratch}\\");
 
-        var provider = new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory());
+        var provider = new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory(), systemDirectories: _system);
 
         Assert.Equal([scratch], await provider.ClaimedEntriesAsync([temporary]));
         Assert.Empty(await provider.ClaimedEntriesAsync([_temp.CreateDirectory("elsewhere")]));
@@ -303,7 +310,7 @@ public sealed class NuGetCacheProviderTests : IDisposable
         var runner = new FakeProcessRunner().Responding(
             Dotnet, "locals all --list", $"temp: {Path.Combine(temporary, "NuGetScratch")}\\");
 
-        var provider = new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory());
+        var provider = new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory(), systemDirectories: _system);
 
         Assert.Empty(await provider.ClaimedEntriesAsync([temporary]));
     }
@@ -328,7 +335,7 @@ public sealed class NuGetCacheProviderTests : IDisposable
         var runner = new FakeProcessRunner().Responding(
             Dotnet, "locals all --list", $"temp: {Path.Combine(asReported, "NuGetScratch")}\\");
 
-        var provider = new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory());
+        var provider = new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory(), systemDirectories: _system);
 
         Assert.Equal([scratch], await provider.ClaimedEntriesAsync([temporary]));
     }
@@ -351,7 +358,7 @@ public sealed class NuGetCacheProviderTests : IDisposable
 
         var provider = new NuGetCacheProvider(
             _environment, runner, FakeProcessInspector.NothingRunning,
-            volumes: new FakeVolumeInventory().Substituting(@"S:\", temporary));
+            volumes: new FakeVolumeInventory().Substituting(@"S:\", temporary), systemDirectories: _system);
 
         Assert.Equal(claimed ? [scratch] : [], await provider.ClaimedEntriesAsync([temporary]));
     }
@@ -361,7 +368,7 @@ public sealed class NuGetCacheProviderTests : IDisposable
     public async Task ClaimsNothingWithoutTheDotnetSdk()
     {
         var scratch = _temp.CreateDirectory("temp", "NuGetScratch");
-        var provider = new NuGetCacheProvider(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory());
+        var provider = new NuGetCacheProvider(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory(), systemDirectories: _system);
 
         Assert.Empty(await provider.ClaimedEntriesAsync([Path.GetDirectoryName(scratch)!]));
     }
@@ -386,7 +393,7 @@ public sealed class NuGetCacheProviderTests : IDisposable
         _environment.WithExecutable("dotnet");
         var runner = new FakeProcessRunner().Responding(Dotnet, "locals all --list", string.Empty, exitCode: 1);
         var provider = new NuGetCacheProvider(
-            _environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory());
+            _environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory(), systemDirectories: _system);
 
         Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(provider));
     }
@@ -403,7 +410,7 @@ public sealed class NuGetCacheProviderTests : IDisposable
         var runner = new FakeProcessRunner().Responding(
             Dotnet, "locals all --list", $"global-packages: {relocated}\\\ntemp: {scratch}\n");
         var provider = new NuGetCacheProvider(
-            _environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory());
+            _environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory(), systemDirectories: _system);
 
         Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(provider));
     }
@@ -425,7 +432,7 @@ public sealed class NuGetCacheProviderTests : IDisposable
         _environment.WithExecutable("dotnet");
         var runner = new FakeProcessRunner().Responding(Dotnet, "locals all --list", $"global-packages: {printed}\\", exitCode: 1);
         var plan = await new NuGetCacheProvider(
-            _environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory()).PlanAsync();
+            _environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory(), systemDirectories: _system).PlanAsync();
 
         Assert.Equal([packages], Assert.Single(plan.Steps.OfType<RunCommandStep>()).MeasuredPaths);
         Assert.DoesNotContain(plan.Notes, n => n.Message.StartsWith("Cleared by NuGet itself", StringComparison.Ordinal));
@@ -452,7 +459,7 @@ public sealed class NuGetCacheProviderTests : IDisposable
         _environment.WithExecutable("dotnet");
         var runner = new FakeProcessRunner().Responding(Dotnet, "locals all --list", string.Empty, exitCode: 1);
         var plan = await new NuGetCacheProvider(
-            _environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory()).PlanAsync();
+            _environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory(), systemDirectories: _system).PlanAsync();
 
         Assert.True(plan.IsEmpty);
         Assert.Equal(
@@ -486,7 +493,7 @@ public sealed class NuGetCacheProviderTests : IDisposable
         _environment.WithExecutable("dotnet");
         var runner = new FakeProcessRunner().Responding(Dotnet, "locals all --list", listing);
 
-        var plan = await new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory()).PlanAsync();
+        var plan = await new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory(), systemDirectories: _system).PlanAsync();
         return (plan, locations);
     }
 }
