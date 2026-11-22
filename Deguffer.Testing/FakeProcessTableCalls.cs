@@ -31,19 +31,35 @@ internal sealed class FakeProcessTableCalls : IProcessTableCalls
         return this;
     }
 
+    /// <summary>Thrown by the next listing, as a failed read of the table throws, and then cleared.</summary>
+    public Exception? ListFailure { get; set; }
+
     /// <summary>How many times the process list was read, which is once for each reading of the table.</summary>
     public int ListCount { get; private set; }
 
     public IReadOnlyList<ListedProcess> List()
     {
+        if (ListFailure is { } failure)
+        {
+            ListFailure = null;
+            throw failure;
+        }
+
         ListCount++;
         return [.. _processes.Select(p => new ListedProcess(p.Id, p.Name))];
     }
 
-    public IOpenedProcess? Open(int processId, bool withMemory) =>
-        _processes.FirstOrDefault(p => p.Id == processId) is { OpenRefused: false } process
-            ? new Opened(process, withMemory ? process.Memory : null)
-            : null;
+    public IOpenedProcess? Open(int processId, bool withMemory)
+    {
+        if (_processes.FirstOrDefault(p => p.Id == processId) is not { } process)
+        {
+            return null;
+        }
+
+        process.WhileOpening?.Invoke();
+
+        return process.OpenRefused ? null : new Opened(process, withMemory ? process.Memory : null);
+    }
 
     private sealed class Opened(FakeListedProcess process, IProcessMemory? memory) : IOpenedProcess
     {
@@ -69,6 +85,12 @@ internal sealed class FakeListedProcess
     public string Name { get; init; } = "process";
 
     public bool OpenRefused { get; init; }
+
+    /// <summary>
+    /// Run on the opening thread each time the process is opened, before the open answers, so a test can
+    /// hold an open in flight or count how many are.
+    /// </summary>
+    public Action? WhileOpening { get; init; }
 
     public string? ImagePath { get; init; }
 

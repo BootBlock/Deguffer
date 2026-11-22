@@ -20,6 +20,7 @@ public sealed class CleanupPlanner
     private readonly IReadOnlyList<ICleanupProvider> _providers;
     private readonly Dictionary<ICleanupProvider, int> _places;
     private readonly RowDeclarations? _declarations;
+    private readonly ILiveTreeInspector? _liveTrees;
     private readonly IVolumeInventory _volumes;
     private readonly RunningAccount _account;
     private readonly TimeProvider _time;
@@ -43,13 +44,19 @@ public sealed class CleanupPlanner
     /// </param>
     /// <param name="time">The clock each provider's plan is timed on (<see cref="ProviderPlanTime"/>). The system's by default.</param>
     /// <param name="tuning">What the walks of each volume run with, which bounds the reads a clean makes first (<see cref="RunResidue"/>).</param>
+    /// <param name="liveTrees">
+    /// The inspector the rows share, whose reading of the process table every pass starts at its top,
+    /// after the rows have dropped their caches and before any of them plans. Asked inside a row's slot
+    /// instead, the first rows to ask would each wait for the whole read. Null where no row asks it.
+    /// </param>
     public CleanupPlanner(
         IEnumerable<ICleanupProvider> providers,
         RowDeclarations? declarations = null,
         IVolumeInventory? volumes = null,
         RunningAccount? account = null,
         TimeProvider? time = null,
-        ScanTuner? tuning = null)
+        ScanTuner? tuning = null,
+        ILiveTreeInspector? liveTrees = null)
     {
         _providers = [.. providers];
         _volumes = volumes ?? VolumeInventory.Current;
@@ -58,6 +65,7 @@ public sealed class CleanupPlanner
         _tuning = tuning ?? ScanTuner.Shipped;
         _places = new Dictionary<ICleanupProvider, int>(_providers.Count, ReferenceEqualityComparer.Instance);
         _declarations = declarations;
+        _liveTrees = liveTrees;
 
         for (var place = 0; place < _providers.Count; place++)
         {
@@ -192,7 +200,8 @@ public sealed class CleanupPlanner
         ],
         declarations,
         account: RunningAccount.Of(environment),
-        tuning: tuning);
+        tuning: tuning,
+        liveTrees: liveTrees);
     }
 
     /// <summary>
@@ -545,6 +554,14 @@ public sealed class CleanupPlanner
             foreach (var provider in providers)
             {
                 holds.Add(provider.HoldCaches());
+            }
+
+            // After the rows dropped the reading they share, so this one is of the machine as the pass
+            // finds it. Without a place, because it waits on the kernel rather than an interpreter. Not
+            // awaited here: the rows ask the inspector for it, and the pass's end waits for it.
+            if (_liveTrees is { } liveTrees)
+            {
+                _ = start.Begin(liveTrees.ReadingAsync);
             }
 
             // Before any slot is handed out, so a slow answer a row near the end of the list waits on

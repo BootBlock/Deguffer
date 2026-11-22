@@ -286,6 +286,15 @@ public interface ILiveTreeInspector
     LiveTreeReading Reading(CancellationToken ct = default);
 
     /// <summary>
+    /// <see cref="Reading"/>, awaited rather than waited for.
+    ///
+    /// <para>For a planning pass, which starts it at its top so the reading runs while the rows begin
+    /// planning, and the first row to ask finds it taken or under way rather than paying for it inside
+    /// its own slot. Everyone who asks while it runs waits for the same reading.</para>
+    /// </summary>
+    Task<LiveTreeReading> ReadingAsync(CancellationToken ct = default);
+
+    /// <summary>
     /// Discard any cached snapshot, so every provider in one planning pass sees the same machine.
     /// The same contract as <see cref="IProcessInspector.Invalidate"/>.
     /// </summary>

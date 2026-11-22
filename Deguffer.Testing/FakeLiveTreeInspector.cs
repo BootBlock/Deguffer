@@ -49,7 +49,6 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
     public static FakeLiveTreeInspector CannotTell => new(complete: false);
 
     public int InvalidateCount { get; private set; }
-
     private int _occupiedAsked;
 
     /// <summary>
@@ -312,6 +311,8 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
             return new LiveTreeReading(_snapshot!.Number);
         }
     }
+
+    public Task<LiveTreeReading> ReadingAsync(CancellationToken ct = default) => Task.FromResult(Reading(ct));
 
     public void Invalidate()
     {

@@ -1,3 +1,5 @@
+using Deguffer.Core.Scanning;
+
 namespace Deguffer.Core.Safety;
 
 /// <inheritdoc />
@@ -9,7 +11,7 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
     private readonly IVolumeInventory _volumes;
     private readonly FileHolderQuery _holdersOf;
     private readonly Lock _gate = new();
-    private readonly TimedReading<ProcessTable> _snapshot;
+    private readonly TimedReading<Task<ProcessTable>> _snapshot;
     private LiveTreeMatch? _match;
 
     public LiveTreeInspector()
@@ -221,14 +223,11 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
 
     public ReachedFolder Reach(string path) => Match.Reach(path);
 
-    public LiveTreeReading Reading(CancellationToken ct = default)
-    {
-        lock (_gate)
-        {
-            Snapshot(ct);
-            return new LiveTreeReading(_snapshot.Number);
-        }
-    }
+    public LiveTreeReading Reading(CancellationToken ct = default) =>
+        new(SnapshotAsync(ct).GetAwaiter().GetResult().Number);
+
+    public async Task<LiveTreeReading> ReadingAsync(CancellationToken ct = default) =>
+        new((await SnapshotAsync(ct).ConfigureAwait(false)).Number);
 
     public void Invalidate()
     {
@@ -267,12 +266,62 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
         }
     }
 
-    /// <summary>One reading of the process table, and the rule that matches it.</summary>
+    /// <summary>
+    /// One reading of the process table, and the rule that matches it, waited for outside the lock.
+    /// See <see cref="SnapshotAsync"/>.
+    /// </summary>
     private (ProcessTable Table, LiveTreeMatch Match) Snapshot(CancellationToken ct)
     {
-        lock (_gate)
+        var (table, match, _) = SnapshotAsync(ct).GetAwaiter().GetResult();
+        return (table, match);
+    }
+
+    /// <summary>
+    /// One reading of the process table, the rule that matches it, and which reading it is.
+    ///
+    /// <para><b>The lock hands out the reading, and nobody reads under it.</b> The reading is a task,
+    /// started by the first to ask (a planning pass starts it at its top, through
+    /// <see cref="ReadingAsync"/>), and everyone who asks while it runs waits for that one task. Read
+    /// under the lock, as it once was, every other asker held a thread on the lock for the whole
+    /// read, and <see cref="Invalidate"/> and <see cref="Reach"/> waited behind it too.</para>
+    ///
+    /// <para><b>A reading that failed or was stopped is not kept</b>, so the next question reads
+    /// again, as it did when a failed read was never stored. One stopped by the token of whoever
+    /// started it, and not by this asker's, is read again for this asker.</para>
+    /// </summary>
+    private async Task<(ProcessTable Table, LiveTreeMatch Match, long Number)> SnapshotAsync(CancellationToken ct)
+    {
+        while (true)
         {
-            return (_snapshot.Get(() => Filtered(RunningProcessTable.Read(_calls, ct))), _match ??= new LiveTreeMatch(_volumes));
+            Task<ProcessTable> reading;
+            LiveTreeMatch match;
+            long number;
+
+            lock (_gate)
+            {
+                reading = _snapshot.Get(() => WorkerThreads.Shared.RunAsync(() => Filtered(RunningProcessTable.Read(_calls, ct)), ct));
+                match = _match ??= new LiveTreeMatch(_volumes);
+                number = _snapshot.Number;
+            }
+
+            try
+            {
+                return (await reading.WaitAsync(ct).ConfigureAwait(false), match, number);
+            }
+            catch (OperationCanceledException) when (reading.IsCanceled && !ct.IsCancellationRequested)
+            {
+                // Stopped for whoever started it. This asker still wants an answer.
+            }
+            finally
+            {
+                if (reading.IsFaulted || reading.IsCanceled)
+                {
+                    lock (_gate)
+                    {
+                        _snapshot.Forget(reading);
+                    }
+                }
+            }
         }
     }
 
