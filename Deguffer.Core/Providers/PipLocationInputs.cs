@@ -5,12 +5,9 @@ namespace Deguffer.Core.Providers;
 /// <summary>
 /// Everything <c>pip cache dir</c> reads to say where pip's cache is, for <see cref="ToolAnswerMemory"/>.
 ///
-/// <para><b>The sources.</b> pip's configuration is read, in order, from the site-wide
-/// <c>%ProgramData%\pip\pip.ini</c>, the legacy <c>%USERPROFILE%\pip\pip.ini</c>, the roaming
-/// <c>%APPDATA%\pip\pip.ini</c>, the interpreter's <c>&lt;sys.prefix&gt;\pip.ini</c>, and the file
-/// <c>PIP_CONFIG_FILE</c> names (https://pip.pypa.io/en/stable/topics/configuration/, and
-/// <c>get_configuration_files</c> in pip's <c>configuration.py</c>). pip does not read
-/// <c>%LOCALAPPDATA%\pip\pip.ini</c>. The variables need no entry: the fingerprint holds the whole
+/// <para><b>The sources.</b> pip's configuration is read from its fixed files
+/// (<see cref="PipConfigurationFiles"/>), the interpreter's <c>&lt;sys.prefix&gt;\pip.ini</c>, and the
+/// file <c>PIP_CONFIG_FILE</c> names. The variables need no entry: the fingerprint holds the whole
 /// block the tool is given.</para>
 ///
 /// <para><b>The code.</b> A different pip can answer differently, so the launcher, the interpreter it
@@ -40,13 +37,8 @@ internal static class PipLocationInputs
     /// <param name="system">Where the site-wide configuration is.</param>
     public static ToolInputs Of(string pip, IUserEnvironment environment, ISystemDirectories system)
     {
-        var files = new List<string>
-        {
-            pip,
-            Path.Combine(system.ProgramData, "pip", "pip.ini"),
-            Path.Combine(environment.UserProfile, "pip", "pip.ini"),
-            Path.Combine(environment.RoamingAppData, "pip", "pip.ini"),
-        };
+        var files = new List<string> { pip };
+        files.AddRange(PipConfigurationFiles.Of(environment, system).Select(static file => file.Path));
 
         var folders = new List<ListedFolder> { new(Path.Combine(environment.RoamingAppData, "Python"), UserSiteDepth) };
 
