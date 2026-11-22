@@ -5,8 +5,9 @@
 > duplicate search, start-up and file I/O, filed as #494 to #537, and a third audit of the map's
 > drawing, Explore's lists and removal, the duplicate search's memory and the shell's lists, filed as
 > #676 to #690, and a fourth audit of the running App, real tools, real drives and elevated passes,
-> filed as #691 to #710 and #737 to #743, and a fifth audit of every hot path again, filed as #1014
-> to #1046. Work each in its own order below:
+> filed as #691 to #710 and #737 to #743, a fifth audit of every hot path again, filed as #1014
+> to #1046, and a sixth audit of finding providers' files and cleaning them, filed as #1057 to
+> #1075 and tracked by #1076. Work each in its own order below:
 > the measurements in each stage 0 decide the larger items after them. Flip to ✅ COMPLETE and
 > `git mv` into `done/` when every issue below is closed or rejected, or supersede it with a newer
 > plan.
@@ -524,3 +525,68 @@ scan copied its whole table at every snapshot (#1015, done), every walk boxed an
 | Steam rows ignoring the token in their loops | Bounded by the library count. |
 | `DllImport` with runtime marshalling in the Memory, window and WMI calls | Per action or reading, not per entry; the source sweep's `library-import-not-dll-import` rule holds new code. |
 | `SequentialScan` on the duplicate search's first-and-last-blocks read | Disproved: no read-ahead past the 64 KiB block either way. |
+
+## Sixth audit: finding providers' files, and cleaning them
+
+A sixth audit read, in five parallel lanes, what a Storage scan and a clean run: the planning pass's
+orchestration and shared seams, the scanning primitives the providers measure through, the providers
+in two halves with the subsystems they use, and the clean with its safety checks. Each finding was
+checked against the code and against every open and closed `type: performance` issue, and the
+survivors were filed as #1057 to #1075, each with an estimated before-and-after benchmark. #1076
+tracks them. Figures come from `Deguffer.Benchmark` (`plan`, `links`, `walk`, `clean`, `verify`)
+and from throwaway programs against the Release `Deguffer.Core.dll`, on one shared machine with
+other work running; each issue says which figures were measured.
+
+### What it found, in one paragraph
+
+**A pass now ends on what its rows wait for, not on what they read.** Warm, a planning pass took a
+median of 4.6 s, and a first pass in a fresh process 8.4 s once and 28.3 s once. In the slow pass,
+eight rows that ask which children another row offers all ended within 44 ms of each other, when the
+shared reading of every row's declarations finished: each had held its planning slot idle, and asked
+before measuring rather than after. The Temporary files row, often last, asks its tenants one at a
+time. uv and NuGet still start their tools every pass. Progress reported path by path re-adds every
+path. In the clean, plans run strictly in turn, each after the last one's verification.
+
+### Order of work
+
+| Issue | Note |
+| --- | --- |
+| #1057 | Rows wait for every row's declarations before measuring, holding a slot idle. The largest gain for the pass's tail. |
+| #1060 | The Temporary files row's tenant claims, one at a time, two of them listed after it. Measured 1.49-2.50 s against 0.73-1.59 s at once. |
+| #1059 | uv and NuGet never adopted the remembered tool answers (#447). NuGet 1.2-1.8 s, uv 0.35-0.70 s per pass. `safety` for NuGet's claim. |
+| #1061 | `RunningTotal` re-adds every path per report: 237 ms for 10,000 paths, measured. |
+| #1062, #1063, #1064, #1065 | The process table read in series under a lock (`safety`), the status line posted per change, two stores written before the pass returns, and volume lookups per path. |
+| #1066, #1067, #1068, #1071 | The hard-link scanner without the index, PlatformIO's plan-time walk, Poetry's two measurements in turn, and cloud sync roots walked in turn. |
+| #1073, #1069, #1075 | A second DISM analysis with both component-store rows, synchronous registered-storage readers, and the registered read and the residue probe in turn. #1069 and #1075 are `safety`. |
+| #1070, #1074 | Hyper-V's WMI calls in series, and a Disk Cleanup look beside `GetSpaceUsed` (`safety`). Each is measured before it is built. |
+
+### Waiting on a decision
+
+| Issue | The decision |
+| --- | --- |
+| #1058 | Let each row state where its declarations can lie, so a question waits only for those rows. Changes which rows decide what §5.6 asserts survived. `safety`. |
+| #1072 | Overlap a clean's removal plans and verify each after every overlapping plan has ended. Some verdicts change from "Survived" to "MISSING". `safety`. |
+
+### Added to open issues
+
+| Issue | What was added |
+| --- | --- |
+| #442 | The pass ends on the Temporary files and Previous Windows installation rows, measured. |
+| #448 | Absent tools held a slot for about 180 ms while 16 PATH searches contended, against 10-13 ms alone. |
+| #535 | `ToolAnswerMemory` does not share a query already in flight. |
+| #970 | The Nx shared-cache row examines and vetoes in its declaration and again in its plan. |
+| #1003 | Source discovery's `DirectorySearch.Meet` looks names up as strings. |
+| #1042 | Unreal's Zen stores are probed and listed again on each of up to four calls. |
+
+### Checked and not filed
+
+| Finding | Why no issue |
+| --- | --- |
+| Start the declarations reading when the pass starts | Timed over 10 Release passes: each waiting row gained 60-140 ms and the pass total stayed inside the noise. #1057 and #1058 address the wait itself. |
+| Fewer deletion threads in a removal | Disproved: 100,000 files took 5.8 s at 32 threads and 8.5-14.1 s at 8. |
+| Per-step progress posts during a clean | Asynchronous, and thinned on the UI thread; they do not delay the clean. |
+| What #1016 left: following survivors when something was left standing | About 0.1 s for 10,918 paths at 16 at once, and cheaper would remember what `MountPointLookup` keeps live on purpose. |
+| Two providers measuring the same tree in one pass | No measured path equals or lies inside another in a pass's 2,950 estimates; `RootSetWalk` already merges nested roots within a call. |
+| A second listing call per directory to prove the listing ended | A short buffer does not prove the end, so skipping it risks a partial listing. |
+| STM32Cube's zips read in turn; the reset logs dated beside their measurement | Rare, or 1-2 ms; #1044 is closed. |
+| Firefox profiles, Nx workspaces, Yarn Berry zips, Restic and Vagrant listings, `LookupAccountSid` per profile | 1-90 ms per pass, or sensitive to change for a small gain. |
