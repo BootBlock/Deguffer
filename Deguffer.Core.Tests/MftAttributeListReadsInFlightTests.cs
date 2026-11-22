@@ -112,30 +112,41 @@ public sealed class MftAttributeListReadsInFlightTests
     }
 
     /// <summary>
-    /// Cancelled while the oldest read is held, the reader hands nothing on, starts no further read, and
-    /// returns only once the held read has finished, so no read lands in a buffer it released.
+    /// Cancelled while the oldest read is held, by a disk that ignores the cancellation, the reader hands
+    /// nothing on, even once that read lands, and returns only after it has, so no read lands in a
+    /// buffer it released. Once cancelled no read is made, so a reader that waited for the oldest to
+    /// land before looking at the token would hand it on and then wait for a read never made.
     /// </summary>
     [Fact]
-    public async Task CancelledWhileTheOldestIsHeldStartsNoMoreAndWaitsForIt()
+    public async Task CancelledWhileTheOldestIsHeldHandsNothingOnAndWaitsForIt()
     {
         var clusters = Enumerable.Range(1, 30).Select(i => i * 1_000L).ToArray();
-        using var source = new HeldReads(held: [1_000]);
+        using var source = new HeldReads(held: [1_000], ignoreCancellation: true);
         using var cancel = new CancellationTokenSource();
         var handed = new List<long>();
 
         var reading = Task.Run(() => Read(source, Deferred(clusters), handed, cancel.Token));
 
-        for (var i = 0; i < Window; i++)
+        try
         {
-            Assert.True(await source.Started.WaitAsync(Patience), $"read {i} was never started while the oldest was held");
-        }
+            for (var i = 0; i < Window; i++)
+            {
+                Assert.True(await source.Started.WaitAsync(Patience), $"read {i} was never started while the oldest was held");
+            }
 
-        await cancel.CancelAsync();
+            await cancel.CancelAsync();
+
+            // Long enough for a reader that did not wait for the held read to have returned.
+            await Task.WhenAny(reading, Task.Delay(TimeSpan.FromMilliseconds(200)));
+            Assert.False(reading.IsCompleted, "the reader returned while the held read was still in flight");
+        }
+        finally
+        {
+            source.Release(1_000, readable: true);
+        }
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => reading.WaitAsync(Patience));
         Assert.Empty(handed);
-        Assert.Equal(Window, source.Reads.Count);
-        Assert.True(source.HeldFinished(1_000), "the reader returned while the held read was still in flight");
     }
 
     /// <summary>
@@ -172,16 +183,16 @@ public sealed class MftAttributeListReadsInFlightTests
 
     /// <summary>
     /// A volume whose every cluster holds a list of one entry naming that cluster. A read starting at a
-    /// held cluster stays in flight until released, landing as readable or not. Each read is recorded
+    /// held cluster stays in flight until released, landing as readable or not, and until cancelled
+    /// unless <c>ignoreCancellation</c>, as a disk that has the request already does. Each read is recorded
     /// with how many lists had been handed on when it was started.
     /// </summary>
-    private sealed class HeldReads(long[] held) : IMftSource
+    private sealed class HeldReads(long[] held, bool ignoreCancellation = false) : IMftSource
     {
         private readonly Dictionary<long, TaskCompletionSource<bool>> _held = held.ToDictionary(
             static c => c, static _ => new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously));
 
         private readonly List<(long Cluster, int Clusters, int HandedBefore)> _reads = [];
-        private readonly Dictionary<long, Task<bool>> _inFlight = [];
         private int _handed;
 
         public SemaphoreSlim Started { get; } = new(0);
@@ -209,15 +220,6 @@ public sealed class MftAttributeListReadsInFlightTests
 
         public void Release(long cluster, bool readable) => _held[cluster].SetResult(readable);
 
-        /// <summary>Whether the read held at <paramref name="cluster"/> has finished, released or cancelled.</summary>
-        public bool HeldFinished(long cluster)
-        {
-            lock (_reads)
-            {
-                return _inFlight.TryGetValue(cluster, out var read) && read.IsCompleted;
-            }
-        }
-
         public ValueTask<bool> TryReadClustersAsync(long firstCluster, Memory<byte> destination, CancellationToken ct)
         {
             var count = destination.Length / ClusterBytes;
@@ -243,14 +245,7 @@ public sealed class MftAttributeListReadsInFlightTests
             // Only the first read of a held cluster is held: one made again alone reads at once.
             if (_held.TryGetValue(firstCluster, out var hold) && !hold.Task.IsCompleted)
             {
-                var read = hold.Task.WaitAsync(ct);
-
-                lock (_reads)
-                {
-                    _inFlight[firstCluster] = read;
-                }
-
-                return new ValueTask<bool>(read);
+                return new ValueTask<bool>(ignoreCancellation ? hold.Task : hold.Task.WaitAsync(ct));
             }
 
             return ValueTask.FromResult(true);

@@ -21,7 +21,9 @@ namespace Deguffer.Core.Scanning.Mft;
 /// <see cref="MftAttributeList.MaximumLength"/> rounded up to whole clusters, so each is at most the
 /// larger of that and a cluster: 8 MiB at the largest depth on a volume of 4 KiB clusters,
 /// and 64 MiB on one of 2 MiB clusters. The entries of lists read ahead of their turn wait beside
-/// them, at most four times as many reads' worth, and a list's entries take no more than its bytes.</para>
+/// them, at most four times as many reads' worth. A list's entries take less than three and a half
+/// times the clusters it was read from: an entry is 40 bytes held and at least 26 on the disk, in a
+/// list that grows by doubling.</para>
 /// </summary>
 public sealed record TableTuning
 {
