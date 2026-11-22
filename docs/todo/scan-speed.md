@@ -551,7 +551,7 @@ path. In the clean, plans run strictly in turn, each after the last one's verifi
 
 | Issue | Note |
 | --- | --- |
-| #1057 | Rows wait for every row's declarations before measuring, holding a slot idle. The largest gain for the pass's tail. |
+| #1057 | Rows wait for every row's declarations before measuring, holding a slot idle. The largest gain for the pass's tail. Done: every row that asks which spared children another row offers starts the question once its walk exists, measures, and awaits the answer only where its plan reads it, and `CodeRuleSweepTests` refuses an `await` written on the question itself. Not timed. |
 | #1060 | The Temporary files row's tenant claims, one at a time, two of them listed after it. Measured 1.49-2.50 s against 0.73-1.59 s at once. Done: `TenantClaims` starts every claim on a worker thread of its own and reads the answers in the tenants' order, and `CreateDefault` lists every tenant ahead of the row. |
 | #1059 | uv and NuGet never adopted the remembered tool answers (#447). NuGet 1.2-1.8 s, uv 0.35-0.70 s per pass. `safety` for NuGet's claim. |
 | #1061 | `RunningTotal` re-adds every path per report: 237 ms for 10,000 paths, measured. |
