@@ -30,7 +30,10 @@ public static class BulkSelectionRule
     /// The finding with the keep list already applied, so every step in its plan is one the row offers.
     /// See <see cref="CleanupPlan.WithKeepList"/>.
     /// </param>
-    /// <param name="isListed">Whether the filters leave the row on screen.</param>
+    /// <param name="isListed">
+    /// Whether the row is drawn in the list, rather than hidden by a filter or folded into the group
+    /// below it (<see cref="PreviewPlace.Listed"/>).
+    /// </param>
     /// <param name="isTicked">Whether any step in the row is ticked now.</param>
     /// <param name="isElevated">Whether this process holds administrator rights, which some steps need.</param>
     public static RowTick For(BulkSelection selection, Finding offered, bool isListed, bool isTicked, bool isElevated)
