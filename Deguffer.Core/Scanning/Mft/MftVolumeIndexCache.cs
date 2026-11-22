@@ -80,6 +80,25 @@ public sealed class MftVolumeIndexCache
     public Task<Built> Get(char driveLetter) => Entry(driveLetter).Build.Value;
 
     /// <summary>
+    /// The index for <paramref name="driveLetter"/> where a build of it has started, still running or
+    /// complete, or null where none has. Starts nothing and opens nothing.
+    ///
+    /// <para>For a question that the table answers more cheaply than a walk only where the table is
+    /// being read anyway: a build costs a pass over the whole volume, seconds, which one store's
+    /// walk does not. A build whose open is still under way is not started yet, so the caller walks
+    /// rather than waiting on the device.</para>
+    /// </summary>
+    public Task<Built>? Started(char driveLetter)
+    {
+        lock (_gate)
+        {
+            return _byVolume.TryGetValue(char.ToUpperInvariant(driveLetter), out var entry) && entry.Build.IsValueCreated
+                ? entry.Build.Value
+                : null;
+        }
+    }
+
+    /// <summary>
     /// A caller waits for the index of <paramref name="driveLetter"/> with no walk beside it, so the
     /// build is not speculative and reads at normal priority for the rest of its life. See
     /// <see cref="BuildPriorities"/>.

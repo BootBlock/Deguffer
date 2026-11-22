@@ -35,7 +35,18 @@ public abstract record TreeEntry(string Name)
 /// control that — stating it here is what lets one pin the single place the two routes are
 /// expected to disagree.
 /// </param>
-public sealed record TreeFile(string Name, int Bytes, bool Resident = false, int? Allocated = null) : TreeEntry(Name);
+/// <param name="Alias">
+/// An 8.3 alias the table gives the file beside its name, which is not a link and is never listed.
+/// Null for none. The real file is left whatever short name its volume gives it, which no route
+/// reads.
+/// </param>
+/// <param name="SizeUnknownToTable">
+/// Whether the table describes the file by a later extent of its data alone, so it establishes no
+/// size for it and declines every total holding it. The real file has its length as usual.
+/// </param>
+public sealed record TreeFile(
+    string Name, int Bytes, bool Resident = false, int? Allocated = null, string? Alias = null, bool SizeUnknownToTable = false)
+    : TreeEntry(Name);
 
 public sealed record TreeDirectory(string Name, params TreeEntry[] Children) : TreeEntry(Name);
 
@@ -163,15 +174,24 @@ public static class MirroredTree
         {
             foreach (var (path, (number, file, names)) in _files)
             {
-                if (names.Count > 1)
+                if (file.SizeUnknownToTable)
+                {
+                    if (names.Count > 1 || file.Alias is not null || file.Resident)
+                    {
+                        throw new NotSupportedException($"{path} has no size in the table, which nothing else here is combined with.");
+                    }
+
+                    Fixture.AddFileDescribingOnlyALaterExtent(number, names[0].Parent, file.Name);
+                }
+                else if (names.Count > 1 || file.Alias is not null)
                 {
                     if (file.Resident)
                     {
-                        throw new NotSupportedException($"{path} is described as resident, which no hard-linked file here is.");
+                        throw new NotSupportedException($"{path} is described as resident, which no file with an alias or a link here is.");
                     }
 
                     Fixture.AddHardLinkedFile(
-                        number, names, file.Allocated ?? file.Bytes, logical: file.Bytes, file.Created, file.Modified);
+                        number, names, file.Allocated ?? file.Bytes, logical: file.Bytes, file.Created, file.Modified, file.Alias);
                 }
                 else if (file.Resident)
                 {

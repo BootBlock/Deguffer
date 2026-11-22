@@ -704,12 +704,37 @@ public sealed class CleanupPlannerTests
                 $"'{id}' measured with tables other than the environment's ({result.Fallback}).");
             Assert.True(File.Exists(estimates), $"'{id}' remembered its measurement outside the environment.");
         }
-
-        static IDirectoryScanner ScannerOf(ICleanupProvider provider) =>
-            (IDirectoryScanner)typeof(CleanupProviderBase)
-                .GetProperty("Scanner", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
-                .GetValue(provider)!;
     }
+
+    /// <summary>
+    /// #1066: every store measured by its sole-linked files (pnpm's, Bun's, the driver store) reads the
+    /// volume indexes of the one scanner every other row shares, so an elevated pass answers the stores
+    /// from the index those rows build rather than walking each store file by file.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void EveryStoreRowReadsTheIndexTheOtherRowsBuild(bool tuned)
+    {
+        using var temp = new TempDirectory();
+        var environment = new FakeUserEnvironment(temp.Path) { VolumeTables = FakeMftSourceFactory.Unavailable(FallbackReason.NotNtfsVolume) };
+        var planner = CleanupPlanner.CreateDefault(
+            liveTrees: FakeLiveTreeInspector.NothingLive,
+            environment: environment,
+            tuning: tuned ? RouteTuners.Table : null);
+
+        var scanners = planner.Providers.Select(ScannerOf).ToList();
+        var shared = Assert.Single(scanners.OfType<DirectoryScanner>().DistinctBy(scanner => scanner, ReferenceEqualityComparer.Instance));
+        var stores = scanners.OfType<HardLinkAwareScanner>().ToList();
+
+        Assert.True(stores.Count >= 3, $"only {stores.Count} rows measure sole-linked files");
+        Assert.All(stores, store => Assert.Same(shared.HardLinks, store));
+    }
+
+    private static IDirectoryScanner ScannerOf(ICleanupProvider provider) =>
+        (IDirectoryScanner)typeof(CleanupProviderBase)
+            .GetProperty("Scanner", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .GetValue(provider)!;
 
     /// <summary>
     /// Every default row that examines the temporary folders reads them through one listing, so a pass

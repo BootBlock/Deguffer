@@ -25,4 +25,7 @@ internal enum MftRecordFlags : byte
 
     /// <summary>See <see cref="MftVolumeTree.IsPresent"/>.</summary>
     Present = 16,
+
+    /// <summary>See <see cref="MftVolumeTree.HasOtherNames"/>.</summary>
+    OtherNames = 32,
 }

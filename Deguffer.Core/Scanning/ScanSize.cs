@@ -69,6 +69,18 @@ public readonly record struct ScanSize(
     public static ScanSize Approximate(long logical) => new(logical, logical, IsApproximate: true);
 
     /// <summary>
+    /// A prediction that knows both sizes, and counts no entries: the bytes of the files nothing
+    /// outside a tree links (<see cref="LinkCounting.SoleName"/>), which both routes read exactly. It
+    /// is still a prediction, because link counts move whenever a project installs or removes
+    /// dependencies, and the tool's eviction chooses by its own reference records rather than by
+    /// counting links. A figure the next hour can change must not present itself as precise.
+    ///
+    /// <para>No entries, because the tool it forecasts decides what it removes, so there is no removal
+    /// of Deguffer's here whose entries could be counted.</para>
+    /// </summary>
+    public static ScanSize Approximate(long allocated, long logical) => new(allocated, logical, IsApproximate: true);
+
+    /// <summary>
     /// The most a removal could free, which it is known to fall short of, and says so. See
     /// <see cref="IsCeiling"/>.
     /// </summary>

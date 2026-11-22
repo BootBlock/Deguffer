@@ -104,12 +104,14 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
     /// Nodes below the path that are neither counted nor entered, and keep every folder above them
     /// standing, as <see cref="TryPlace"/> found them. See <see cref="ScanBounds.LeftOut"/>.
     /// </param>
+    /// <param name="counting">What a file with several names counts.</param>
     public MftMeasurement? TryMeasure(
         IReadOnlyList<string> relativePath,
         IReadOnlyList<MinimumAge> keeps,
         bool keepRoot,
-        IReadOnlySet<uint> leftOut) =>
-        TryResolve(relativePath) is { } record ? _tally.TryTally(record, keeps, keepRoot, leftOut) : null;
+        IReadOnlySet<uint> leftOut,
+        LinkCounting counting = LinkCounting.EachName) =>
+        TryResolve(relativePath) is { } record ? _tally.TryTally(record, keeps, keepRoot, leftOut, counting) : null;
 
     /// <summary>The same, where the caller has no guard and so nothing to be told about.</summary>
     public ScanSize? TryMeasure(IReadOnlyList<string> relativePath) =>
@@ -142,7 +144,7 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
 
     /// <summary>
     /// The node of each entry of <paramref name="leftOut"/>, given as components below
-    /// <paramref name="root"/>, for <see cref="TryMeasure(IReadOnlyList{string}, IReadOnlyList{MinimumAge}, bool, IReadOnlySet{uint})"/>
+    /// <paramref name="root"/>, for <see cref="TryMeasure(IReadOnlyList{string}, IReadOnlyList{MinimumAge}, bool, IReadOnlySet{uint}, LinkCounting)"/>
     /// to leave out, or null where one cannot be placed. See <see cref="MftLeftOutPlacement"/>.
     /// </summary>
     /// <param name="describe">

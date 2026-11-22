@@ -11,10 +11,10 @@ public enum ScanStrategy
     /// its own.
     ///
     /// <para>Usually it carries a <see cref="FallbackReason"/>, because usually it was reached by
-    /// falling back. The exception is <see cref="HardLinkAwareScanner"/>, which walks by choice:
-    /// a hard-link count has to be read per file, the file table cannot be read unelevated, and a
-    /// figure that existed only under elevation would disagree with the ordinary run's. Nothing was
-    /// fallen back from there, so nothing is offered — see <see cref="ScanResult.ByChoice"/>.</para>
+    /// falling back. The exception is <see cref="HardLinkAwareScanner"/>, which walks by choice: it
+    /// reads the file table only where other rows are building it anyway, and never starts a build of
+    /// its own, so its walk fell back from nothing and nothing is offered — see
+    /// <see cref="ScanResult.ByChoice"/>.</para>
     /// </summary>
     ParallelEnumeration,
 

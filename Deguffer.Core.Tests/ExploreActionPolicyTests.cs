@@ -1780,7 +1780,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [
         new GradleCacheProvider(_environment),
         new CargoCacheProvider(_environment),
-        new NuGetCacheProvider(_environment),
+        new NuGetCacheProvider(_environment, systemDirectories: _system),
         new MavenRepositoryProvider(_environment),
         new PlatformIoCacheProvider(_environment),
         new UvCacheProvider(_environment),
