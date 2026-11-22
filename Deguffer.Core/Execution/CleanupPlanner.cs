@@ -136,7 +136,7 @@ public sealed class CleanupPlanner
         // One scanner for every provider, as this machine's shared one is: its volume index is the
         // whole cost of the fast path, and an unshared scanner per provider would rebuild it for each.
         var scanner = tuning is null ? DirectoryScanner.For(environment) : DirectoryScanner.CreateDefault(environment, tuning);
-        var hardLinks = tuning is null ? HardLinkAwareScanner.Default : new HardLinkAwareScanner(tuning);
+        var hardLinks = scanner.HardLinks;
 
         // One discovery for every provider that searches the user's own folders, and one live-tree
         // inspector beside it. Shared deliberately rather than defaulted per provider: six unshared

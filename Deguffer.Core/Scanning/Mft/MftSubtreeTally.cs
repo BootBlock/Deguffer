@@ -23,14 +23,16 @@ internal sealed class MftSubtreeTally(MftVolumeTree tree, MftChildLinks links)
     /// </summary>
     /// <param name="keepRoot">See <see cref="ScanBounds.KeepRoot"/>.</param>
     /// <param name="leftOut">See <see cref="ScanBounds.LeftOut"/>.</param>
-    public MftMeasurement? TryTally(uint node, IReadOnlyList<MinimumAge> keeps, bool keepRoot, IReadOnlySet<uint> leftOut)
+    /// <param name="counting">What a file with several names counts.</param>
+    public MftMeasurement? TryTally(
+        uint node, IReadOnlyList<MinimumAge> keeps, bool keepRoot, IReadOnlySet<uint> leftOut, LinkCounting counting)
     {
         ArgumentOutOfRangeException.ThrowIfZero(keeps.Count);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(keeps.Count, MostGuards);
 
         if (tree.IsDirectory(node))
         {
-            return TrySumSubtree(node, keeps, keepRoot, leftOut);
+            return TrySumSubtree(node, keeps, keepRoot, leftOut, counting);
         }
 
         if (tree.SizeUnknown(node))
@@ -39,7 +41,9 @@ internal sealed class MftSubtreeTally(MftVolumeTree tree, MftChildLinks links)
         }
 
         var newest = tree.NewestOf(node);
-        var taken = new ScanSize(tree.AllocatedOf(node), tree.LogicalOf(node), Entries: 1);
+        var taken = counting is LinkCounting.EachName
+            ? new ScanSize(tree.AllocatedOf(node), tree.LogicalOf(node), Entries: 1)
+            : SoleNameSize(node);
 
         return new MftMeasurement(
             [.. keeps.Select(keep => keep.Protects(newest) ? new MftReading(ScanSize.Zero, WithheldRecent: true) : new MftReading(taken, false))],
@@ -72,8 +76,15 @@ internal sealed class MftSubtreeTally(MftVolumeTree tree, MftChildLinks links)
     /// <para><b>A file is counted once for each of its names in the subtree</b>, because each is a
     /// node (see <see cref="MftLink"/>). That is what the walk lists and what the removal takes, and
     /// a name outside the subtree is outside the total.</para>
+    ///
+    /// <para><b>Under <see cref="LinkCounting.SoleName"/>, a file counts only where it has one
+    /// name</b>, and the readings count no entries, as <see cref="HardLinkAwareScanner"/>'s walk
+    /// reads each file's link count. The traversal, the guard, the stores and the bounds are the same,
+    /// so the two figures of one tree differ only by what links share. A link to a folder is passed
+    /// over, because that walk neither counts nor judges a folder.</para>
     /// </summary>
-    private MftMeasurement? TrySumSubtree(uint root, IReadOnlyList<MinimumAge> keeps, bool keepRoot, IReadOnlySet<uint> leftOut)
+    private MftMeasurement? TrySumSubtree(
+        uint root, IReadOnlyList<MinimumAge> keeps, bool keepRoot, IReadOnlySet<uint> leftOut, LinkCounting counting)
     {
         var guards = keeps.Count;
         var everyGuard = guards == MostGuards ? uint.MaxValue : (1u << guards) - 1;
@@ -122,7 +133,7 @@ internal sealed class MftSubtreeTally(MftVolumeTree tree, MftChildLinks links)
             // file is one the walk never sees, so it is not counted here either.
             if (tree.IsReparsePoint(node))
             {
-                if (tree.IsDirectory(node))
+                if (tree.IsDirectory(node) && counting is LinkCounting.EachName)
                 {
                     CountOrKeep(node, item.Holder, allocatedBytes: 0, logicalBytes: 0);
                 }
@@ -155,7 +166,15 @@ internal sealed class MftSubtreeTally(MftVolumeTree tree, MftChildLinks links)
                 continue;
             }
 
-            CountOrKeep(node, item.Holder, tree.AllocatedOf(node), tree.LogicalOf(node));
+            // A file with another name keeps its bytes while that name is left, wherever the name is.
+            if (counting is LinkCounting.SoleName && tree.HasOtherNames(node))
+            {
+                CountOrKeep(node, item.Holder, allocatedBytes: 0, logicalBytes: 0);
+            }
+            else
+            {
+                CountOrKeep(node, item.Holder, tree.AllocatedOf(node), tree.LogicalOf(node));
+            }
         }
 
         foreach (var (_, standsUnder) in folders)
@@ -174,7 +193,9 @@ internal sealed class MftSubtreeTally(MftVolumeTree tree, MftChildLinks links)
         for (var guard = 0; guard < guards; guard++)
         {
             readings[guard] = new MftReading(
-                new ScanSize(allocated[guard], logical[guard], Entries: entries[guard]),
+                counting is LinkCounting.EachName
+                    ? new ScanSize(allocated[guard], logical[guard], Entries: entries[guard])
+                    : ScanSize.Approximate(allocated[guard], logical[guard]),
                 (withheld & (1u << guard)) != 0);
         }
 
@@ -227,6 +248,10 @@ internal sealed class MftSubtreeTally(MftVolumeTree tree, MftChildLinks links)
             }
         }
     }
+
+    /// <summary>A file's bytes where it has one name, and none where it has others. See <see cref="LinkCounting.SoleName"/>.</summary>
+    private ScanSize SoleNameSize(uint node) =>
+        tree.HasOtherNames(node) ? ScanSize.Approximate(0, 0) : ScanSize.Approximate(tree.AllocatedOf(node), tree.LogicalOf(node));
 
     /// <summary>
     /// Rebuild one node's path by walking <see cref="MftVolumeTree.ParentOf"/> up to the root. A

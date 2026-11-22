@@ -150,6 +150,18 @@ public sealed class MftVolumeTree(int count)
     public bool IsPresent(long node) => Has(node, MftRecordFlags.Present);
 
     /// <summary>
+    /// Whether this node's file has a name beside the one it was placed by, so that Windows reports
+    /// it with more than one link. Every name of the file answers alike.
+    ///
+    /// <para>Decided from the names the record carries, and not from the links <see cref="PlaceLinks"/>
+    /// keeps, because a name in a directory outside the table is dropped there and is still a link
+    /// Windows counts. A record's 8.3 alias is never among them (<see cref="MftLink"/>), so one name
+    /// and its alias answer false, as <c>GetFileInformationByHandleEx</c> reports one link. A bit of a
+    /// byte every record has anyway, because a sole-link figure asks it of every file it sums.</para>
+    /// </summary>
+    public bool HasOtherNames(long node) => Has(node, MftRecordFlags.OtherNames);
+
+    /// <summary>
     /// Put one record in, under each of its names that is in the table.
     ///
     /// <para>A name whose directory is outside the table is dropped, and the file keeps its others.
@@ -196,7 +208,8 @@ public sealed class MftVolumeTree(int count)
         var flags = MftRecordFlags.Present
             | (record.Size is null ? MftRecordFlags.SizeUnknown : MftRecordFlags.None)
             | (record.IsDirectory ? MftRecordFlags.Directory : MftRecordFlags.None)
-            | (record.IsReparsePoint ? MftRecordFlags.ReparsePoint : MftRecordFlags.None);
+            | (record.IsReparsePoint ? MftRecordFlags.ReparsePoint : MftRecordFlags.None)
+            | (otherLinks.Count > 0 ? MftRecordFlags.OtherNames : MftRecordFlags.None);
 
         if (record.IsDirectory)
         {
