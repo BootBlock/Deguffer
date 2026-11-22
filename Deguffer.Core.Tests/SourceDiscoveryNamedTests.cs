@@ -4,7 +4,7 @@ namespace Deguffer.Core.Tests;
 
 /// <summary>
 /// How a source-tree row picks its own folders out of the discovery every row shares, and what that
-/// costs: about twenty rows ask it of every candidate in each pass.
+/// costs: every source-tree row asks it of every candidate in each pass.
 /// </summary>
 public sealed class SourceDiscoveryNamedTests
 {
