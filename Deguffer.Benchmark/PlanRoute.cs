@@ -6,7 +6,7 @@ namespace Deguffer.Benchmark;
 
 /// <summary>
 /// A full planning pass of every provider, as a Storage scan runs one, with when each provider took a
-/// slot and ended (#443). It only plans: nothing is executed, and nothing a plan offers is removed.
+/// slot and ended (#443), and when each volume's index was ready (#1081). It only plans: nothing is executed, and nothing a plan offers is removed.
 ///
 /// <para>One planner for every run, as the Storage page keeps one for its life, so the first run is a
 /// pass from a fresh process and each later run a warm pass of the same process. Each pass drops the
@@ -22,14 +22,20 @@ internal sealed class PlanRoute(CleanupPlanner planner)
     {
         var timed = new PlanTimeLog();
         var calls = new MachineCallTally();
+        var builds = new IndexBuildLog();
         IReadOnlyList<Finding> findings;
 
-        // Opened in this flow, so every slot and task the pass starts is counted in it (#516).
+        // Opened in this flow, so every slot and task the pass starts is counted in them (#516, #1081).
         using (calls.CountIn())
+        using (builds.RecordIn())
         {
             findings = await planner.PlanAllAsync(timed: timed, ct: ct).ConfigureAwait(false);
         }
 
-        return new RunTally(findings.Count, BytesRead: 0, Complete: true, Planning: new PlanRun(timed.Times, PlanRun.CallsOf(calls)));
+        return new RunTally(
+            findings.Count,
+            BytesRead: 0,
+            Complete: true,
+            Planning: new PlanRun(timed.Times, PlanRun.CallsOf(calls), builds.Volumes));
     }
 }

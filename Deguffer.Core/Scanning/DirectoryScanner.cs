@@ -427,6 +427,33 @@ public sealed class DirectoryScanner : IDirectoryScanner
                 results[indexes[j]] = walked[j];
             }
         }
+
+        RecordAnswers(pipeline, results);
+    }
+
+    /// <summary>
+    /// Which route answered each path of <paramref name="pipeline"/> on a drive letter, for the
+    /// benchmark's <see cref="Diagnostics.IndexBuildLog"/>, where one records this flow.
+    /// </summary>
+    private static void RecordAnswers(IReadOnlyList<VolumeFolders> pipeline, ScanResult[][] results)
+    {
+        if (Diagnostics.IndexBuildLog.Current is null)
+        {
+            return;
+        }
+
+        foreach (var volume in pipeline)
+        {
+            if (volume.DriveLetter is not { } driveLetter)
+            {
+                continue;
+            }
+
+            foreach (var folder in volume.Folders)
+            {
+                Diagnostics.IndexBuildLog.Answered(driveLetter, results[folder.Index][0].Strategy is ScanStrategy.MasterFileTable);
+            }
+        }
     }
 
     /// <summary>

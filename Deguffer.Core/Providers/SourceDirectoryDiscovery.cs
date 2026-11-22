@@ -427,8 +427,14 @@ public sealed class SourceDirectoryDiscovery
             // search is not making.
             _scanner.NeedIndex(root);
 
-            return await FromIndexAsync(search, root, ct).ConfigureAwait(false)
-                ?? (await WorkerThreads.Shared.RunAsync(() => Walk(search, root, ct), ct).ConfigureAwait(false)) with { FellBack = true };
+            if (await FromIndexAsync(search, root, ct).ConfigureAwait(false) is { } indexed)
+            {
+                RecordAnswer(root, byTable: true);
+                return indexed;
+            }
+
+            RecordAnswer(root, byTable: false);
+            return (await WorkerThreads.Shared.RunAsync(() => Walk(search, root, ct), ct).ConfigureAwait(false)) with { FellBack = true };
         }
 
         var raced = await RouteRace.FirstAsync(
@@ -438,7 +444,18 @@ public sealed class SourceDirectoryDiscovery
             () => _scanner.NeedIndex(root),
             ct).ConfigureAwait(false);
 
+        RecordAnswer(root, byTable: raced.Outcome is RaceOutcome.TableAnswered);
+
         return raced.Outcome is RaceOutcome.TableDeclined ? raced.Answer with { FellBack = true } : raced.Answer;
+    }
+
+    /// <summary>Which route answered the search of <paramref name="root"/>, for the benchmark's <see cref="Diagnostics.IndexBuildLog"/>.</summary>
+    private static void RecordAnswer(string root, bool byTable)
+    {
+        if (Diagnostics.IndexBuildLog.Current is not null && VolumePath.TryParse(root, out var volume))
+        {
+            Diagnostics.IndexBuildLog.Answered(volume.DriveLetter, byTable);
+        }
     }
 
     /// <summary>

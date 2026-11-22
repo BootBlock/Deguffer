@@ -1,3 +1,5 @@
+using Deguffer.Core.Diagnostics;
+
 namespace Deguffer.Core.Scanning.Mft;
 
 /// <summary>
@@ -44,6 +46,9 @@ internal sealed class BuildPriorities
         internal bool Needed { get; set; }
 
         internal ReadPriority Applied { get; set; } = ReadPriority.Normal;
+
+        /// <summary>Where the benchmark records each change of priority, or null where nothing records it.</summary>
+        internal IndexBuildTrace? Trace { get; set; }
     }
 
     /// <summary>A walk in flight on <see cref="Disks"/>, or on disks unknown where null, until disposed.</summary>
@@ -142,6 +147,7 @@ internal sealed class BuildPriorities
         {
             volume.Prioritise(wanted);
             build.Applied = wanted;
+            build.Trace?.Prioritised(wanted);
         }
     }
 

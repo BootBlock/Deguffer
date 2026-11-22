@@ -5,17 +5,98 @@ using Deguffer.Core.Execution.Timing;
 namespace Deguffer.Benchmark;
 
 /// <summary>
-/// The plan route's part of the result: the costly questions the pass asked Windows (#516), and when
-/// each provider took a slot and ended (#443). Apart from <see cref="Report"/>, which states what
+/// The plan route's part of the result: the costly questions the pass asked Windows (#516), what each
+/// volume's index build did (#1081), and when each provider took a slot and ended (#443). Apart from <see cref="Report"/>, which states what
 /// every route reports, and in its formats.
 /// </summary>
 internal static class PlanReport
 {
-    /// <summary>The machine calls, then the providers, under the rows every route reports.</summary>
+    /// <summary>The machine calls, the index builds, then the providers, under the rows every route reports.</summary>
     public static void Rows(StringBuilder text, RunSample first, RunSample[] later)
     {
         CallRows(text, first, later);
+        BuildRows(text, first, later);
         ProviderRows(text, first, later);
+    }
+
+    /// <summary>
+    /// For each volume the pass asked about, from the start of the pass: when its index build opened
+    /// the volume, when its index was ready, how long it read at low priority, and how many questions
+    /// the table and a walk answered (#1081). Named by drive letter, never by a path. A dash is a build
+    /// that never opened, or never finished, in that run. The later runs' columns are each the median
+    /// of the runs that have a figure for it.
+    /// </summary>
+    private static void BuildRows(StringBuilder text, RunSample first, RunSample[] later)
+    {
+        var volumes = PlanOf(first).Builds;
+
+        if (volumes.Count == 0)
+        {
+            return;
+        }
+
+        Report.Line(text);
+        PlanRow(text, BuildNameWidth, string.Empty, ["first run", string.Empty, string.Empty, string.Empty, string.Empty, later.Length > 0 ? "later runs: median" : string.Empty]);
+        PlanRow(text, BuildNameWidth, "index of", [.. BuildHeadings, .. later.Length > 0 ? BuildHeadings : []]);
+
+        foreach (var volume in volumes)
+        {
+            var letter = volume.DriveLetter;
+            string[] columns =
+            [
+                Moment(volume.Started),
+                Moment(volume.Ready),
+                Report.Duration(volume.AtLowPriority.TotalSeconds),
+                Report.Count(volume.TableAnswers),
+                Report.Count(volume.WalkAnswers),
+                .. later.Length > 0
+                    ? new[]
+                    {
+                        MedianMoment(later, letter, build => build.Started),
+                        MedianMoment(later, letter, build => build.Ready),
+                        MedianMoment(later, letter, build => build.AtLowPriority),
+                        MedianCount(later, letter, build => build.TableAnswers),
+                        MedianCount(later, letter, build => build.WalkAnswers),
+                    }
+                    : [],
+            ];
+
+            PlanRow(text, BuildNameWidth, letter + ":", columns);
+        }
+    }
+
+    private static readonly string[] BuildHeadings = ["started", "ready", "low", "table", "walk"];
+
+    private const int BuildNameWidth = 10;
+
+    private static string Moment(TimeSpan? at) => at is { } time ? Report.Duration(time.TotalSeconds) : "-";
+
+    private static string MedianMoment(RunSample[] runs, char letter, Func<IndexBuildTimes, TimeSpan?> measure)
+    {
+        double[] figures = [.. runs.Select(run => BuildOf(run, letter) is { } build ? measure(build) : null).OfType<TimeSpan>().Select(time => time.TotalSeconds)];
+
+        return figures.Length == 0 ? "-" : Report.Duration(Spread.Of(figures).Median);
+    }
+
+    private static string MedianCount(RunSample[] runs, char letter, Func<IndexBuildTimes, int> measure)
+    {
+        double[] figures = [.. runs.Select(run => BuildOf(run, letter)).OfType<IndexBuildTimes>().Select(build => (double)measure(build))];
+
+        return figures.Length == 0 ? "-" : Report.Count(Spread.Of(figures).Median);
+    }
+
+    /// <summary>A run's record of the volume <paramref name="letter"/>, or null where that run did not ask about it.</summary>
+    private static IndexBuildTimes? BuildOf(RunSample run, char letter)
+    {
+        foreach (var build in PlanOf(run).Builds)
+        {
+            if (build.DriveLetter == letter)
+            {
+                return build;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

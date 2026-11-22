@@ -1,3 +1,4 @@
+using Deguffer.Core.Diagnostics;
 using Deguffer.Core.Scanning.Media;
 
 namespace Deguffer.Core.Scanning.Mft;
@@ -159,6 +160,11 @@ public sealed class MftVolumeIndexCache
             return Task.FromResult(new Built(null, reason));
         }
 
+        // Taken from the flow that starts the build, before its priority can first change.
+        var trace = IndexBuildLog.Current?.Of(driveLetter);
+        trace?.Started();
+        priority.Trace = trace;
+
         // Only under Auto, the one route that races the questions it asks a build against a walk.
         // File table first waits for the table, so its build is the answer and keeps normal priority.
         if (_tuning.Route is Configuration.ScanRoute.Auto)
@@ -177,14 +183,25 @@ public sealed class MftVolumeIndexCache
             () =>
             {
                 Volatile.Write(ref ran, true);
+                var ready = false;
 
-                // Read here rather than with the open: see the class remarks. A table that cannot be
-                // found closes the volume and says why, as an open that fails does.
-                using var source = volume.TryReadTable(out var unread);
+                try
+                {
+                    // Read here rather than with the open: see the class remarks. A table that cannot be
+                    // found closes the volume and says why, as an open that fails does.
+                    using var source = volume.TryReadTable(out var unread);
 
-                return source is null
-                    ? new Built(null, unread)
-                    : Build(source, table, scan);
+                    var result = source is null
+                        ? new Built(null, unread)
+                        : Build(source, table, scan);
+
+                    ready = result.Index is not null;
+                    return result;
+                }
+                finally
+                {
+                    trace?.Ended(ready);
+                }
             },
             scan);
 

@@ -40,13 +40,7 @@ internal sealed class MachineCallTally
     /// Count the calls made by the caller's flow, and by everything it starts, in this tally until the
     /// returned scope is disposed, which gives the flow back to whatever tally counted it before.
     /// </summary>
-    public MachineCallScope CountIn()
-    {
-        var outer = Counting.Value;
-        Counting.Value = this;
-
-        return new MachineCallScope(outer);
-    }
+    public FlowScope<MachineCallTally> CountIn() => FlowScope<MachineCallTally>.Enter(Counting, this);
 
     /// <summary>What this tally has counted of <paramref name="call"/> so far.</summary>
     public MachineCallCount Of(MachineCall call) =>
@@ -77,9 +71,6 @@ internal sealed class MachineCallTally
             work();
         };
     }
-
-    /// <summary>Put the flow back in the hands of <paramref name="tally"/>, for <see cref="MachineCallScope"/>.</summary>
-    internal static void Restore(MachineCallTally? tally) => Counting.Value = tally;
 
     /// <summary>Count one <paramref name="call"/> that began at <paramref name="started"/>, for <see cref="MachineCallTiming"/>.</summary>
     internal void Ended(MachineCall call, long started)

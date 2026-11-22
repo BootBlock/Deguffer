@@ -106,6 +106,65 @@ public sealed class PlanRouteTests
     }
 
     /// <summary>
+    /// Which route answered each question about a volume is recorded with the pass (#1081), wherever its
+    /// providers ask, and a run records only its own.
+    /// </summary>
+    [Fact]
+    public async Task ARunRecordsWhichRouteAnsweredEachVolumesQuestions()
+    {
+        var asking = new FakeCleanupProvider("asking")
+        {
+            WhilePlanning = () =>
+            {
+                IndexBuildLog.Answered('d', byTable: true);
+                IndexBuildLog.Answered('C', byTable: false);
+                IndexBuildLog.Answered('c', byTable: true);
+            },
+        };
+        var route = new PlanRoute(new CleanupPlanner([asking])).Timed;
+
+        var first = (await route.Run(CancellationToken.None)).Planning!;
+        var second = (await route.Run(CancellationToken.None)).Planning!;
+
+        Assert.Equal([('C', 1, 1), ('D', 1, 0)], first.Builds.Select(build => (build.DriveLetter, build.TableAnswers, build.WalkAnswers)));
+        Assert.Equal(first.Builds.Select(build => (build.DriveLetter, build.TableAnswers, build.WalkAnswers)), second.Builds.Select(build => (build.DriveLetter, build.TableAnswers, build.WalkAnswers)));
+        Assert.All(first.Builds, build => Assert.Null(build.Started));
+    }
+
+    /// <summary>
+    /// Each volume's build start, ready time, low span and answers, by drive letter, with the later
+    /// runs' medians beside them, and a dash for a build that never opened or never finished.
+    /// </summary>
+    [Fact]
+    public void TheReportStatesEachVolumesBuild()
+    {
+        var npm = new FakeCleanupProvider("npm");
+        IndexBuildTimes C(double ready, double low, int table, int walk) =>
+            new('C', TimeSpan.FromSeconds(0.1), TimeSpan.FromSeconds(ready), TimeSpan.FromSeconds(low), table, walk);
+        var unbuilt = new IndexBuildTimes('D', null, null, TimeSpan.Zero, 0, 3);
+
+        var text = Report.Render(
+            Route.Plan,
+            "tuning",
+            [],
+            Machine,
+            [
+                Pass(7, 0, [C(25, 22, 2, 20), unbuilt], (npm, 0, 1)),
+                Pass(5, 0, [C(5, 1, 18, 4), unbuilt], (npm, 0, 1)),
+                Pass(6, 0, [C(7, 3, 16, 6), unbuilt], (npm, 0, 1)),
+            ]);
+
+        var lines = text.Split('\n');
+        Assert.Contains(lines, line => line.StartsWith("index of ", StringComparison.Ordinal));
+        Assert.Equal(
+            ["C:", "100.0 ms", "25.000 s", "22.000 s", "2", "20", "100.0 ms", "6.000 s", "2.000 s", "17", "5"],
+            BuildColumns(lines.Single(line => line.StartsWith("C: ", StringComparison.Ordinal))));
+        Assert.Equal(
+            ["D:", "-", "-", "0.0 ms", "0", "3", "-", "-", "0.0 ms", "0", "3"],
+            BuildColumns(lines.Single(line => line.StartsWith("D: ", StringComparison.Ordinal))));
+    }
+
+    /// <summary>
     /// Each provider's start, end and time, in the order the first run started them, with the later
     /// runs' medians beside them, and the bound stated with the tuning.
     /// </summary>
@@ -164,6 +223,15 @@ public sealed class PlanRouteTests
 
     /// <param name="processTables">How many process table readings the pass made, each taking 15 ms.</param>
     private static RunSample Pass(double seconds, int processTables, params (FakeCleanupProvider Provider, double Began, double Ended)[] times) =>
+        Pass(seconds, processTables, [], times);
+
+    /// <param name="processTables">How many process table readings the pass made, each taking 15 ms.</param>
+    /// <param name="builds">What each volume's index build did in the pass.</param>
+    private static RunSample Pass(
+        double seconds,
+        int processTables,
+        IReadOnlyList<IndexBuildTimes> builds,
+        params (FakeCleanupProvider Provider, double Began, double Ended)[] times) =>
         new(
             TimeSpan.FromSeconds(seconds),
             new RunTally(
@@ -178,7 +246,8 @@ public sealed class PlanRouteTests
                     .. Enum.GetValues<MachineCall>().Select(call => call is MachineCall.ProcessTable
                         ? new MachineCallCount(processTables, TimeSpan.FromMilliseconds(15 * processTables))
                         : default),
-                ])),
+                ],
+                builds)),
             AllocatedBytes: 0,
             FullCollections: 0,
             PeakWorkingSet: 0,
@@ -189,6 +258,20 @@ public sealed class PlanRouteTests
     {
         var words = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         return [words[0], .. words.Skip(1).Chunk(3).SelectMany(group => new[] { group[0], string.Join(' ', group.Skip(1)) })];
+    }
+
+    /// <summary>A volume's letter, then each time as a number and its unit, a dash alone, or a count alone.</summary>
+    private static string[] BuildColumns(string line)
+    {
+        var words = new Queue<string>(line.Split(' ', StringSplitOptions.RemoveEmptyEntries));
+        var columns = new List<string> { words.Dequeue() };
+
+        while (words.TryDequeue(out var word))
+        {
+            columns.Add(words.TryPeek(out var unit) && unit is "ms" or "s" ? word + " " + words.Dequeue() : word);
+        }
+
+        return [.. columns];
     }
 
     /// <summary>A row's id and its times, each a number and its unit.</summary>
