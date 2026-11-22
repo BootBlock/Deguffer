@@ -7,6 +7,7 @@ using Deguffer.Core.Viewing;
 using Deguffer.Testing;
 using Microsoft.Graphics.Canvas;
 using Microsoft.UI.Composition;
+using Windows.Graphics;
 
 namespace Deguffer.App.Tests;
 
@@ -143,6 +144,28 @@ public sealed class ExploreMiniatureTests
         Assert.True(disposed, "the canvas made on the lost device was not disposed");
     }
 
+    /// <summary>
+    /// A canvas made on a device a loss has replaced, which a map keeps until it hears of the
+    /// replacement, is neither written into nor shrunk: drawn through the new device, it would fail
+    /// with an error that is not a loss, and reach the UI thread.
+    /// </summary>
+    [Fact]
+    public void ACanvasOfALostDeviceIsNeitherWrittenNorShrunk()
+    {
+        var (uploaded, shrunk) = OnAMap(map =>
+        {
+            var stale = map.Land(Side, Side)!;
+
+            // As Win2D reports a loss, which it does only for a device that is lost.
+            map.On(() => map.Graphics.Device.OnDeviceLost(map.Graphics.Device.Current, null));
+
+            return map.Through(stale);
+        });
+
+        Assert.Equal(0, uploaded);
+        Assert.False(shrunk, "a copy was shrunk from the lost device's canvas");
+    }
+
     /// <summary>Run <paramref name="work"/> on a map's drawings, on a compositor of the test's own.</summary>
     private static T OnAMap<T>(Func<Map, T> work)
     {
@@ -228,6 +251,27 @@ public sealed class ExploreMiniatureTests
         /// <summary>Write every region of a blank canvas <paramref name="width"/> by <paramref name="height"/> up through the upload.</summary>
         public CanvasBitmap? Land(int width, int height) =>
             On(() => Upload.Land(_surface, new byte[PixelBuffer.LengthFor(width, height)], width, height, PaintOrder.Regions(width, height, focus: null)));
+
+        /// <summary>
+        /// Write one region of a blank canvas through <paramref name="canvas"/> and shrink it, and say
+        /// how many bytes went up and whether a copy was made.
+        /// </summary>
+        public (long Uploaded, bool Shrunk) Through(CanvasBitmap canvas) =>
+            On(() =>
+            {
+                var before = Graphics.Uploaded;
+
+                Graphics.Write(
+                    _surface,
+                    canvas,
+                    new byte[PixelBuffer.LengthFor(Side, Side)],
+                    Side,
+                    new CanvasRegion(0, 0, PaintOrder.RegionSize, PaintOrder.RegionSize));
+
+                var shrunk = Graphics.Shrink(null, canvas, Side, Side, new SizeInt32(Side / 4, Side / 4));
+
+                return (Graphics.Uploaded - before, shrunk is not null);
+            });
 
         /// <summary>How many bytes have gone up, and whether the overview has a copy.</summary>
         public (long Uploaded, bool Overview) Result() => On(() => (Graphics.Uploaded, Layers.Overview is not null));

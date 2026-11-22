@@ -97,8 +97,9 @@ internal sealed class MapGraphics
     internal CanvasBitmap? Staging => _staging;
 
     /// <summary>
-    /// How many bytes of painted pixels have gone up to the GPU through here. Read by a test, which
-    /// proves a drawing painted on the CPU goes up once, overview and all.
+    /// How many bytes of painted pixels have gone up to the GPU, every one of them through
+    /// <see cref="Send"/>. Read by a test, which proves a drawing painted on the CPU goes up once, and
+    /// that its overview sends nothing more.
     /// </summary>
     internal long Uploaded { get; private set; }
 
@@ -151,15 +152,9 @@ internal sealed class MapGraphics
 
         Device.UnlessLost(device =>
         {
-            var staging = _staging ??= CanvasBitmap.CreateFromBytes(
-                device,
-                _staged,
-                PaintOrder.RegionSize,
-                PaintOrder.RegionSize,
-                CompositionDevice.BitmapFormat);
+            var staging = _staging ??= Blank(device, PaintOrder.RegionSize, PaintOrder.RegionSize);
 
-            staging.SetPixelBytes(_staged, 0, 0, region.Width, region.Height);
-            Uploaded += PixelBuffer.LengthFor(region.Width, region.Height);
+            Send(staging, 0, 0, region);
 
             CopyInto(surface, staging, new Point(0, 0), region, flush: false);
         });
@@ -175,7 +170,7 @@ internal sealed class MapGraphics
         Device.UnlessLost<CanvasBitmap>(device =>
         {
             if (spare is not null
-                && ReferenceEquals(spare.Device, device)
+                && IsOnDevice(spare, device)
                 && spare.SizeInPixels.Width == width
                 && spare.SizeInPixels.Height == height)
             {
@@ -184,9 +179,7 @@ internal sealed class MapGraphics
 
             spare?.Dispose();
 
-            // A render target rather than a bitmap made from bytes, so making it sends nothing up: every
-            // pixel of it is written a region at a time as the drawing lands.
-            return new CanvasRenderTarget(device, width, height, 96, CompositionDevice.BitmapFormat, CanvasAlphaMode.Premultiplied);
+            return Blank(device, width, height);
         });
 
     /// <summary>
@@ -194,16 +187,21 @@ internal sealed class MapGraphics
     /// pixels across, into the same place on <paramref name="canvas"/>, a GPU bitmap of that canvas's
     /// size, and from there into the same place on <paramref name="surface"/>, and nothing else of
     /// either. Once every region is written, all of the canvas is on the GPU for <see cref="Shrink"/>,
-    /// and none of it went up twice.
+    /// and none of it went up twice. Nothing is written with a canvas made on a device a loss has
+    /// replaced: see <see cref="IsOnDevice"/>.
     /// </summary>
     public void Write(CompositionDrawingSurface surface, CanvasBitmap canvas, byte[] pixels, int width, CanvasRegion region)
     {
         PixelBuffer.CopyRegion(pixels, width, region, _staged);
 
-        Device.UnlessLost(_ =>
+        Device.UnlessLost(device =>
         {
-            canvas.SetPixelBytes(_staged, region.X, region.Y, region.Width, region.Height);
-            Uploaded += PixelBuffer.LengthFor(region.Width, region.Height);
+            if (!IsOnDevice(canvas, device))
+            {
+                return;
+            }
+
+            Send(canvas, region.X, region.Y, region);
 
             CopyInto(surface, canvas, new Point(region.X, region.Y), region, flush: false);
         });
@@ -266,10 +264,17 @@ internal sealed class MapGraphics
     /// region at a time (see <see cref="PaintUpload"/>), so nothing more goes up through the UI thread.
     /// The GPU shrinks it, with a filter that takes every pixel into account, so a treemap's fine lines
     /// thin out rather than break up as they do when a large surface is shown small.</para>
+    ///
+    /// <para>Null, too, for a canvas made on a device a loss has replaced: see <see cref="IsOnDevice"/>.</para>
     /// </summary>
     public CompositionDrawingSurface? Shrink(CompositionDrawingSurface? into, CanvasBitmap canvas, int width, int height, SizeInt32 size) =>
-        Device.UnlessLost(_ =>
+        Device.UnlessLost<CompositionDrawingSurface>(device =>
         {
+            if (!IsOnDevice(canvas, device))
+            {
+                return null;
+            }
+
             // Resized rather than made again for each whole picture (G5).
             var surface = Sized(into, size);
 
@@ -340,6 +345,34 @@ internal sealed class MapGraphics
             session.Flush();
         }
     }
+
+    /// <summary>
+    /// A bitmap <paramref name="width"/> by <paramref name="height"/> on <paramref name="device"/>, with
+    /// nothing written into it yet. A render target rather than a bitmap made from bytes, so making it
+    /// sends nothing up: every pixel of it that is read goes up through <see cref="Send"/> first.
+    /// </summary>
+    private static CanvasRenderTarget Blank(CanvasDevice device, int width, int height) =>
+        new(device, width, height, 96, CompositionDevice.BitmapFormat, CanvasAlphaMode.Premultiplied);
+
+    /// <summary>
+    /// Send <paramref name="region"/>'s pixels, packed in the staged array, up into
+    /// <paramref name="bitmap"/> at <paramref name="x"/>, <paramref name="y"/>. The one place painted
+    /// pixels go up to the GPU, so <see cref="Uploaded"/> counts every byte.
+    /// </summary>
+    private void Send(CanvasBitmap bitmap, int x, int y, CanvasRegion region)
+    {
+        bitmap.SetPixelBytes(_staged, x, y, region.Width, region.Height);
+        Uploaded += PixelBuffer.LengthFor(region.Width, region.Height);
+    }
+
+    /// <summary>
+    /// Whether <paramref name="bitmap"/> was made on <paramref name="device"/>, the device drawn through
+    /// now. A map's GPU canvas (see <see cref="PaintUpload"/>) outlives a loss until the map hears the
+    /// device was replaced, and a hand-over can go on landing regions after a loss met earlier in it.
+    /// Drawn through the new device, a bitmap of the old one fails with an error that is not a loss,
+    /// which <see cref="CompositionDevice.UnlessLost{T}"/> would let through to the UI thread.
+    /// </summary>
+    private static bool IsOnDevice(CanvasBitmap bitmap, CanvasDevice device) => ReferenceEquals(bitmap.Device, device);
 
     /// <summary><paramref name="spare"/> resized to <paramref name="size"/>, or a plain surface of that size where there is none.</summary>
     private CompositionDrawingSurface Sized(CompositionDrawingSurface? spare, SizeInt32 size)
