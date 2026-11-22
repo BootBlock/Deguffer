@@ -119,7 +119,7 @@ public sealed class RefusedAfterReadingTests : IDisposable
             Steps = [step],
         };
 
-        var result = await executor.ExecuteAsync(plan, runReach: null, residue: null, progress: null, underway: null, default);
+        var result = await executor.ExecuteAsync(plan, runReach: null, residue: null, activity: null, progress: null, underway: null, default);
 
         return Assert.Single(result.Steps);
     }

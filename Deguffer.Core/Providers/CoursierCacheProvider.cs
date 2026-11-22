@@ -217,6 +217,7 @@ public sealed class CoursierCacheProvider : CleanupProviderBase
 
         var kept = Kept();
         var walk = CacheLevelWalk.Under(Levels, cache, ct);
+        var sparing = walk.SurvivorsAsync(_declarations, ct);
 
         // A variable can put one of the kept caches inside a download folder, or the artefact cache
         // inside a kept one. Either way the download folder's address layout is no longer evidence that
@@ -236,9 +237,11 @@ public sealed class CoursierCacheProvider : CleanupProviderBase
             }
         }
 
+        var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
+
         // A kept cache can be a child of the artefact cache where the variable names the folder around
         // them all. It is said once, with what it holds rather than that it was not recognised.
-        var unrecognised = await walk.SurvivorsAsync(_declarations, ct).ConfigureAwait(false);
+        var unrecognised = await sparing.ConfigureAwait(false);
 
         List<(string Path, string Reason)> spared =
         [
@@ -254,8 +257,6 @@ public sealed class CoursierCacheProvider : CleanupProviderBase
                 .Where(k => LongPath.ProbeDirectory(k.Path) is PathPresence.Present)
                 .Select(CacheLevelWalk.SparedNote),
         ];
-
-        var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
 
         if (measured.Note is { } scanNote)
         {

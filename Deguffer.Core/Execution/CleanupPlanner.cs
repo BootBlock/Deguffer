@@ -257,7 +257,7 @@ public sealed class CleanupPlanner
         ProtectionScope scope)
     {
         // Every row that offers an entry of a temporary folder under the name of the tool that wrote
-        // it, built first so the "Temporary files" row can leave those entries to them.
+        // it, built and listed first so the "Temporary files" row can leave those entries to them.
         // They share one listing of each folder they examine, on the reasoning of the shared discoveries
         // CreateDefault builds: the caches, installer downloads and logs rows each start from the
         // temporary folders themselves, which hold tens of thousands of entries on a developer's machine,
@@ -396,13 +396,14 @@ public sealed class CleanupPlanner
             new FileHistoryProvider(environment, preferences: preferences, scanner: scanner),
             new CloudLocalCopiesProvider(CloudFiles.Default, environment, scanner: scanner, tuning: tuning),
             new DropboxCacheProvider(environment, scanner: scanner),
+            installerDownloads,
+            toolLogs,
             new TempDirectoryProvider(
                 environment,
                 liveTrees: liveTrees,
                 preferences: preferences,
                 tenants: [nuget, toolCaches, installerDownloads, toolLogs, testBrowsers, afterEffects, claudeSnapshots, microsoftSymbols, otherSymbols],
                 scanner: scanner),
-            installerDownloads,
             new DeliveryOptimizationProvider(environment, scanner: scanner),
             new PreviousWindowsInstallationProvider(handlers, environment, scanner: scanner),
             new UpgradeDiscardedFilesProvider(handlers, environment, scanner: scanner),
@@ -418,7 +419,6 @@ public sealed class CleanupPlanner
             new BattleNetLogProvider(environment, scanner: scanner),
             new VsCodeLogProvider(environment, declarations: declarations, scanner: scanner),
             new ClaudeCodeMcpLogProvider(environment, scanner: scanner),
-            toolLogs,
             new ClaudeCodeFileHistoryProvider(environment, sessions: claudeSessions, scanner: scanner),
             new ClaudeCodeConversationProvider(environment, projects: claudeProjects, sessions: claudeSessions, scanner: scanner, scope: scope),
             new VirtualDiskProvider(SystemDirectories.Current, environment, scanner: scanner),
@@ -557,7 +557,7 @@ public sealed class CleanupPlanner
             // The account's folders are followed to their mounts once for the pass.
             var terms = new PassTerms(registrars, AnotherAccountPlan.For(_account, _volumes), keep);
 
-            using var pass = new PlanningPass(providers, terms, _volumes, clock, start, ct);
+            using var pass = new PlanningPass(providers, terms, _volumes, _time, clock, start, ct);
             return await pass.RunAsync(status, found, timed).ConfigureAwait(false);
         }
         finally
@@ -631,20 +631,7 @@ public sealed class CleanupPlanner
                 .Select(proof => new Finding(proof.Registrar, IsPresent: true, proof.Proof)),
         ];
 
-        // A finding with nothing to remove and nothing to prove is not part of the run, so it is
-        // dropped here rather than skipped inside the loop. One with nothing to remove and a
-        // survivor to prove stays, because verifying that survivor is the whole of what it is for.
-        //
-        // Those go last, whatever order the selection arrived in: their promise is about what the
-        // whole run leaves standing, and checking it before a later plan has deleted anything would
-        // prove nothing about that plan. OrderBy is stable, so the plans that delete keep the order
-        // they were given.
-        var plans = selected
-            .Select(f => (Finding: f, Plan: f.Plan))
-            .Where(p => p.Plan is { IsEmpty: false } or { HasSomethingToProve: true })
-            .Select(p => (p.Finding, Plan: p.Plan!))
-            .OrderBy(p => p.Plan.IsEmpty)
-            .ToList();
+        var plans = RunOrder.Of(selected);
 
         // §5.6's negative is answered against what the whole run may destroy, not against each
         // plan's own targets. Gathered once, before the first deletion, because a provider that
@@ -659,6 +646,11 @@ public sealed class CleanupPlanner
         // provider promised to leave. Begun before the first deletion, because what had already gone
         // by then is what no removal in the run can have taken. See RunResidue.
         var residue = await RunResidue.BeginAsync([.. plans.Select(p => p.Plan)], _tuning).ConfigureAwait(false);
+
+        // What the run has set acting on the machine, one record for every plan, so a tool's reading one
+        // plan took can stand for the next plan's only where no step of any plan acted between them. See
+        // RunActivity.
+        var activity = new RunActivity();
 
         // §7's extra confirmation, for every plan before the first deletion. Asked inside the loop, the
         // refusal of a later plan arrived after an earlier one had deleted, and threw away that plan's
@@ -700,6 +692,7 @@ public sealed class CleanupPlanner
                     plan,
                     reach,
                     residue,
+                    activity,
                     ScaledProgress.Within(reporters.Progress, done / total, weights[i] / total),
                     reporters.Underway,
                     plan.IsEmpty ? CancellationToken.None : ct)

@@ -420,6 +420,24 @@ public sealed class CleanupPlannerTests
     }
 
     /// <summary>
+    /// Every tenant is listed ahead of the temporary-folder row (#1060). The row waits on each tenant's
+    /// claim before it walks anything, and a tenant listed after it either computes its survey in the
+    /// row's own slot or starts it only once the row is already waiting.
+    /// </summary>
+    [Fact]
+    public void EveryTenantIsListedAheadOfTheTemporaryFolderRow()
+    {
+        using var shipped = new ShippedProviders();
+        var providers = shipped.Planner.Providers.ToList();
+        var temporary = Assert.Single(providers.OfType<TempDirectoryProvider>());
+        var row = providers.IndexOf(temporary);
+
+        Assert.All(temporary.Tenants, tenant => Assert.True(
+            providers.IndexOf((ICleanupProvider)tenant) is >= 0 and var at && at < row,
+            $"{tenant.Name} is listed after the {temporary.Name} row."));
+    }
+
+    /// <summary>
     /// A row that walks a folder leaves out of its survivors what another row's table offers there,
     /// and it learns the other rows from the declarations the planner admitted. A row holding a set of
     /// its own would assert every other row's removals in a folder they share, and report each run
@@ -479,10 +497,10 @@ public sealed class CleanupPlannerTests
                 "plex-transcode", "jellyfin-transcode", "emby-transcode", "affinity-model-cache", "topaz-models", "capture-one-cache", "davinci-resolve-render-cache", "after-effects-disk-cache", "adobe-media-cache", "redshift-cache", "capcut-cache",
                 "squirrel-staging",
                 "platformio", "stm32cube-firmware-zips", "yarn-berry", "playwright", "puppeteer", "vscode-extension-browsers", "vscode-extension-leftovers", "lmstudio-runtimes", "huggingface-hub", "vagrant-boxes", "pulumi-plugins", "test-browser-profiles", "squirrel-superseded-versions", "capcut-superseded-builds", "azure-functions-tools",
-                "graphics-driver-installers", "autodesk-installers", "claude-code-leftovers", "claude-code-command-snapshots", "recycle-bin", "file-history", "cloud-local-copies", "dropbox-cache", "temp-directories",
-                "temp-installer-downloads", "delivery-optimization", "previous-windows-installation", "upgrade-discarded-files", "windows-update-leftovers",
+                "graphics-driver-installers", "autodesk-installers", "claude-code-leftovers", "claude-code-command-snapshots", "recycle-bin", "file-history", "cloud-local-copies", "dropbox-cache", "temp-installer-downloads",
+                "temp-tool-logs", "temp-directories", "delivery-optimization", "previous-windows-installation", "upgrade-discarded-files", "windows-update-leftovers",
                 "driver-store", "component-store", "component-store-reset-base", "restore-points", "other-account-profiles", "crash-dumps",
-                "windows-servicing-logs", "epic-launcher-logs", "battle-net-logs", "vscode-logs", "claude-code-mcp-logs", "temp-tool-logs",
+                "windows-servicing-logs", "epic-launcher-logs", "battle-net-logs", "vscode-logs", "claude-code-mcp-logs",
                 "claude-code-file-history", "claude-code-conversations", "virtual-disks", "hyper-v-disks", "vmware-disks", "virtualbox-disks", "mod-manager-downloads",
             ],
             planner.Providers.Select(p => p.Id));
@@ -493,15 +511,15 @@ public sealed class CleanupPlannerTests
                 "tox-environments", "nox-environments", "dart-tool", "git-lfs-objects",
                 "conda", "debugger-symbols-other-servers", "maven", "vcpkg", "chromium-service-worker-storage", "steam-library-artwork", "steam-shader-cache", "emulator-shader-cache", "retroarch-downloads", "unreal-ddc", "unity-gi-cache", "affinity-model-cache", "topaz-models", "capture-one-cache", "davinci-resolve-render-cache", "after-effects-disk-cache", "adobe-media-cache", "platformio", "stm32cube-firmware-zips", "yarn-berry", "playwright", "puppeteer", "lmstudio-runtimes", "vagrant-boxes",
                 "squirrel-superseded-versions", "capcut-superseded-builds", "azure-functions-tools", "graphics-driver-installers", "autodesk-installers",
-                "cloud-local-copies", "dropbox-cache", "temp-directories", "temp-installer-downloads", "previous-windows-installation",
+                "cloud-local-copies", "dropbox-cache", "temp-installer-downloads", "temp-directories", "previous-windows-installation",
                 "windows-update-leftovers", "driver-store", "component-store",
             ],
             planner.Providers.Where(p => p.Tier == SafetyTier.RegenerableWithCost).Select(p => p.Id));
 
         Assert.Equal(
             [
-                "retroarch-thumbnails", "huggingface-hub", "recycle-bin", "file-history", "upgrade-discarded-files", "component-store-reset-base", "restore-points", "other-account-profiles", "crash-dumps", "windows-servicing-logs",
-                "epic-launcher-logs", "battle-net-logs", "vscode-logs", "claude-code-mcp-logs", "temp-tool-logs", "claude-code-file-history",
+                "retroarch-thumbnails", "huggingface-hub", "recycle-bin", "file-history", "temp-tool-logs", "upgrade-discarded-files", "component-store-reset-base", "restore-points", "other-account-profiles", "crash-dumps", "windows-servicing-logs",
+                "epic-launcher-logs", "battle-net-logs", "vscode-logs", "claude-code-mcp-logs", "claude-code-file-history",
                 "claude-code-conversations", "virtual-disks", "hyper-v-disks", "vmware-disks", "virtualbox-disks", "mod-manager-downloads",
             ],
             planner.Providers.Where(p => p.Tier == SafetyTier.UserData).Select(p => p.Id));
@@ -1065,6 +1083,32 @@ public sealed class CleanupPlannerTests
     }
 
     /// <summary>
+    /// A tool's reading one plan took may stand for the next plan's only where no step of any plan acted
+    /// between them, so every plan in a clean is handed the one record of what the clean set acting, and
+    /// a second clean starts a record of its own: the time between two cleans is time Windows can change
+    /// its component store in.
+    /// </summary>
+    [Fact]
+    public async Task EveryPlanInACleanIsHandedOneRecordOfWhatTheCleanSetActing()
+    {
+        var first = new StubProvider("first", bytes: 1_000);
+        var second = new StubProvider("second", bytes: 1_000);
+        var planner = new CleanupPlanner([first, second]);
+        var plans = await planner.PlanAllAsync();
+
+        await planner.ExecuteAsync(plans);
+        var firstClean = first.ActivityHandedOver;
+
+        Assert.NotNull(firstClean);
+        Assert.Same(firstClean, second.ActivityHandedOver);
+
+        await planner.ExecuteAsync(plans);
+
+        Assert.NotNull(first.ActivityHandedOver);
+        Assert.NotSame(firstClean, first.ActivityHandedOver);
+    }
+
+    /// <summary>
     /// A survivor that had gone before the clean began is somebody else's doing, whichever plan in the
     /// run was working in the folder around it. The run reads what has gone before its first deletion.
     /// </summary>
@@ -1156,6 +1200,9 @@ public sealed class CleanupPlannerTests
 
         /// <summary>The record of what the run's removals left standing, as the planner handed it over.</summary>
         public RunResidue? ResidueHandedOver { get; private set; }
+
+        /// <summary>The record of what the run set acting on the machine, as the planner handed it over.</summary>
+        public RunActivity? ActivityHandedOver { get; private set; }
 
         public void InvalidateCaches() => Note($"invalidate:{id}");
 
@@ -1253,6 +1300,7 @@ public sealed class CleanupPlannerTests
             CleanupPlan plan,
             RunReach? runReach = null,
             RunResidue? residue = null,
+            RunActivity? activity = null,
             IProgress<double>? progress = null,
             IProgress<CommandUnderway?>? underway = null,
             CancellationToken ct = default)
@@ -1260,6 +1308,7 @@ public sealed class CleanupPlannerTests
             WasExecuted = true;
             ReachHandedOver = runReach;
             ResidueHandedOver = residue;
+            ActivityHandedOver = activity;
             Note($"execute:{id}");
 
             // Stands in for what a plan's own removal does to the disk, for a test of what a later plan

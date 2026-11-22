@@ -145,6 +145,11 @@ public interface ICleanupProvider
     /// a folder another provider's removal went into is still a folder this run went into. Null means
     /// this plan is the whole run.
     /// </param>
+    /// <param name="activity">
+    /// What the run has set acting on the machine, which this execution adds to and its tools'
+    /// measurements read. One record for the whole run, because a step of another plan can change what
+    /// this plan's tool measures. Null means this plan is the whole run. See <see cref="RunActivity"/>.
+    /// </param>
     /// <param name="underway">
     /// Each command step's tool as it starts, and null as it returns. See <see cref="CommandUnderway"/>.
     /// </param>
@@ -157,6 +162,7 @@ public interface ICleanupProvider
         CleanupPlan plan,
         RunReach? runReach = null,
         RunResidue? residue = null,
+        RunActivity? activity = null,
         IProgress<double>? progress = null,
         IProgress<CommandUnderway?>? underway = null,
         CancellationToken ct = default);

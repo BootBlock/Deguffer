@@ -198,12 +198,18 @@ public sealed class KopiaCacheProvider : CleanupProviderBase
         var unreadable = layout.Unreadable.Count > 0;
         var declined = false;
 
+        const string CacheReason = "Kopia's cache folder must survive. Only the folders Kopia caches into are removed.";
+
+        // Every cache is walked, and its survivors asked, before either is awaited: the measurement needs
+        // only the targets, and the first survivors question in a pass reads every row's declarations.
+        List<(string Cache, LevelWalk Walk, Task<IReadOnlyList<(string Path, string Reason)>> Sparing)> walks = [];
+
         foreach (var cache in layout.Caches)
         {
-            survivors.Add((cache, "Kopia's cache folder must survive. Only the folders Kopia caches into are removed."));
-
+            // Running holds back every cache or none, so these never interleave with the walked ones.
             if (running)
             {
+                survivors.Add((cache, CacheReason));
                 held.Add((cache, HeldReason));
                 continue;
             }
@@ -212,14 +218,20 @@ public sealed class KopiaCacheProvider : CleanupProviderBase
             var heading = LongPath.Display(cache);
 
             targets.AddRange(walk.Targets.Select(target => target with { Group = heading, UseCheck = stillClosed }));
+            walks.Add((cache, walk, walk.SurvivorsAsync(_declarations, ct)));
+        }
+
+        var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
+
+        foreach (var (cache, walk, sparing) in walks)
+        {
+            survivors.Add((cache, CacheReason));
             survivors.AddRange(walk.Declined);
-            survivors.AddRange(await walk.SurvivorsAsync(_declarations, ct).ConfigureAwait(false));
+            survivors.AddRange(await sparing.ConfigureAwait(false));
             notes.AddRange(walk.Notes);
             unreadable |= walk.Unreadable;
             declined |= walk.Declined.Count > 0;
         }
-
-        var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
 
         if (held.Count > 0)
         {

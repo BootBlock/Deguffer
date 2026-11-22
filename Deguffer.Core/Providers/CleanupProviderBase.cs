@@ -322,6 +322,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         CleanupPlan plan,
         RunReach? runReach = null,
         RunResidue? residue = null,
+        RunActivity? activity = null,
         IProgress<double>? progress = null,
         IProgress<CommandUnderway?>? underway = null,
         CancellationToken ct = default)
@@ -334,7 +335,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
                 $"Plan belongs to provider '{plan.ProviderId}', not '{Id}'.", nameof(plan));
         }
 
-        return _executor.ExecuteAsync(plan, runReach, residue, progress, underway, ct);
+        return _executor.ExecuteAsync(plan, runReach, residue, activity, progress, underway, ct);
     }
 
     public Task<VerificationResult> VerifyAsync(
@@ -633,7 +634,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
             throw new ArgumentException($"Only a folder emptied in place can leave entries standing: {unbounded}.", nameof(targets));
         }
 
-        ThrowIfMisdated(targets);
+        OneLevelDownDating.ThrowIfMisdated(targets);
 
         // An index is removed with the directory it indexes, so it is measured with it. A folder
         // emptied in place is measured on the terms its removal empties it on, so the figure is
@@ -695,44 +696,8 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// whose age is only shown is left for <see cref="PlanDeletionsAsync"/>, which dates it from its
     /// measurement and so lists it once rather than twice.</para>
     /// </summary>
-    protected Task<IReadOnlyList<DeletionTarget>> DatedAsync(IReadOnlyList<DeletionTarget> targets, CancellationToken ct)
-    {
-        ThrowIfMisdated(targets);
-
-        return ReadAgesAsync(targets, ct);
-    }
-
-    /// <summary>
-    /// Before anything is read, so a target that cannot be dated one level down fails its plan rather
-    /// than reading null.
-    /// </summary>
-    private static void ThrowIfMisdated(IReadOnlyList<DeletionTarget> targets)
-    {
-        if (targets.FirstOrDefault(t => t.DatedOneLevelDown && (t.LastWritten is not null || t.Kind is not (TargetKind.Directory or TargetKind.DirectoryContents))) is { Path: { } misdated })
-        {
-            throw new ArgumentException($"Only a directory with no age of its own can be dated one level down: {misdated}.", nameof(targets));
-        }
-    }
-
-    private async Task<IReadOnlyList<DeletionTarget>> ReadAgesAsync(IReadOnlyList<DeletionTarget> targets, CancellationToken ct)
-    {
-        int[] undated = [.. Enumerable.Range(0, targets.Count).Where(index => targets[index].DatedOneLevelDown)];
-
-        if (undated.Length == 0)
-        {
-            return targets;
-        }
-
-        var ages = await DateAsync([.. undated.Select(index => targets[index].Path)], ct).ConfigureAwait(false);
-        var dated = targets.ToArray();
-
-        for (var each = 0; each < undated.Length; each++)
-        {
-            dated[undated[each]] = dated[undated[each]] with { LastWritten = ages[each], DatedOneLevelDown = false };
-        }
-
-        return dated;
-    }
+    protected Task<IReadOnlyList<DeletionTarget>> DatedAsync(IReadOnlyList<DeletionTarget> targets, CancellationToken ct) =>
+        OneLevelDownDating.DateAsync(targets, DateAsync, ct);
 
     /// <summary>
     /// The age of each of <paramref name="directories"/>, in their order, read as many at once as
