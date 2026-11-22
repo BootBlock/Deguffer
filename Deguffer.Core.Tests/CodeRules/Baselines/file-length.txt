@@ -7,7 +7,7 @@
 745 Deguffer.App/Views/ExplorePage.xaml.cs
 723 Deguffer.Core/Execution/CleanupPlanner.cs
 544 Deguffer.Core/Execution/CleanupStep.cs
-1017 Deguffer.Core/Execution/PlanExecutor.cs
+1008 Deguffer.Core/Execution/PlanExecutor.cs
 559 Deguffer.Core/Exploring/Acting/ExploreActionPolicy.cs
 598 Deguffer.Core/Exploring/ExploreTree.cs
 738 Deguffer.Core/Exploring/Layout/TreemapLayout.cs

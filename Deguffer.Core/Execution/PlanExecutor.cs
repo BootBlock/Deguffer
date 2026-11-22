@@ -152,7 +152,7 @@ public sealed class PlanExecutor(
 
         // One bound on the deletions of every step, so steps that run at once share the disk's queue
         // rather than each filling it. Plans run one at a time, so this is the bound for the run.
-        var deletions = new ThreadAllowance(DirectoryRemover.MostAtOnce);
+        var shared = new PlanRun(plan, runResidue, runActivity, new ThreadAllowance(DirectoryRemover.MostAtOnce), underway);
 
         // The bar is weighted as the planner weights whole plans, for the same reason: one obj
         // directory of 4 GB and five of 20 MB are six steps, and splitting the bar six ways would
@@ -162,8 +162,7 @@ public sealed class PlanExecutor(
         var run = await PlanSteps.RunAsync(
             plan.Steps,
             StepOverlap.Of(plan.Steps, _volumes, _fileSystem),
-            (index, stepProgress, stop) => RunTimedStepAsync(
-                plan, index, heldAtClean[index] = [], runResidue, runActivity, deletions, stepProgress, underway, stop),
+            (index, stepProgress, stop) => RunTimedStepAsync(shared, index, heldAtClean[index] = [], stepProgress, stop),
             progress,
             ct).ConfigureAwait(false);
 
@@ -202,26 +201,22 @@ public sealed class PlanExecutor(
     /// reported as stopped where it throws because the clean was cancelled.
     /// </summary>
     private async Task<StepOutcome> RunTimedStepAsync(
-        CleanupPlan plan,
+        PlanRun run,
         int index,
         List<ProtectedPath> heldAtClean,
-        RunResidue runResidue,
-        RunActivity runActivity,
-        ThreadAllowance deletions,
         IProgress<double>? progress,
-        IProgress<CommandUnderway?>? underway,
         CancellationToken ct)
     {
-        var step = plan.Steps[index];
+        var step = run.Plan.Steps[index];
         var clock = new StepClock(_time);
         StepOutcome outcome;
 
         // A step that does not act from its start marks the part of itself that does. See ActsFromItsStart.
-        using var acting = step.ActsFromItsStart ? runActivity.Begin() : default;
+        using var acting = step.ActsFromItsStart ? run.Activity.Begin() : default;
 
         try
         {
-            outcome = await RunStepAsync(plan, step, heldAtClean, runResidue, runActivity, deletions, clock, progress, underway, ct)
+            outcome = await RunStepAsync(run, step, heldAtClean, clock, progress, ct)
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -243,19 +238,15 @@ public sealed class PlanExecutor(
     /// <summary>
     /// Carry out one step, or say why it did not run. What a use check holds back is added to
     /// <paramref name="heldAtClean"/>, because it is proved standing afterwards. The use check and any
-    /// look are timed on <paramref name="clock"/>, and each deletion takes its place in
-    /// <paramref name="deletions"/>.
+    /// look are timed on <paramref name="clock"/>, and each deletion takes its place in the run's
+    /// <see cref="PlanRun.Deletions"/>.
     /// </summary>
     private async Task<StepOutcome> RunStepAsync(
-        CleanupPlan plan,
+        PlanRun run,
         CleanupStep step,
         List<ProtectedPath> heldAtClean,
-        RunResidue runResidue,
-        RunActivity runActivity,
-        ThreadAllowance deletions,
         StepClock clock,
         IProgress<double>? progress,
-        IProgress<CommandUnderway?>? underway,
         CancellationToken ct)
     {
         if (step.HeldWhileUpdating && await _updateHold.WhyHeldAsync(step, ct).ConfigureAwait(false) is { } updating)
@@ -304,13 +295,13 @@ public sealed class PlanExecutor(
 
         return step switch
         {
-            RunCommandStep command => await RunCommandAsync(command, runActivity, clock, underway, ct).ConfigureAwait(false),
-            ClearDirectoryStep clear => await ClearAsync(clear, plan.Keep, runResidue, deletions, progress, ct).ConfigureAwait(false),
-            DeleteDirectoryStep delete => await DeleteAsync(delete, plan.Keep, runResidue, deletions, progress, ct).ConfigureAwait(false),
-            DeleteFileStep delete => await DeleteAsync(delete, plan.Keep, deletions, progress, ct).ConfigureAwait(false),
-            EmptyRecycleBinStep empty => await EmptyAsync(empty, plan.Keep, clock, progress, ct).ConfigureAwait(false),
-            DiskCleanupStep handler => await DiskCleanupRun.RunAsync(_handlers!, scanner, handler, plan.Keep, clock, progress, ct).ConfigureAwait(false),
-            ReleaseLocalCopiesStep release => await LocalCopyRelease.RunAsync(_cloud!, release, plan.Keep, progress, _time, ct).ConfigureAwait(false),
+            RunCommandStep command => await RunCommandAsync(command, run.Activity, clock, run.Underway, ct).ConfigureAwait(false),
+            ClearDirectoryStep clear => await ClearAsync(clear, run.Plan.Keep, run.Residue, run.Deletions, progress, ct).ConfigureAwait(false),
+            DeleteDirectoryStep delete => await DeleteAsync(delete, run.Plan.Keep, run.Residue, run.Deletions, progress, ct).ConfigureAwait(false),
+            DeleteFileStep delete => await DeleteAsync(delete, run.Plan.Keep, run.Deletions, progress, ct).ConfigureAwait(false),
+            EmptyRecycleBinStep empty => await EmptyAsync(empty, run.Plan.Keep, clock, progress, ct).ConfigureAwait(false),
+            DiskCleanupStep handler => await DiskCleanupRun.RunAsync(_handlers!, scanner, handler, run.Plan.Keep, clock, progress, ct).ConfigureAwait(false),
+            ReleaseLocalCopiesStep release => await LocalCopyRelease.RunAsync(_cloud!, release, run.Plan.Keep, progress, _time, ct).ConfigureAwait(false),
             RemoveRestorePointsStep removal => await RestorePointRun.RunAsync(_protection!, removal, progress, ct).ConfigureAwait(false),
             RemoveProfileStep profile => await ProfileRemovalRun.RunAsync(_profiles!, _environment, scanner, profile, clock, ct).ConfigureAwait(false),
             _ => throw new NotSupportedException($"Unknown step type {step.GetType().Name}."),

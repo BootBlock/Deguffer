@@ -66,9 +66,10 @@ public sealed class ComponentStoreAnalysis(
     /// <para><b>Why the last one can stand.</b> The cleanup's analysis after its command and the reset's
     /// before its own are adjacent in a clean of both rows, and nothing runs between them, so asking
     /// again would spend a minute or more reading what was just read. <paramref name="run"/> says
-    /// whether anything ran: a command, a removal, a Disk Cleanup handler or a servicing call of the
-    /// clean's own, from any plan in it. Any of those, a reading begun while one acted, or a clean other
-    /// than the one the reading was taken in, asks afresh.</para>
+    /// whether anything ran: a command, DISM's included, a removal, a release that closes a program, or
+    /// a Disk Cleanup handler, from any plan in it. An analysis only reads, so it is none of these. Any
+    /// of those, a reading begun while one acted, or a clean other than the one the reading was taken
+    /// in, asks afresh.</para>
     ///
     /// <para>Only an analysis that gave a report is kept. A failure or a refusal is asked again, because
     /// an answer the run could not use is no saving, and the next analysis may give one.</para>
