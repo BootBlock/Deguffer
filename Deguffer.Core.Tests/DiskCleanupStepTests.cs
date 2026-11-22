@@ -117,11 +117,6 @@ public sealed class DiskCleanupStepTests : IDisposable
     }
 
     /// <summary>
-    /// Windows clears the directories whole, so a guard that holds anything back cannot be honoured by
-    /// doing less. The executor looks on the disk itself rather than trusting the plan to have
-    /// withdrawn the step, and Windows is never asked.
-    /// </summary>
-    /// <summary>
     /// The look on the disk before Windows clears the directories whole is the step's look, so a slow
     /// one is reported as a look rather than as Windows' cleanup.
     /// </summary>
@@ -141,11 +136,16 @@ public sealed class DiskCleanupStepTests : IDisposable
         var result = await executor.ExecuteAsync(Planning(Installation()), runReach: null, residue: null, progress: null, underway: null, CancellationToken.None);
         var timing = Assert.Single(result.Steps).Timing;
 
-        Assert.Single(handlers.Calls);
+        Assert.Single(handlers.Purged);
         Assert.True(timing.Look > TimeSpan.Zero, "the look before Windows' cleanup was not timed");
         Assert.True(timing.Look <= timing.Elapsed, "the look took longer than its step");
     }
 
+    /// <summary>
+    /// Windows clears the directories whole, so a guard that holds anything back cannot be honoured by
+    /// doing less. The executor looks on the disk itself rather than trusting the plan to have
+    /// withdrawn the step, and Windows is never let purge.
+    /// </summary>
     [Fact]
     public async Task TheRunRefusesAStepWhoseRecentFilesTheGuardWouldKeep()
     {
@@ -170,6 +170,124 @@ public sealed class DiskCleanupStepTests : IDisposable
         Assert.False(outcome.Succeeded);
         Assert.Equal(0, outcome.BytesReclaimed);
         Assert.Contains("changed in the last", outcome.Message, StringComparison.Ordinal);
-        Assert.Empty(handlers.Calls);
+        Assert.Empty(handlers.Purged);
+        Assert.True(Directory.Exists(Download), "a refused step's directory was cleared");
+    }
+
+    /// <summary>
+    /// Windows walks the directories to measure them before it purges, and the look walks them too, so
+    /// the handler measures while the look still decides whether it may purge. The look is held in the
+    /// middle of its walk until the handler has started measuring, so a step that hosted the handler
+    /// only after its look would never let the look finish. Once the look passes, the handler clears
+    /// exactly once.
+    /// </summary>
+    [Fact]
+    public async Task TheHandlerMeasuresWhileTheLookDecidesAndPurgesOnceItPasses()
+    {
+        var measuring = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handlers = FakeDiskCleanupHandlers.Windows(measurement: _ => measuring.TrySetResult());
+        var measuredDuringTheLook = false;
+
+        var fs = new ListingHookFileSystem(
+            WindowsFileSystem.Default,
+            Download,
+            () => measuredDuringTheLook = measuring.Task.Wait(TimeSpan.FromSeconds(10)));
+
+        var result = await Executing(handlers, Planning(Installation()), fs);
+
+        Assert.True(measuredDuringTheLook, "the handler did not measure while the look was walking");
+        Assert.True(Assert.Single(result.Steps).Succeeded);
+        Assert.Equal([("Windows ESD installation files", Volume)], handlers.Purged);
+
+        // §5.6: the volume the handler was given, and everything on it it does not clear, survived.
+        Assert.False(Directory.Exists(Staging));
+        Assert.False(Directory.Exists(Download));
+        Assert.True(File.Exists(Sibling));
+    }
+
+    /// <summary>
+    /// A look that refuses lets the handler go without purging, and the step waits for it to return
+    /// first. Told to stop, a handler may still finish measuring before it returns, and the next step
+    /// could start a second instance of the same handler beside it.
+    /// </summary>
+    [Fact]
+    public async Task ARefusedLookLetsTheMeasuringHandlerGoAndWaitsForIt()
+    {
+        var handlers = FakeDiskCleanupHandlers.Windows(measurement: ReturningAWhileAfterItIsStopped);
+
+        var plan = Planning(Installation()) with
+        {
+            Keep = MinimumAge.Within(TimeSpan.FromDays(7), DateTime.UtcNow),
+        };
+
+        // Every file is written now, so each one is within the week the guard keeps.
+        var result = await Executing(handlers, plan);
+
+        Assert.False(Assert.Single(result.Steps).Succeeded);
+        Assert.Empty(handlers.Purged);
+        Assert.Equal(["Windows ESD installation files"], handlers.RunsReturned);
+        Assert.True(Directory.Exists(Staging), "a refused step's directory was cleared");
+        Assert.True(Directory.Exists(Download), "a refused step's directory was cleared");
+        Assert.True(File.Exists(Sibling));
+    }
+
+    /// <summary>
+    /// A clean cancelled in the middle of the look ends the step without a look that passed, so the
+    /// handler is let go without purging and waited for, as it is for a refusal.
+    /// </summary>
+    [Fact]
+    public async Task ALookCancelledPartWayLetsTheMeasuringHandlerGoAndWaitsForIt()
+    {
+        var handlers = FakeDiskCleanupHandlers.Windows(measurement: ReturningAWhileAfterItIsStopped);
+        using var cancel = new CancellationTokenSource();
+        var fs = new ListingHookFileSystem(WindowsFileSystem.Default, Download, cancel.Cancel);
+
+        var failure = await Record.ExceptionAsync(() => Executing(handlers, Planning(Installation()), fs, cancel.Token));
+
+        Assert.True(failure is null or OperationCanceledException, $"the cancelled clean failed with {failure}");
+        Assert.Empty(handlers.Purged);
+        Assert.Equal(["Windows ESD installation files"], handlers.RunsReturned);
+        Assert.True(Directory.Exists(Staging), "a cancelled step's directory was cleared");
+        Assert.True(Directory.Exists(Download), "a cancelled step's directory was cleared");
+        Assert.True(File.Exists(Sibling));
+    }
+
+    /// <summary>
+    /// Measures until it is told to stop, and returns a while after, as a real handler does. Bounded,
+    /// so a step that never told it to stop fails the test rather than hanging it.
+    /// </summary>
+    private static void ReturningAWhileAfterItIsStopped(CancellationToken ct)
+    {
+        ct.WaitHandle.WaitOne(TimeSpan.FromSeconds(10));
+        Thread.Sleep(200);
+    }
+
+    private string Sibling => Path.Combine(Volume, "Users", "keep.txt");
+
+    /// <summary>
+    /// Runs <paramref name="plan"/> over the scratch volume, with both directories and an unrelated
+    /// file in place, through <paramref name="fs"/> where a test holds or cancels the look.
+    /// </summary>
+    private async Task<CleanupResult> Executing(
+        FakeDiskCleanupHandlers handlers,
+        CleanupPlan plan,
+        IFileSystem? fs = null,
+        CancellationToken ct = default)
+    {
+        Directory.CreateDirectory(Staging);
+        File.WriteAllBytes(Path.Combine(Staging, "install.esd"), new byte[16]);
+        Directory.CreateDirectory(Download);
+        File.WriteAllBytes(Path.Combine(Download, "update.cab"), new byte[16]);
+        Directory.CreateDirectory(Path.GetDirectoryName(Sibling)!);
+        File.WriteAllBytes(Sibling, new byte[16]);
+
+        var executor = new PlanExecutor(
+            new FakeProcessRunner(),
+            ParallelEnumerationScanner.Default,
+            RefusalRecord.For(new FakeUserEnvironment(_temp.Path)),
+            handlers: handlers,
+            fileSystem: fs);
+
+        return await executor.ExecuteAsync(plan, runReach: null, residue: null, progress: null, underway: null, ct);
     }
 }

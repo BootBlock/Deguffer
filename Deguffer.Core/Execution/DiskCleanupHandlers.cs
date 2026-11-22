@@ -88,7 +88,7 @@ public sealed class DiskCleanupHandlers : IDiskCleanupHandlers
             () => new DiskCleanupSurvey(DiskCleanupAnswer.NothingToClear)));
     }
 
-    public DiskCleanupOutcome Run(string handler, string volume, CancellationToken ct)
+    public DiskCleanupOutcome Run(string handler, string volume, PurgeDecision mayPurge, CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(handler);
         ArgumentException.ThrowIfNullOrWhiteSpace(volume);
@@ -115,6 +115,13 @@ public sealed class DiskCleanupHandlers : IDiskCleanupHandlers
                 if (measured == DiskCleanupNative.E_ABORT)
                 {
                     return new DiskCleanupOutcome(Ran: false, "Stopped before Windows cleared anything.");
+                }
+
+                // Waited for here, on the handler's own thread, because a handler is purged in the
+                // apartment it was measured in.
+                if (!mayPurge.Wait(ct))
+                {
+                    return new DiskCleanupOutcome(Ran: false, "Windows was not asked to clear anything.");
                 }
 
                 // Asked to purge everything where the size could not be worked out, for any reason,

@@ -80,12 +80,55 @@ public sealed class DiskCleanupHandlersTests
         var cache = new RecordingVolumeCache { Measured = 4096 };
         var loader = new RecordingLoader(cache);
 
-        var outcome = new DiskCleanupHandlers(loader).Run(Handler, Volume, CancellationToken.None);
+        using var mayPurge = new PurgeDecision();
+        mayPurge.Decide(true);
+        var outcome = new DiskCleanupHandlers(loader).Run(Handler, Volume, mayPurge, CancellationToken.None);
 
         Assert.True(outcome.Ran);
         Assert.Equal(["Initialize", "GetSpaceUsed", "Purge", "Deactivate"], cache.Calls);
         Assert.Equal(4096UL, cache.AskedToPurge);
         Assert.Equal(Volume, cache.Volume);
+        Assert.Equal(1, loader.Released);
+    }
+
+    /// <summary>
+    /// The handler measures while the step's look still decides whether it may purge, and purges only
+    /// once that is decided, so the two walks of the same tree run side by side and the look still
+    /// decides the one call that deletes.
+    /// </summary>
+    [Fact]
+    public async Task ARunMeasuresBeforeItsPurgeIsDecidedAndPurgesOnlyOnceItIs()
+    {
+        var cache = new RecordingVolumeCache { Measured = 4096 };
+        using var mayPurge = new PurgeDecision();
+
+        var run = Task.Run(() => new DiskCleanupHandlers(new RecordingLoader(cache)).Run(Handler, Volume, mayPurge, CancellationToken.None));
+
+        await cache.MeasuredSignal.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.False(run.IsCompleted);
+        Assert.DoesNotContain("Purge", cache.Calls);
+
+        mayPurge.Decide(true);
+        var outcome = await run;
+
+        Assert.True(outcome.Ran);
+        Assert.Equal(["Initialize", "GetSpaceUsed", "Purge", "Deactivate"], cache.Calls);
+    }
+
+    /// <summary>A run its look refused is let go having measured, never having purged.</summary>
+    [Fact]
+    public void ARunNotLetPurgeIsDeactivatedWithoutPurging()
+    {
+        var cache = new RecordingVolumeCache { Measured = 4096 };
+        var loader = new RecordingLoader(cache);
+
+        using var mayPurge = new PurgeDecision();
+        mayPurge.Decide(false);
+        var outcome = new DiskCleanupHandlers(loader).Run(Handler, Volume, mayPurge, CancellationToken.None);
+
+        Assert.False(outcome.Ran);
+        Assert.Equal(["Initialize", "GetSpaceUsed", "Deactivate"], cache.Calls);
+        Assert.Null(cache.AskedToPurge);
         Assert.Equal(1, loader.Released);
     }
 
@@ -200,9 +243,13 @@ public sealed class DiskCleanupHandlersTests
             return Started(volume, out displayName, out description);
         }
 
+        /// <summary>Completes once the handler has measured, so a test can look at a run still in progress.</summary>
+        public TaskCompletionSource MeasuredSignal { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public int GetSpaceUsed(out ulong spaceUsed, IEmptyVolumeCacheCallBack callback)
         {
             Calls.Add("GetSpaceUsed");
+            MeasuredSignal.TrySetResult();
             spaceUsed = Measured;
             return DiskCleanupNative.S_OK;
         }

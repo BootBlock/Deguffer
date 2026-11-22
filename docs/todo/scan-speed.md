@@ -558,7 +558,8 @@ path. In the clean, plans run strictly in turn, each after the last one's verifi
 | #1062, #1063, #1064, #1065 | The process table read in series under a lock (`safety`), the status line posted per change, two stores written before the pass returns, and volume lookups per path. |
 | #1066, #1067, #1068, #1071 | The hard-link scanner without the index, PlatformIO's plan-time walk, Poetry's two measurements in turn, and cloud sync roots walked in turn. |
 | #1073, #1069, #1075 | A second DISM analysis with both component-store rows, synchronous registered-storage readers, and the registered read and the residue probe in turn. #1069 and #1075 are `safety`. |
-| #1070, #1074 | Hyper-V's WMI calls in series, and a Disk Cleanup look beside `GetSpaceUsed` (`safety`). Each is measured before it is built. |
+| #1070 | Hyper-V's WMI calls in series. Measured before it is built. |
+| #1074 | A Disk Cleanup look beside `GetSpaceUsed` (`safety`). Measured elevated over an uncached 4 GB `Windows.old`: the look took 2.2-4.4 s and the handler's measurement 22.6-63.5 s alone, and the two at once took 25.8-44.0 s against 36.7-66.6 s in turn in five pairs of six, and 32.9 s against 24.8 s in the sixth. Warm, one pair took 19.3 s against 19.7 s and the other 26.5 s against 21.8 s, on a loaded machine. Done: the handler measures while the look runs and purges only once the look has passed. A refused look lets it go without purging and waits for it to return, which can take the rest of its measurement: told to stop 3 s in, it returned 22.2 s after it started. |
 
 ### Waiting on a decision
 

@@ -127,9 +127,15 @@ public interface IDiskCleanupHandlers
     /// The top of the volume to clear, in display form. The caller supplies it and this does not
     /// derive it, so the assertion about what crosses stays falsifiable.
     /// </param>
+    /// <param name="mayPurge">
+    /// Whether the handler may clear what it measured. The handler measures first and waits for this
+    /// only before it purges, so the caller's own reading of the disk can run beside the handler's
+    /// measurement and still decide the one call that deletes. Refused, the handler is let go without
+    /// clearing anything.
+    /// </param>
     /// <param name="ct">
     /// Handed to the handler through its progress callback, which is the only way to stop one:
     /// answering a report with <c>E_ABORT</c> asks it to stop at its next check.
     /// </param>
-    DiskCleanupOutcome Run(string handler, string volume, CancellationToken ct);
+    DiskCleanupOutcome Run(string handler, string volume, PurgeDecision mayPurge, CancellationToken ct);
 }
