@@ -31,7 +31,11 @@ internal static class DriveFacts
     internal static SectorSizes? Sectors(IDriveDevice device) =>
         device.Ask(DriveQuestion.Alignment).Bytes is { } alignment && DriveProperties.TryReadSectors(alignment, out var sizes) ? sizes : null;
 
-    internal static IReadOnlyList<DriveFact> Of(DeviceDescriptor descriptor, IDriveDevice device, SectorSizes? sectors)
+    /// <summary>Whether the drive is a spinning disk, asked once because both its details and the drive database need it.</summary>
+    internal static bool? SeekPenalty(IDriveDevice device) =>
+        device.Ask(DriveQuestion.SeekPenalty).Bytes is { } seek && StorageDescriptors.TryReadSeekPenalty(seek, out var incurs) ? incurs : null;
+
+    internal static IReadOnlyList<DriveFact> Of(DeviceDescriptor descriptor, IDriveDevice device, SectorSizes? sectors, bool? incursSeekPenalty)
     {
         var facts = new List<DriveFact>();
 
@@ -39,7 +43,7 @@ internal static class DriveFacts
         Add("Serial number", descriptor.Serial.Text);
         Add("Connection", Connection(descriptor));
 
-        if (device.Ask(DriveQuestion.SeekPenalty).Bytes is { } seek && StorageDescriptors.TryReadSeekPenalty(seek, out var incurs))
+        if (incursSeekPenalty is { } incurs)
         {
             Add("Type", incurs ? "Hard disk" : "Solid state");
         }

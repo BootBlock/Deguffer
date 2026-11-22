@@ -1,4 +1,5 @@
 using Deguffer.Core.Health.Parsing;
+using Deguffer.Core.Health.Smartmontools;
 using Deguffer.Core.Scanning.Media;
 
 namespace Deguffer.Core.Health;
@@ -21,11 +22,18 @@ internal sealed class AtaHealthSource : IDriveHealthSource
 
     public bool Reads(StorageBusType bus) => bus is StorageBusType.Sata or StorageBusType.Ata;
 
-    public DriveReadout Read(IDriveDevice device, DeviceDescriptor drive, SectorSizes? sectors)
+    public DriveReadout Read(IDriveDevice device, DeviceDescriptor drive, DriveTraits traits)
     {
         var thresholds = device.Ask(DriveQuestion.AtaThresholds);
         var moreWhenElevated = thresholds.Win32Error == DeviceCalls.AccessDenied;
-        var facts = IdentifyFacts(device);
+        AtaIdentify? identify = Sector(device, DriveQuestion.AtaIdentify) is { } identifySector && AtaIdentify.TryRead(identifySector, out var read) ? read : null;
+        var facts = IdentifyFacts(identify);
+        var (family, databaseFact) = DriveDatabaseLookup.For(DriveDatabaseLookup.Identity(drive, identify), traits);
+
+        if (databaseFact is not null)
+        {
+            facts.Add(databaseFact);
+        }
 
         if (device.Ask(DriveQuestion.PredictFailure).Bytes is not { } prediction
             || !AtaAttributeTable.TryReadPrediction(prediction, out var predictsFailure, out var attributes))
@@ -40,7 +48,7 @@ internal sealed class AtaHealthSource : IDriveHealthSource
             attributes = AtaAttributeTable.WithThresholds(attributes, limits);
         }
 
-        List<HealthAttribute> rows = [AtaAttributeRows.Prediction(predictsFailure), .. AtaAttributeRows.Of(attributes, drive, sectors?.Logical)];
+        List<HealthAttribute> rows = [AtaAttributeRows.Prediction(predictsFailure), .. AtaAttributeRows.Of(attributes, drive, traits.Sectors?.Logical, family)];
 
         if (Sector(device, DriveQuestion.AtaSelfTestLog) is { } selfTest && SelfTestLogs.TryReadAta(selfTest, out var outcome))
         {
@@ -55,11 +63,11 @@ internal sealed class AtaHealthSource : IDriveHealthSource
         return new DriveReadout(rows, HasPrimarySignal: true, facts, Temperature(attributes), moreWhenElevated);
     }
 
-    private static List<DriveFact> IdentifyFacts(IDriveDevice device)
+    private static List<DriveFact> IdentifyFacts(AtaIdentify? read)
     {
         var facts = new List<DriveFact>();
 
-        if (Sector(device, DriveQuestion.AtaIdentify) is not { } sector || !AtaIdentify.TryRead(sector, out var identify))
+        if (read is not { } identify)
         {
             return facts;
         }

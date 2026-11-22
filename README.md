@@ -389,6 +389,14 @@ Kingston's SMART attribute documents get the readings that document defines for 
 remaining life, data written and read, and the temperature range. The documents differ from each
 other, so each is read only on the models it names.
 
+If [smartmontools](https://www.smartmontools.org/) is installed, Health also reads its drive
+database from that installation, for a SATA drive's attributes that no document above and no
+reading common to every drive covers. Such a reading is shown with the name and layout the database
+gives it and a "smartmontools" mark, and it is judged by nothing but the drive's own threshold. The
+drive's details name the database entry that matched, or say why none was used. Deguffer does not
+include the database: it reads the copy smartmontools installed, and a refresh after
+`update-smart-drivedb` reads the new one.
+
 The page reads nothing until you open it, and it reads again only when you press Refresh, because a
 read can wake a sleeping disk. Everything it sends a drive is a read: it never starts a self-test or
 changes a setting. The NVMe drives it was tried on gave everything without administrator rights. For a SATA drive,

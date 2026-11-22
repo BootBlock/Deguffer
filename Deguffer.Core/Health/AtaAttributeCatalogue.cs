@@ -89,6 +89,9 @@ internal enum SmartRawFormat
 
     /// <summary>The raw value is one of the codes a manufacturer's document lists, each with its own meaning.</summary>
     Status,
+
+    /// <summary>Laid out as an installed smartmontools drive database says, and judged by nothing but the drive's own threshold.</summary>
+    DriveDatabase,
 }
 
 /// <summary>How much of the six raw bytes a count or a number of hours fills.</summary>

@@ -1,4 +1,5 @@
 using Deguffer.Core.Health.Parsing;
+using Deguffer.Core.Health.Smartmontools;
 
 namespace Deguffer.Core.Health;
 
@@ -34,9 +35,10 @@ internal static class AtaAttributeRows
         predictsFailure ? "predicted" : "not predicted");
 
     /// <param name="logicalSectorBytes">The drive's logical sector size, or null where Windows did not report it.</param>
-    internal static IEnumerable<HealthAttribute> Of(IReadOnlyList<AtaAttribute> attributes, DeviceDescriptor drive, uint? logicalSectorBytes)
+    /// <param name="family">The installed drive database's entry for the drive, or null where there is none to use.</param>
+    internal static IEnumerable<HealthAttribute> Of(IReadOnlyList<AtaAttribute> attributes, DeviceDescriptor drive, uint? logicalSectorBytes, DatabaseFamily? family = null)
     {
-        var rows = attributes.Select(attribute => Row(attribute, drive, logicalSectorBytes));
+        var rows = attributes.Select(attribute => Row(attribute, drive, logicalSectorBytes, family));
 
         return WriteAmplification(attributes, drive) is { } amplification ? rows.Append(amplification) : rows;
     }
@@ -86,22 +88,40 @@ internal static class AtaAttributeRows
             $"IDs {hostId} and {driveId}: raw {host} and {own}");
     }
 
-    private static HealthAttribute Row(AtaAttribute attribute, DeviceDescriptor drive, uint? logicalSectorBytes)
+    private static HealthAttribute Row(AtaAttribute attribute, DeviceDescriptor drive, uint? logicalSectorBytes, DatabaseFamily? family)
     {
-        var known = AtaVendorOverlay.Of(attribute.Id, drive) ?? AtaAttributeCatalogue.Of(attribute.Id);
+        var known = Definition(attribute.Id, drive, family);
         var raw = RawText(attribute);
 
         if (known is null)
         {
-            return Judged(attribute, drive, $"Vendor-specific attribute {attribute.Id}", Value(attribute), UnusedNumbers, AttributeStanding.Normal, raw);
+            return Judged(attribute, drive, $"Vendor-specific attribute {attribute.Id}", Value(attribute), UnusedNumbers, AttributeStanding.Normal, raw, ReadingBasis.Deguffer);
         }
 
         var (reading, meaning, standing) = Reading(attribute, known, logicalSectorBytes);
-        return Judged(attribute, drive, known.Name, reading, meaning, standing, raw);
+        var basis = known is DatabaseAttributeDefinition ? ReadingBasis.DriveDatabase : ReadingBasis.Deguffer;
+        return Judged(attribute, drive, known.Name, reading, meaning, standing, raw, basis);
+    }
+
+    /// <summary>
+    /// A manufacturer's document for the family first, then the catalogue where it reads the attribute
+    /// the same on every drive. The installed drive database reads only what neither covers (#751): the
+    /// catalogue's attributes are judged by their documented meaning, and the database judges nothing.
+    /// </summary>
+    private static AtaAttributeDefinition? Definition(byte id, DeviceDescriptor drive, DatabaseFamily? family)
+    {
+        if (AtaVendorOverlay.Of(id, drive) is { } documented)
+        {
+            return documented;
+        }
+
+        var catalogued = AtaAttributeCatalogue.Of(id);
+
+        return catalogued is { Format: not SmartRawFormat.Opaque } ? catalogued : family?.Of(id) ?? catalogued;
     }
 
     /// <summary>A reading at or below the drive's own threshold is the drive's own verdict, so it stands whatever the raw value's format.</summary>
-    private static HealthAttribute Judged(AtaAttribute attribute, DeviceDescriptor drive, string name, string reading, string meaning, AttributeStanding standing, string raw) =>
+    private static HealthAttribute Judged(AtaAttribute attribute, DeviceDescriptor drive, string name, string reading, string meaning, AttributeStanding standing, string raw, ReadingBasis basis) =>
         IsPastThreshold(attribute, drive)
             ? new HealthAttribute(
                 Key(attribute),
@@ -109,8 +129,9 @@ internal static class AtaAttributeRows
                 reading,
                 "The drive rates this reading as failed by its own limit. Copy your important files somewhere else now.",
                 AttributeStanding.Failing,
-                raw)
-            : new HealthAttribute(Key(attribute), name, reading, meaning, standing, raw);
+                raw,
+                basis)
+            : new HealthAttribute(Key(attribute), name, reading, meaning, standing, raw, basis);
 
     private static bool IsPastThreshold(AtaAttribute attribute, DeviceDescriptor drive) =>
         attribute is { IsPreFail: true, Threshold: { } threshold, Value: var value }
@@ -122,6 +143,7 @@ internal static class AtaAttributeRows
     private static (string Reading, string Meaning, AttributeStanding Standing) Reading(AtaAttribute attribute, AtaAttributeDefinition known, uint? logicalSectorBytes) => known switch
     {
         AtaStatusDefinition status => Status(attribute, status),
+        DatabaseAttributeDefinition database => (DatabaseRawValue.Text(attribute, database.Preset), database.Explanation, AttributeStanding.Normal),
         { Format: SmartRawFormat.Opaque } => (Value(attribute), $"{known.Explanation} {UnusedNumbers}".TrimStart(), AttributeStanding.Normal),
         { Role: AttributeRole.FailureCount } => FailureCount(attribute, known),
         { Role: AttributeRole.RemainingLife } => RemainingLife(attribute, known),

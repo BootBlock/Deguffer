@@ -116,6 +116,13 @@ public static class FindingStatusExtensions
     /// What a row built from <paramref name="offered"/> is reporting, for a process holding the rights
     /// <paramref name="isElevated"/> describes.
     ///
+    /// <para>Something to remove is asked first. Every state after it is one the preview may put out of
+    /// sight, behind a filter or in the group folded below the list, and a row out of sight must hold
+    /// nothing that can be ticked (<see cref="PreviewFilter.Place"/>). A provider waiting for a source
+    /// folder plans nothing, so asking first changes no row it makes, and it keeps that true by
+    /// construction rather than by each provider's care: a row with something to remove is listed,
+    /// whatever else it says.</para>
+    ///
     /// <para>Presence is asked after <see cref="Finding.AwaitingSourceFolders"/>, because the two do
     /// not line up: the .NET build output is present whenever the SDK is, approved folders or not,
     /// and that row has as little to report as the four that are absent for the same reason.</para>
@@ -137,6 +144,13 @@ public static class FindingStatusExtensions
     {
         ArgumentNullException.ThrowIfNull(offered);
 
+        if (offered.HasSomethingToRemove)
+        {
+            return Choosing.StepChoice.AnyCanBeSelected(offered, isElevated)
+                ? FindingStatus.ReadyToClean
+                : FindingStatus.NeedsElevation;
+        }
+
         if (offered.AwaitingSourceFolders)
         {
             return FindingStatus.AwaitingSourceFolders;
@@ -145,13 +159,6 @@ public static class FindingStatusExtensions
         if (!offered.IsPresent)
         {
             return FindingStatus.ToolchainMissing;
-        }
-
-        if (offered.HasSomethingToRemove)
-        {
-            return Choosing.StepChoice.AnyCanBeSelected(offered, isElevated)
-                ? FindingStatus.ReadyToClean
-                : FindingStatus.NeedsElevation;
         }
 
         return offered.Plan switch

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Deguffer.Core.Health.Parsing;
+using Deguffer.Core.Health.Smartmontools;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Media;
@@ -13,7 +14,8 @@ namespace Deguffer.Core.Health;
 /// a <see cref="SingleRun{T}"/>: a read that keeps being refreshed holds one thread for each drive,
 /// one for the listing and one for the volumes, however often it is refreshed.
 /// </summary>
-public sealed class DriveHealthReader(IDriveProbe probe, IVolumeInventory inventory, IStorageQueries storage, TimeSpan answerLimit)
+/// <param name="environment">Where an installed smartmontools is found, whose drive database names attributes no cited document covers.</param>
+public sealed class DriveHealthReader(IDriveProbe probe, IVolumeInventory inventory, IStorageQueries storage, IUserEnvironment environment, TimeSpan answerLimit)
 {
     /// <summary>Long enough for a disk to spin up from standby, and short enough that a stalled drive still gets a row.</summary>
     public static readonly TimeSpan DefaultAnswerLimit = TimeSpan.FromSeconds(30);
@@ -25,6 +27,8 @@ public sealed class DriveHealthReader(IDriveProbe probe, IVolumeInventory invent
     private const string DidNotDescribe = "Windows could not describe this drive.";
 
     private static readonly IDriveHealthSource[] Sources = [new NvmeHealthSource(), new AtaHealthSource()];
+
+    private readonly InstalledDriveDatabase _database = new(environment);
 
     private readonly SingleRun<IReadOnlyList<DriveDescription>?> _listing = new();
     private readonly SingleRun<IReadOnlyDictionary<int, IReadOnlyList<LocalVolume>>> _volumes = new();
@@ -91,6 +95,9 @@ public sealed class DriveHealthReader(IDriveProbe probe, IVolumeInventory invent
     {
         var options = new ParallelOptions { MaxDegreeOfParallelism = MostAtOnce, CancellationToken = ct };
 
+        // One look at the database for the whole read, taken by the first drive that needs it.
+        var database = new Lazy<DatabaseReading>(_database.Read);
+
         await Parallel.ForEachAsync(drives, options, async (drive, token) =>
         {
             DriveHealth health;
@@ -99,7 +106,7 @@ public sealed class DriveHealthReader(IDriveProbe probe, IVolumeInventory invent
             {
                 var run = _drives.GetOrAdd(drive.Disk, _ => new SingleRun<DriveHealth>());
 
-                health = await run.Join(() => Task.FromResult(Examine(drive))).WaitAsync(answerLimit, token);
+                health = await run.Join(() => Task.FromResult(Examine(drive, database))).WaitAsync(answerLimit, token);
             }
             catch (TimeoutException)
             {
@@ -143,7 +150,7 @@ public sealed class DriveHealthReader(IDriveProbe probe, IVolumeInventory invent
             : new DriveDescription(DriveKey.Of(disk), disk, Named(string.Empty, disk));
     }
 
-    private DriveHealth Examine(DriveDescription drive)
+    private DriveHealth Examine(DriveDescription drive, Lazy<DatabaseReading> database)
     {
         if (drive.Descriptor is not { } descriptor)
         {
@@ -151,15 +158,15 @@ public sealed class DriveHealthReader(IDriveProbe probe, IVolumeInventory invent
         }
 
         using var device = probe.Open(drive.Disk);
-        var sectors = DriveFacts.Sectors(device);
-        var facts = DriveFacts.Of(descriptor, device, sectors);
+        var traits = new DriveTraits(DriveFacts.Sectors(device), DriveFacts.SeekPenalty(device), database);
+        var facts = DriveFacts.Of(descriptor, device, traits.Sectors, traits.IncursSeekPenalty);
 
         if (Array.Find(Sources, source => source.Reads(descriptor.Bus)) is not { } reader)
         {
             return Empty(drive, DriveVerdict.Unknown, NotReported) with { Facts = facts };
         }
 
-        var readout = reader.Read(device, descriptor, sectors);
+        var readout = reader.Read(device, descriptor, traits);
         var verdict = DriveAssessment.Verdict(readout.Attributes, readout.HasPrimarySignal);
 
         return new DriveHealth(

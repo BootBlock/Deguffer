@@ -1,12 +1,14 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using Deguffer.Core.Execution;
 using Deguffer.Core.Viewing;
 
 namespace Deguffer.App.ViewModels;
 
 /// <summary>
-/// The rows the Storage list draws: every row of the findings that the filters let through
-/// (<see cref="FindingViewModel.IsListed"/>), in the same order.
+/// The rows the Storage list draws: every row of the findings that the filters let through, in the
+/// same order, split between the list and the folded group below it by
+/// <see cref="FindingViewModel.Place"/>.
 ///
 /// <para>A row the filters hide leaves this list rather than collapsing where it stood, and a row
 /// they show again joins it, so the list can show it going and coming. The commonest case is the end
@@ -23,14 +25,11 @@ internal sealed class StorageListedRows
 {
     private readonly ObservableCollection<FindingViewModel> _findings;
 
-    private readonly Action _shown;
-
     /// <param name="findings">Every row of the scan, in the order the list shows them.</param>
-    /// <param name="shown">Called after every update, so the page can say whether the list is empty.</param>
-    public StorageListedRows(ObservableCollection<FindingViewModel> findings, Action shown)
+    public StorageListedRows(ObservableCollection<FindingViewModel> findings)
     {
         _findings = findings;
-        _shown = shown;
+        Empty = new StorageEmptyState(findings, this);
 
         findings.CollectionChanged += (_, changed) =>
         {
@@ -47,19 +46,29 @@ internal sealed class StorageListedRows
 
     public BoundList<FindingViewModel> Rows { get; } = [];
 
+    /// <summary>The rows waiting for a source folder, folded into one group below <see cref="Rows"/>.</summary>
+    public AwaitingFolderGroupViewModel AwaitingFolders { get; } = new();
+
+    /// <summary>What the card says when it draws none of these, told after every update.</summary>
+    public StorageEmptyState Empty { get; }
+
     /// <summary>
     /// Bring <see cref="Rows"/> up to the rows the filters let through, in place. Called for a change
     /// the findings raise nothing for: a filter, or a row re-planned where it stands.
     /// </summary>
     public void Show()
     {
-        LiveList.Show(Rows, [.. _findings.Where(row => row.IsListed)], row => row);
-        _shown();
+        LiveList.Show(Rows, PlacedAt(PreviewPlace.Listed), row => row);
+        AwaitingFolders.Show(PlacedAt(PreviewPlace.AwaitingSourceFolders));
+        Empty.Changed();
     }
 
     private void Replace()
     {
-        Rows.Replace(_findings.Where(row => row.IsListed));
-        _shown();
+        Rows.Replace(PlacedAt(PreviewPlace.Listed));
+        AwaitingFolders.Replace(PlacedAt(PreviewPlace.AwaitingSourceFolders));
+        Empty.Changed();
     }
+
+    private FindingViewModel[] PlacedAt(PreviewPlace place) => [.. _findings.Where(row => row.Place == place)];
 }

@@ -102,7 +102,7 @@ public sealed class DriveParsersTests
     [Fact]
     public void AnAttributeEntryIsReadInFull()
     {
-        var bytes = DriveBytes.Prediction(true, new AtaEntry(5, 90, Raw: 0x0102_0304_0506, PreFail: true, Worst: 80));
+        var bytes = DriveBytes.Prediction(true, new AtaEntry(5, 90, Raw: 0x0102_0304_0506, PreFail: true, Worst: 80, Reserved: 0x07));
 
         Assert.True(AtaAttributeTable.TryReadPrediction(bytes, out var predicts, out var attributes));
         Assert.True(predicts);
@@ -113,6 +113,7 @@ public sealed class DriveParsersTests
         Assert.Equal((byte)90, attribute.Value);
         Assert.Equal((byte)80, attribute.Worst);
         Assert.Equal(0x0102_0304_0506UL, attribute.Raw);
+        Assert.Equal((byte)0x07, attribute.Reserved);
     }
 
     [Fact]
@@ -150,6 +151,26 @@ public sealed class DriveParsersTests
         Assert.True(AtaIdentify.TryRead(DriveBytes.Identify(word, capabilities, current), out var identify));
         Assert.Equal(expected, identify.RotationRpm);
         Assert.Equal(fastest, identify.FastestGeneration);
+    }
+
+    [Fact]
+    public void IdentifyReadsTheModelAndFirmwareWithoutTheirPadding()
+    {
+        Assert.True(AtaIdentify.TryRead(DriveBytes.Identify(1, model: "EXAMPLE SSD 512GB", firmware: "TEST01"), out var identify));
+        Assert.Equal("EXAMPLE SSD 512GB", identify.Model);
+        Assert.Equal("TEST01", identify.Firmware);
+    }
+
+    [Fact]
+    public void AnUnsetIdentifyStringIsEmpty()
+    {
+        Assert.True(AtaIdentify.TryRead(DriveBytes.Identify(1), out var blank));
+        Assert.Equal(string.Empty, blank.Model);
+
+        var sector = DriveBytes.Identify(1, model: "EXAMPLE");
+        sector[(27 * 2) + 3] = 0xFF;
+        Assert.True(AtaIdentify.TryRead(sector, out var garbled));
+        Assert.Equal(string.Empty, garbled.Model);
     }
 
     [Fact]

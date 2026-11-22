@@ -19,7 +19,7 @@ public sealed partial class HealthPage : Page
 
     public HealthPage()
     {
-        var reader = new DriveHealthReader(DriveProbe.Machine, VolumeInventory.Current, StorageQueries.Machine, DriveHealthReader.DefaultAnswerLimit);
+        var reader = new DriveHealthReader(DriveProbe.Machine, VolumeInventory.Current, StorageQueries.Machine, UserEnvironment.Current, DriveHealthReader.DefaultAnswerLimit);
 
         // Assigned before InitializeComponent so no x:Bind evaluates against a null view-model.
         ViewModel = new HealthViewModel(
