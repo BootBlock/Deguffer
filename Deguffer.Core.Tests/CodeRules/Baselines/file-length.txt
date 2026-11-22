@@ -17,11 +17,11 @@
 590 Deguffer.Core/Providers/GpuShaderCacheProvider.cs
 537 Deguffer.Core/Providers/MavenRepositoryProvider.cs
 540 Deguffer.Core/Providers/PlatformIoCacheProvider.cs
-609 Deguffer.Core/Providers/PoetryCacheProvider.cs
+605 Deguffer.Core/Providers/PoetryCacheProvider.cs
 540 Deguffer.Core/Providers/RecycleBinProvider.cs
 557 Deguffer.Core/Providers/SquirrelStagingProvider.cs
 529 Deguffer.Core/Providers/SquirrelSupersededVersionProvider.cs
-562 Deguffer.Core/Providers/TempDirectoryProvider.cs
+533 Deguffer.Core/Providers/TempDirectoryProvider.cs
 516 Deguffer.Core/Providers/UnrealDerivedDataCacheProvider.cs
 659 Deguffer.Core/Providers/VcpkgCacheProvider.cs
 791 Deguffer.Core/Safety/FileInformation.cs

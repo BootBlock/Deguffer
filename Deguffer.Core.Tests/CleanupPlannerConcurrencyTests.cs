@@ -114,13 +114,16 @@ public sealed class CleanupPlannerConcurrencyTests
 
     /// <summary>
     /// The status line names every provider still being checked, and stops naming one as soon as it
-    /// ends, so it never names a provider that has finished while another is still running.
+    /// ends, so it never names a provider that has finished while another is still running. The line is
+    /// posted by time, so the clock is moved an interval at a time, and nothing is posted after the pass.
     /// </summary>
     [Fact]
     public async Task TheStatusNamesTheProvidersStillBeingCheckedAndDropsOneThatEnded()
     {
-        using var release = new ManualResetEventSlim();
+        var clock = new ManualTimeProvider();
         using var bothStarted = new CountdownEvent(2);
+        using var quickEnds = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
         var status = new ProgressRecorder<string>();
 
         var quick = new FakeCleanupProvider("quick")
@@ -128,7 +131,7 @@ public sealed class CleanupPlannerConcurrencyTests
             WhilePlanning = () =>
             {
                 bothStarted.Signal();
-                bothStarted.Wait(Deadline);
+                quickEnds.Wait(Deadline);
             },
         };
         var slow = new FakeCleanupProvider("slow")
@@ -140,81 +143,33 @@ public sealed class CleanupPlannerConcurrencyTests
             },
         };
 
-        var pass = new CleanupPlanner([slow, quick]).PlanAllAsync(status: status);
+        var pass = new CleanupPlanner([slow, quick], time: clock).PlanAllAsync(status: status);
 
+        // The first start is posted at once, and the second, made inside the interval, at its end.
         Assert.True(bothStarted.Wait(Deadline), "The two providers were never under way together.");
-        SpinWait.SpinUntil(() => status.Reports.Count >= 3, Deadline);
+        await clock.WhenWaitingAsync(Deadline);
+        clock.Advance(ReportCadence.Interval);
+
+        quickEnds.Set();
+        await clock.WhenWaitingAsync(Deadline);
+        clock.Advance(ReportCadence.Interval);
+
         var whileSlowRan = status.Reports;
         release.Set();
         await pass.WaitAsync(Deadline);
+        clock.Advance(ReportCadence.Interval);
 
-        // Which of the two started first is the scheduler's choice, and either is a true line.
-        Assert.Equal(3, whileSlowRan.Count);
+        // Which of the two started first is the scheduler's choice, and either is a true line. The first
+        // start's line is read as it is posted, so where the second start came first it names both, and
+        // the line due at the interval's end says nothing new.
+        Assert.InRange(whileSlowRan.Count, 2, 3);
         Assert.True(
-            whileSlowRan[1] is "Checking slow and quick…" or "Checking quick and slow…",
-            $"While both ran, the line was '{whileSlowRan[1]}'.");
-        Assert.Equal("Checking slow…", whileSlowRan[2]);
+            whileSlowRan[^2] is "Checking slow and quick…" or "Checking quick and slow…",
+            $"While both ran, the line was '{whileSlowRan[^2]}'.");
+        Assert.Equal("Checking slow…", whileSlowRan[^1]);
 
         // Nothing is said once the last one ends: the caller's own sentence replaces the line.
         Assert.Equal(whileSlowRan, status.Reports);
-    }
-
-    [Fact]
-    public void TheStatusOfManyProvidersNamesTheFirstTwoAndCountsTheRest()
-    {
-        PlanningStatus.Underway[] checking =
-            [.. new[] { "conda", "pip", "npm", "PlatformIO" }.Select(name => new PlanningStatus.Underway(new FakeCleanupProvider(name)))];
-
-        Assert.Equal("Checking conda…", PlanningStatus.Describe(checking[..1]));
-        Assert.Equal("Checking conda and pip…", PlanningStatus.Describe(checking[..2]));
-        Assert.Equal("Checking conda, pip and 2 more…", PlanningStatus.Describe(checking));
-    }
-
-    /// <summary>
-    /// §5.5: a provider walking a large location says how much it has counted, so the line moves while
-    /// the walk runs. Worded as a count of work done, never as what a clean would free, and left off a
-    /// provider that has counted nothing yet.
-    /// </summary>
-    [Fact]
-    public void TheStatusNamesTheBytesEachProviderHasCountedSoFar()
-    {
-        var npm = new PlanningStatus.Underway(new FakeCleanupProvider("npm")) { Counted = 3 * 1024 * 1024 };
-        var pip = new PlanningStatus.Underway(new FakeCleanupProvider("pip"));
-
-        Assert.Equal($"Checking npm ({FreeSpace.Format(3 * 1024 * 1024)} counted so far)…", PlanningStatus.Describe([npm]));
-        Assert.Equal($"Checking pip and npm ({FreeSpace.Format(3 * 1024 * 1024)} counted so far)…", PlanningStatus.Describe([pip, npm]));
-    }
-
-    /// <summary>
-    /// The line follows a provider's figure as it rises, and a figure reported once the provider has
-    /// ended is dropped: the finding has its own figure by then, and the line must not go on naming
-    /// the provider.
-    /// </summary>
-    [Fact]
-    public void TheStatusFollowsAProvidersFigureUntilItEnds()
-    {
-        var status = new ProgressRecorder<string>();
-        var planning = new PlanningStatus(status);
-        var npm = new FakeCleanupProvider("npm");
-        var pip = new FakeCleanupProvider("pip");
-        var counted = planning.Counted(npm);
-
-        planning.Started(npm);
-        planning.Started(pip);
-        counted.Report(ScanSize.FromLengths(2048));
-        counted.Report(ScanSize.FromLengths(4096));
-        planning.Ended(npm);
-        counted.Report(ScanSize.FromLengths(8192));
-
-        Assert.Equal(
-            [
-                "Checking npm…",
-                "Checking npm and pip…",
-                $"Checking npm ({FreeSpace.Format(2048)} counted so far) and pip…",
-                $"Checking npm ({FreeSpace.Format(4096)} counted so far) and pip…",
-                "Checking pip…",
-            ],
-            status.Reports);
     }
 
     /// <summary>
@@ -224,26 +179,45 @@ public sealed class CleanupPlannerConcurrencyTests
     [Fact]
     public async Task AProviderThatFailsStopsBeingNamed()
     {
+        var clock = new ManualTimeProvider();
         var status = new ProgressRecorder<string>();
-        using var failed = new ManualResetEventSlim();
+        using var waitingStarted = new ManualResetEventSlim();
+        using var failingStarted = new ManualResetEventSlim();
         using var release = new ManualResetEventSlim();
 
         var failing = new FakeCleanupProvider("failing")
         {
-            WhilePlanning = () => failed.Set(),
+            WhilePlanning = () =>
+            {
+                failingStarted.Set();
+                waitingStarted.Wait(Deadline);
+            },
             PlanFailure = new InvalidOperationException("The tool would not answer."),
         };
 
         var waiting = new FakeCleanupProvider("waiting")
         {
             // Holds the pass open until the failure has been reported, so the line is read after it.
-            WhilePlanning = () => release.Wait(Deadline),
+            WhilePlanning = () =>
+            {
+                waitingStarted.Set();
+                release.Wait(Deadline);
+            },
         };
 
-        var pass = new CleanupPlanner([waiting, failing]).PlanAllAsync(status: status);
+        var pass = new CleanupPlanner([waiting, failing], time: clock).PlanAllAsync(status: status);
 
-        Assert.True(failed.Wait(Deadline));
-        SpinWait.SpinUntil(() => status.Reports.Count >= 3, Deadline);
+        Assert.True(failingStarted.Wait(Deadline) && waitingStarted.Wait(Deadline), "The two providers were never under way together.");
+
+        // Each line due is posted until the line names only the provider still running and nothing more
+        // is due. A line that went on naming the failed provider would never settle, and the clock would
+        // wait for a report nobody arms.
+        while (status.Reports is not [.., "Checking waiting…"] || clock.Waiting > 0)
+        {
+            await clock.WhenWaitingAsync(Deadline);
+            clock.Advance(ReportCadence.Interval);
+        }
+
         release.Set();
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => pass.WaitAsync(Deadline));

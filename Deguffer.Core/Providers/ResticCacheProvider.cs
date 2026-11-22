@@ -169,22 +169,27 @@ public sealed class ResticCacheProvider : CleanupProviderBase
         var fallback = FallbackReason.None;
         var unreadable = false;
 
-        foreach (var folder in folders)
+        // Asked for every folder before any folder is measured, and each awaited only after its folder's
+        // measurement: the first such question in a pass reads every row's declarations.
+        var sparing = folders.Select(folder => _declarations.UnofferedAsync(folder.Unrecognised, ct)).ToList();
+
+        foreach (var (folder, spared) in folders.Zip(sparing))
         {
             notes.AddRange(folder.Notes);
             unreadable |= folder.Unreadable;
             survivors.Add((folder.Root, "restic's cache folder must survive. Only what it cached for each repository is removed."));
             survivors.AddRange(folder.Declined);
-            survivors.AddRange(await SparedAsync(folder.Unrecognised, ct).ConfigureAwait(false));
 
-            if (folder.Caches.Count == 0)
+            // Nothing in the folder is measured, so there is nothing for the answer to run beside.
+            if (folder.Caches.Count == 0 || running)
             {
-                continue;
-            }
+                survivors.AddRange(await spared.ConfigureAwait(false));
 
-            if (running)
-            {
-                held.AddRange(folder.Caches.Select(cache => (cache, HeldReason)));
+                if (running)
+                {
+                    held.AddRange(folder.Caches.Select(cache => (cache, HeldReason)));
+                }
+
                 continue;
             }
 
@@ -193,6 +198,7 @@ public sealed class ResticCacheProvider : CleanupProviderBase
             if (restic is not null && whyNotWhole is null)
             {
                 var measured = await MeasureAllAsync(folder.Caches, ct).ConfigureAwait(false);
+                survivors.AddRange(await spared.ConfigureAwait(false));
 
                 steps.Add(new RunCommandStep(
                     restic,
@@ -214,6 +220,7 @@ public sealed class ResticCacheProvider : CleanupProviderBase
             var (removals, removed, walked) = await PlanRemovalsByPathAsync(folder, keep, ct).ConfigureAwait(false);
 
             steps.AddRange(removals);
+            survivors.AddRange(await spared.ConfigureAwait(false));
             survivors.AddRange(walked.Survivors);
             unreadable |= walked.Unreadable;
             notes.AddRange(walked.Notes);
@@ -274,6 +281,8 @@ public sealed class ResticCacheProvider : CleanupProviderBase
         var notes = new List<PlanNote>();
         var unreadable = false;
 
+        List<(string Cache, LevelWalk Walk, Task<IReadOnlyList<(string Path, string Reason)>> Sparing)> walks = [];
+
         foreach (var cache in folder.Caches)
         {
             var walk = CacheLevelWalk.Under(ResticCacheLayout.Levels, cache, ct);
@@ -282,35 +291,23 @@ public sealed class ResticCacheProvider : CleanupProviderBase
             var heading = $"Repository {Path.GetFileName(cache)[..10]}";
 
             targets.AddRange(walk.Targets.Select(target => target with { Group = heading, UseCheck = stillClosed }));
+            walks.Add((cache, walk, walk.SurvivorsAsync(_declarations, ct)));
+        }
+
+        // Measured before any survivors are awaited, as the caller does with the folder's own.
+        var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
+
+        foreach (var (cache, walk, sparing) in walks)
+        {
             survivors.Add((cache, "restic's cache for this repository must survive. Only the folders it caches into are removed."));
             survivors.Add((Path.Combine(cache, ResticCacheLayout.VersionFile), "The file restic records this cache's layout in."));
             survivors.AddRange(walk.Declined);
-            survivors.AddRange(await walk.SurvivorsAsync(_declarations, ct).ConfigureAwait(false));
+            survivors.AddRange(await sparing.ConfigureAwait(false));
             notes.AddRange(walk.Notes);
             unreadable |= walk.Unreadable;
         }
 
-        var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
-
         return (steps, measured, new WalkedCaches(survivors, notes, unreadable));
-    }
-
-    /// <summary>Everything unrecognised in a cache folder that no other row offers.</summary>
-    private async Task<IReadOnlyList<(string Path, string Reason)>> SparedAsync(
-        IReadOnlyList<(string Path, string Reason)> unrecognised,
-        CancellationToken ct)
-    {
-        var spared = new List<(string Path, string Reason)>();
-
-        foreach (var entry in unrecognised)
-        {
-            if (!await _declarations.OfferedByARowAsync(entry.Path, ct).ConfigureAwait(false))
-            {
-                spared.Add(entry);
-            }
-        }
-
-        return spared;
     }
 
     private IEnumerable<PlanNote> DeclinedSettingNotes() =>

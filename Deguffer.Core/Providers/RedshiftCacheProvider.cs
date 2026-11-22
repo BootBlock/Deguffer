@@ -158,6 +158,7 @@ public sealed class RedshiftCacheProvider : CleanupProviderBase
             return EmptyPlan("Redshift has kept no converted textures in this user's account.");
         }
 
+        var sparing = examined.Walks.Select(walked => walked.Walk.SurvivorsAsync(_declarations, ct)).ToList();
         var notes = new List<PlanNote>(examined.Notes);
         notes.AddRange(layout.Notes);
 
@@ -180,12 +181,7 @@ public sealed class RedshiftCacheProvider : CleanupProviderBase
             notes.Add(scanNote);
         }
 
-        List<(string Path, string Reason)> unrecognised = [];
-
-        foreach (var walked in examined.Walks)
-        {
-            unrecognised.AddRange(await walked.Walk.SurvivorsAsync(_declarations, ct).ConfigureAwait(false));
-        }
+        List<(string Path, string Reason)> unrecognised = [.. (await Task.WhenAll(sparing).ConfigureAwait(false)).SelectMany(spared => spared)];
 
         return new CleanupPlan
         {

@@ -320,10 +320,27 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
         var emptiedAContainer = false;
         var spared = 0;
 
+        // Every cache is walked, and its survivors asked, before either is awaited: the measurement needs
+        // only the targets, and the first survivors question in a pass reads every row's declarations.
+        List<(string Cache, LevelWalk Walk, Task<IReadOnlyList<(string Path, string Reason)>> Sparing)> walks = [];
+
         foreach (var cache in caches)
         {
             ct.ThrowIfCancellationRequested();
 
+            var walk = CacheLevelWalk.Under(Levels, cache, ct);
+
+            targets.AddRange(walk.Targets);
+            declined.AddRange(walk.Declined);
+            emptiedAContainer |= walk.EmptiedAContainer;
+            unreadable |= walk.Unreadable;
+            walks.Add((cache, walk, walk.SurvivorsAsync(_declarations, ct)));
+        }
+
+        var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
+
+        foreach (var (cache, walk, sparing) in walks)
+        {
             survivors.Add((
                 cache,
                 "The store's browser folder itself must survive — only recognised caches inside it "
@@ -331,17 +348,11 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
             survivors.AddRange(ProtectedProfileFiles.Select(
                 file => (Path.Combine(cache, file.Name), file.Reason)));
 
-            var walk = CacheLevelWalk.Under(Levels, cache, ct);
-            var spares = await walk.SurvivorsAsync(_declarations, ct).ConfigureAwait(false);
+            var spares = await sparing.ConfigureAwait(false);
 
-            targets.AddRange(walk.Targets);
-            declined.AddRange(walk.Declined);
             survivors.AddRange(spares);
             notes.AddRange(walk.Notes);
-
             spared += spares.Count;
-            emptiedAContainer |= walk.EmptiedAContainer;
-            unreadable |= walk.Unreadable;
         }
 
         // One note rather than one per spared child. Each is still asserted individually by §5.6,
@@ -371,8 +382,6 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
                 PlanNoteSeverity.Information,
                 "The Epic Games launcher's store is holding no cache on disk."));
         }
-
-        var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
 
         if (measured.Note is { } scanNote)
         {
