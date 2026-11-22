@@ -47,10 +47,35 @@ public sealed record SourceDiscovery(
     public IReadOnlyList<string> NotSearchedRoots { get; init; } = [];
 
     /// <summary>The candidates called any of <paramref name="names"/>, for the provider that owns them.</summary>
-    public IReadOnlyList<string> Named(IReadOnlyList<string> names) =>
-    [
-        .. Candidates.Where(c => names.Contains(
-            Path.GetFileName(c.TrimEnd(Path.DirectorySeparatorChar)),
-            StringComparer.OrdinalIgnoreCase)),
-    ];
+    /// <remarks>
+    /// Every source-tree row asks this of every candidate in each pass, so a candidate's name is
+    /// compared where it sits in the path rather than cut out of it.
+    /// </remarks>
+    public IReadOnlyList<string> Named(IReadOnlyList<string> names)
+    {
+        var named = new List<string>();
+        for (var i = 0; i < Candidates.Count; i++)
+        {
+            if (IsCalledAnyOf(Candidates[i], names))
+            {
+                named.Add(Candidates[i]);
+            }
+        }
+
+        return named;
+    }
+
+    private static bool IsCalledAnyOf(string candidate, IReadOnlyList<string> names)
+    {
+        var name = Path.GetFileName(candidate.AsSpan().TrimEnd(Path.DirectorySeparatorChar));
+        for (var i = 0; i < names.Count; i++)
+        {
+            if (name.Equals(names[i], StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }

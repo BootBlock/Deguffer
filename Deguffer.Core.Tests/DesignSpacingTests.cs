@@ -21,7 +21,7 @@ public sealed class DesignSpacingTests
         ["Deguffer.App/MainWindow.xaml"] = 1,
         ["Deguffer.App/Views/AboutPage.xaml"] = 8,
         ["Deguffer.App/Views/CleanConfirmationView.xaml"] = 2,
-        ["Deguffer.App/Views/CleanPage.xaml"] = 32,
+        ["Deguffer.App/Views/CleanPage.xaml"] = 31,
         ["Deguffer.App/Views/DuplicatesPage.xaml"] = 21,
         ["Deguffer.App/Views/ExplorePage.xaml"] = 17,
         ["Deguffer.App/Views/HealthPage.xaml"] = 4,

@@ -163,7 +163,7 @@ public sealed partial class StorageSelection : ObservableObject
     }
 
     private RowTick TickFor(BulkSelection selection, FindingViewModel row) =>
-        BulkSelectionRule.For(selection, row.Finding, row.IsListed, row.IsSelected, _isElevated);
+        BulkSelectionRule.For(selection, row.Finding, row.Place == PreviewPlace.Listed, row.IsSelected, _isElevated);
 
     /// <summary>
     /// Whether applying <paramref name="tick"/> changes a step of <paramref name="row"/>. Asked before

@@ -162,9 +162,12 @@ not run it while anything inside is a link. That holds for every tool's own comm
 
 ### What is protected
 
-`%LOCALAPPDATA%\pip` — the folder *containing* the cache — and `pip.ini` inside it. That file holds
-index URLs and can carry credentials for a private package index. Reclaiming the cache by removing
-its parent folder would take that with it, so Deguffer asserts both survived the run.
+`%LOCALAPPDATA%\pip` — the folder *containing* the cache — because reclaiming the cache by removing
+its parent folder would take anything else kept there with it. Also the configuration files pip
+reads: `C:\ProgramData\pip\pip.ini`, the legacy `C:\Users\<user>\pip\pip.ini` and
+`%APPDATA%\pip\pip.ini`. They hold index URLs and can carry credentials for a private package
+index. Deguffer asserts that each of these survived the run, and the Explore page will not remove
+them. pip reads no configuration from `%LOCALAPPDATA%\pip`.
 
 ### What it costs you
 

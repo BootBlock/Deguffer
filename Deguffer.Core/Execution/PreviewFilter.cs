@@ -1,12 +1,18 @@
 namespace Deguffer.Core.Execution;
 
 /// <summary>
-/// Which rows of the Storage preview are drawn, given the two filters the user can leave on.
+/// Where each row of the Storage preview is drawn, given the two filters the user can leave on.
 ///
 /// <para>Both hide a row that offers no decision: one whose toolchain this machine does not have,
 /// and one with nothing left to reclaim. Neither hides a row that has something to say, so a row is
 /// drawn only when it passes both. A hidden row is still scanned, counted and kept in the list; it is
 /// drawn or not, so switching a filter back on needs no rescan.</para>
+///
+/// <para>A row waiting for a source folder is never hidden, and never drawn among the rows either. It
+/// goes to a group of its own below them, folded away until the user opens it. Several providers
+/// search only approved folders, so with none approved each of them gives the same answer on a row of
+/// its own, and among the rows that report something they would bury them. The group keeps the
+/// answer on screen, as one line that counts the rows and says what to do.</para>
 ///
 /// <para>Each filter is read off <see cref="FindingStatus"/> rather than off the condition behind
 /// it, because a second copy of that condition is free to disagree with the words on screen, and
@@ -25,18 +31,21 @@ namespace Deguffer.Core.Execution;
 public readonly record struct PreviewFilter(bool ShowNotInstalled, bool ShowAlreadyClear)
 {
     /// <summary>
-    /// Whether a row reporting <paramref name="status"/> is drawn.
+    /// Where a row reporting <paramref name="status"/> is drawn.
     ///
-    /// <para><b>A row this hides can carry no ticked step</b>, which is what makes hiding it safe
-    /// behind a filter that is on by default. Both hidden states need
-    /// <see cref="Finding.HasSomethingToRemove"/> to be false, which is no step answering
-    /// <see cref="CleanupStep.RemovesSomething"/>, and <see cref="Choosing.StepChoice.CanBeSelected"/>
-    /// refuses exactly those steps. The proof holds only while both sides ask that one property.</para>
+    /// <para><b>A row this hides, or folds away, can carry no ticked step</b>, which is what makes
+    /// putting it out of sight safe by default. All three states it puts out of sight need
+    /// <see cref="Finding.HasSomethingToRemove"/> to be false, because
+    /// <see cref="FindingStatusExtensions.ToStatus"/> asks it before any of them. That is no step
+    /// answering <see cref="CleanupStep.RemovesSomething"/>, and
+    /// <see cref="Choosing.StepChoice.CanBeSelected"/> refuses exactly those steps. The proof holds
+    /// only while both sides ask that one property.</para>
     /// </summary>
-    public bool Lists(FindingStatus status) => status switch
+    public PreviewPlace Place(FindingStatus status) => status switch
     {
-        FindingStatus.ToolchainMissing => ShowNotInstalled,
-        FindingStatus.AlreadyClear => ShowAlreadyClear,
-        _ => true,
+        FindingStatus.AwaitingSourceFolders => PreviewPlace.AwaitingSourceFolders,
+        FindingStatus.ToolchainMissing when !ShowNotInstalled => PreviewPlace.Hidden,
+        FindingStatus.AlreadyClear when !ShowAlreadyClear => PreviewPlace.Hidden,
+        _ => PreviewPlace.Listed,
     };
 }

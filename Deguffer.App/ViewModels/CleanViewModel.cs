@@ -168,7 +168,7 @@ public sealed partial class CleanViewModel : ObservableObject
         TotalSpace = space?.Total;
         FreeSpaceNow = space?.Free;
 
-        _listed = new StorageListedRows(Findings, NotifyEmptyStateChanged);
+        _listed = new StorageListedRows(Findings);
 
         // Offered before anything has been scanned, so an elevated preview does not have to be
         // reached through the unelevated one it replaces.
@@ -266,6 +266,9 @@ public sealed partial class CleanViewModel : ObservableObject
 
     /// <summary>The rows the list draws. See <see cref="StorageListedRows"/>.</summary>
     public BoundList<FindingViewModel> Listed => _listed.Rows;
+
+    /// <summary>The rows waiting for a source folder, which the list folds into one group below it.</summary>
+    public AwaitingFolderGroupViewModel AwaitingFolders => _listed.AwaitingFolders;
 
     public WhenCompleteViewModel WhenComplete { get; }
 
@@ -386,7 +389,7 @@ public sealed partial class CleanViewModel : ObservableObject
     {
         foreach (var row in Findings)
         {
-            row.IsListed = IsListed(row);
+            row.Place = PlaceOf(row);
         }
 
         // The collection did not change, so the subscription above raises nothing. Without this a
@@ -397,9 +400,8 @@ public sealed partial class CleanViewModel : ObservableObject
         Selection.RefreshMenu();
     }
 
-    /// <summary>A row is drawn unless a filter the user left on hides it. See <see cref="PreviewFilter"/>.</summary>
-    private bool IsListed(FindingViewModel row) =>
-        new PreviewFilter(ShowNotInstalled, ShowAlreadyClear).Lists(row.Status);
+    /// <summary>Where a row is drawn, unless a filter the user left on hides it. See <see cref="PreviewFilter"/>.</summary>
+    private PreviewPlace PlaceOf(FindingViewModel row) => new PreviewFilter(ShowNotInstalled, ShowAlreadyClear).Place(row.Status);
 
     /// <summary>Whether a preview exists — the only state from which cleaning is offered.</summary>
     [ObservableProperty]
@@ -528,39 +530,8 @@ public sealed partial class CleanViewModel : ObservableObject
     /// </summary>
     public string RunDiagnostics { get; private set; } = string.Empty;
 
-    /// <summary>
-    /// Whether to show the empty state instead of the list. On launch the list is a large blank
-    /// card, which reads as a screen that has failed rather than one waiting to be told to start.
-    ///
-    /// <para>Asked of what is drawn rather than of what was found, because a filter can empty the
-    /// list under a scan that found plenty. The commonest case is the one that follows success:
-    /// clean everything, let the run re-plan, and every row is then either clear or absent — both
-    /// hidden by default. Counting rows instead put a blank card at the end of a run that
-    /// worked.</para>
-    /// </summary>
-    public bool HasNothingListed => Listed.Count == 0;
-
-    /// <summary>
-    /// Whether that empty list is the filters' doing rather than an empty machine. The two need
-    /// different words: one says what to press, and the other says why a scan that finished is
-    /// showing nothing, and where to switch it back on.
-    /// </summary>
-    private bool IsHiddenByFilters => Findings.Count > 0 && HasNothingListed;
-
-    public string EmptyStateTitle => IsHiddenByFilters ? "Every row is hidden" : "Nothing scanned yet";
-
-    public string EmptyStateMessage => IsHiddenByFilters
-        ? "The scan found locations, and the filters are hiding all of them. Tick “Show items not "
-          + "installed” above, or switch on “Show items that are already clear” in Settings."
-        : "A scan looks at the locations Deguffer recognises and reports what each one holds. It "
-          + "reads only — nothing is removed until you choose to.";
-
-    private void NotifyEmptyStateChanged()
-    {
-        OnPropertyChanged(nameof(HasNothingListed));
-        OnPropertyChanged(nameof(EmptyStateTitle));
-        OnPropertyChanged(nameof(EmptyStateMessage));
-    }
+    /// <summary>What the card says in place of its rows when it draws none.</summary>
+    public StorageEmptyState EmptyState => _listed.Empty;
 
     public bool CanClean => HasPreview && !IsBusy && Selection.IsAnyTicked;
 
@@ -1044,7 +1015,7 @@ public sealed partial class CleanViewModel : ObservableObject
         }
 
         row.Replan(finding, memory, _keeps.Current);
-        row.IsListed = IsListed(row);
+        row.Place = PlaceOf(row);
         Sizes.Show(row);
         ScanChoice.Missing.Record(finding.Provider, row.Status);
 
@@ -1097,7 +1068,7 @@ public sealed partial class CleanViewModel : ObservableObject
 
         // Rows arrive as their providers finish, so each one is filtered as it lands rather than in a
         // pass at the end that a cancelled scan would never reach.
-        row.IsListed = IsListed(row);
+        row.Place = PlaceOf(row);
         Sizes.Show(row);
 
         // As each row lands rather than once at the end, so a scan that is cancelled part-way still

@@ -151,9 +151,10 @@ public class CleanViewModelScanTests
 
     /// <summary>
     /// Both filters are on by default and each hides its own rows as they land. A row waiting for a
-    /// folder is absent too, and is never hidden: it is the one row that says what the user can do.
-    /// The list draws exactly the rows the filters let through, and a filter switched on adds its rows
-    /// to it one by one rather than rebuilding it, so the rows already drawn stay where they are.
+    /// folder is absent too, and is never hidden: it goes to the folded group below the list, under
+    /// either filter. The list draws exactly the rows the filters let through, and a filter switched
+    /// on adds its rows to it one by one rather than rebuilding it, so the rows already drawn stay
+    /// where they are.
     /// </summary>
     [Fact]
     public void EachRowIsFilteredAsItLandsAndAgainWhenAFilterChanges()
@@ -166,27 +167,69 @@ public class CleanViewModelScanTests
 
         page.Scan();
 
-        Assert.False(page.Row("missing").IsListed);
-        Assert.False(page.Row("clear").IsListed);
-        Assert.True(page.Row("waiting").IsListed);
-        Assert.True(page.Row("ready").IsListed);
-        Assert.Equal(["ready", "waiting"], Drawn(page).Order());
+        Assert.Equal(PreviewPlace.Hidden, page.Row("missing").Place);
+        Assert.Equal(PreviewPlace.Hidden, page.Row("clear").Place);
+        Assert.Equal(PreviewPlace.AwaitingSourceFolders, page.Row("waiting").Place);
+        Assert.Equal(PreviewPlace.Listed, page.Row("ready").Place);
+        Assert.Equal(["ready"], Drawn(page));
+        Assert.Equal(["waiting"], Grouped(page));
 
         var changes = new List<NotifyCollectionChangedAction>();
         page.ViewModel.Listed.CollectionChanged += (_, e) => changes.Add(e.Action);
 
         page.ViewModel.ShowNotInstalled = true;
-        Assert.True(page.Row("missing").IsListed);
-        Assert.False(page.Row("clear").IsListed);
-        Assert.Equal(["missing", "ready", "waiting"], Drawn(page).Order());
+        Assert.Equal(PreviewPlace.Listed, page.Row("missing").Place);
+        Assert.Equal(PreviewPlace.Hidden, page.Row("clear").Place);
+        Assert.Equal(["missing", "ready"], Drawn(page).Order());
         Assert.Equal([NotifyCollectionChangedAction.Add], changes);
 
         page.ViewModel.ShowAlreadyClear = true;
-        Assert.True(page.Row("clear").IsListed);
-        Assert.Equal(["clear", "missing", "ready", "waiting"], Drawn(page).Order());
+        Assert.Equal(PreviewPlace.Listed, page.Row("clear").Place);
+        Assert.Equal(["clear", "missing", "ready"], Drawn(page).Order());
+        Assert.Equal(["waiting"], Grouped(page));
 
         static IEnumerable<string> Drawn(StoragePage page) =>
             page.ViewModel.Listed.Select(row => row.Finding.Provider.Id);
+
+        static IEnumerable<string> Grouped(StoragePage page) =>
+            page.ViewModel.AwaitingFolders.Rows.Select(row => row.Finding.Provider.Id);
+    }
+
+    /// <summary>
+    /// The folded group says how many rows it holds, and a card whose only rows are in it is not an
+    /// empty card: closed, the group still says what is folded away. A second scan starts the group
+    /// again, once, as it does the list.
+    /// </summary>
+    [Fact]
+    public void TheFoldedGroupCountsItsRowsAndKeepsTheCardFromReadingAsEmpty()
+    {
+        FakeCleanupProvider[] providers =
+        [
+            new("rust") { IsPresent = false, IsAwaitingSourceFolders = true },
+            new("godot") { IsPresent = false, IsAwaitingSourceFolders = true },
+        ];
+        using var page = new StoragePage(providers);
+        var group = page.ViewModel.AwaitingFolders;
+        var raised = group.Notifications();
+
+        Assert.False(group.HasRows);
+
+        page.Scan();
+
+        Assert.True(group.HasRows);
+        Assert.Contains(nameof(group.HasRows), raised);
+        Assert.Equal("2 locations with nothing to search until you add a source folder in Settings.", group.Summary);
+        Assert.Empty(page.ViewModel.Listed);
+        Assert.False(page.ViewModel.EmptyState.IsShown);
+
+        var changes = new List<NotifyCollectionChangedAction>();
+        group.Rows.CollectionChanged += (_, e) => changes.Add(e.Action);
+
+        page.Scan();
+
+        Assert.Equal(NotifyCollectionChangedAction.Reset, changes[0]);
+        Assert.DoesNotContain(NotifyCollectionChangedAction.Remove, changes);
+        Assert.Equal(2, group.Rows.Count);
     }
 
     /// <summary>
@@ -228,20 +271,22 @@ public class CleanViewModelScanTests
         var clear = new FakeCleanupProvider("clear");
         using var page = new StoragePage([clear]);
 
-        Assert.True(page.ViewModel.HasNothingListed);
-        Assert.Equal("Nothing scanned yet", page.ViewModel.EmptyStateTitle);
+        var empty = page.ViewModel.EmptyState;
+
+        Assert.True(empty.IsShown);
+        Assert.Equal("Nothing scanned yet", empty.Title);
 
         page.Scan();
 
-        Assert.True(page.ViewModel.HasNothingListed);
-        Assert.Equal("Every row is hidden", page.ViewModel.EmptyStateTitle);
+        Assert.True(empty.IsShown);
+        Assert.Equal("Every row is hidden", empty.Title);
 
-        var raised = page.ViewModel.Notifications();
+        var raised = empty.Notifications();
         page.ViewModel.ShowAlreadyClear = true;
 
-        Assert.False(page.ViewModel.HasNothingListed);
-        Assert.Contains(nameof(page.ViewModel.HasNothingListed), raised);
-        Assert.Contains(nameof(page.ViewModel.EmptyStateTitle), raised);
+        Assert.False(empty.IsShown);
+        Assert.Contains(nameof(empty.IsShown), raised);
+        Assert.Contains(nameof(empty.Title), raised);
     }
 
     /// <summary>
