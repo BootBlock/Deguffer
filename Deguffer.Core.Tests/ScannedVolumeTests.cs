@@ -120,6 +120,10 @@ public sealed class ScannedVolumeTests
     /// The free space is the volume's as the scan ends, read from that one volume, and not the
     /// figure the remembered list held as it started: everything else drawn describes the disk as
     /// the scan found it.
+    ///
+    /// <para>The volume's free space moves through <see cref="FakeVolumeInventory.FreeNow"/>, which
+    /// leaves the remembered list as it was read. The start's reading runs on a pool thread while the
+    /// test goes on, and replacing the volume in the list would let it find no volume at all.</para>
     /// </summary>
     [Fact]
     public async Task TheFreeSpaceIsReadAsTheScanEnds()
@@ -127,7 +131,7 @@ public sealed class ScannedVolumeTests
         var volumes = new FakeVolumeInventory().With(@"D:\", totalBytes: 12_000, freeBytes: 6_000);
         var reading = ScannedVolume.Start(volumes, new FakeHiddenSpaceSource(), @"D:\", default);
 
-        volumes.Without(@"D:\").With(@"D:\", totalBytes: 12_000, freeBytes: 5_000);
+        volumes.FreeNow(@"D:\", 5_000);
 
         Assert.Equal(new VolumeSpace(12_000, 5_000), await reading.SpaceAsync(Tree(@"D:\", Svi.Absent)));
     }
