@@ -119,8 +119,9 @@ internal static class Usage
                                stops the run. Deguffer never empties the cache itself.
         --build-priority yield|normal
                                Race only. Whether the build reads at low priority while the
-                               walk runs, as Auto's does where the two share a disk, or at
-                               normal priority throughout. The default is yield.
+                               walk runs, as Auto's does where the walk is of another volume
+                               on its disk, or at normal priority throughout. The default is
+                               yield. A build of the folder's own volume never yields.
         --checksum name        Duplicates only. The checksum the content is compared by: xxh128,
                                sha-256, sha-512, sha-1, md5, crc-32, or sha3-256 where Windows
                                has it, with or without the hyphen. The default is xxh128, as a

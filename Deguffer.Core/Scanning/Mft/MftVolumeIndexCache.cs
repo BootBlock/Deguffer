@@ -28,9 +28,10 @@ namespace Deguffer.Core.Scanning.Mft;
 /// <see cref="Invalidate"/> ends every build, because the next scan starts from the machine as it is
 /// then.</para>
 ///
-/// <para><b>Read at low priority while a walk is in flight on its disk.</b> Under Auto a build reads
-/// its table after the walks <see cref="Walking"/> registers on its disks, until <see cref="Need"/>
-/// says a caller waits for it alone: see <see cref="BuildPriorities"/>.</para>
+/// <para><b>Read at low priority while a walk of another volume is in flight on its disk.</b> Under
+/// Auto a build reads its table after the walks <see cref="Walking"/> registers of other volumes on its
+/// disks, until <see cref="Need"/> says a caller waits for it alone: see
+/// <see cref="BuildPriorities"/>.</para>
 ///
 /// <para><b>Kept only while a pass holds it.</b> An index costs about 49 bytes for every slot of the
 /// volume's table, so a system volume of a few million slots holds over a hundred megabytes. Nothing
@@ -90,40 +91,55 @@ public sealed class MftVolumeIndexCache
 
     /// <summary>
     /// A walk of <paramref name="paths"/> is in flight until the walk returned is disposed, and every
-    /// build on the disks under them reads after it. See <see cref="BuildPriorities"/>.
+    /// build of another volume on the disks under them reads after it. See <see cref="BuildPriorities"/>.
     /// </summary>
-    public IDisposable Walking(IEnumerable<string> paths) => _priorities.Walking(DisksOf(paths));
+    public IDisposable Walking(IEnumerable<string> paths) => _priorities.Walking(VolumesOf(paths));
 
     /// <summary>
-    /// The physical disks under the volumes holding <paramref name="paths"/>, or null where any of them
-    /// could not say, which <see cref="BuildPriorities"/> takes to share every disk.
+    /// The volumes holding <paramref name="paths"/>, each once, with the physical disks under them.
     ///
     /// <para>Asked of each path rather than its drive letter, so a folder mounted from another volume
-    /// counts that volume's disks. A share, a mapped network drive or an optical drive is on no disk of
-    /// this machine, which its media says with no reason, and adds no disk rather than every one.</para>
+    /// counts as that volume. A share, a mapped network drive or an optical drive is on no disk of this
+    /// machine, which its media says with no reason, and is left out rather than taken to be on every
+    /// disk.</para>
     /// </summary>
-    private IReadOnlyList<int>? DisksOf(IEnumerable<string> paths)
+    private List<VolumeDisks> VolumesOf(IEnumerable<string> paths)
     {
-        var disks = new SortedSet<int>();
+        var volumes = new List<VolumeDisks>();
 
         foreach (var path in paths)
         {
-            switch (_tuning.StorageOf(path))
+            var place = PlaceOf(path);
+
+            if (place == VolumeDisks.Unknown)
             {
-                case { PhysicalDisks.Count: > 0 } media:
-                    disks.UnionWith(media.PhysicalDisks);
-                    break;
-
-                case { Reason: MediaUnknownReason.None }:
-                    break;
-
-                default:
-                    return null;
+                // Taken to be of another volume on every disk, so it speaks for the whole walk.
+                return [place];
             }
+
+            if (place.Disks is { Count: 0 } || volumes.Exists(place.SameVolume))
+            {
+                continue;
+            }
+
+            volumes.Add(place);
         }
 
-        return [.. disks];
+        return volumes;
     }
+
+    /// <summary>
+    /// The volume holding <paramref name="path"/> and the disks under it: <see cref="VolumeDisks.Unknown"/>
+    /// where the machine's volumes were not asked or none holds it, and no disks where it is on none of
+    /// this machine's.
+    /// </summary>
+    private VolumeDisks PlaceOf(string path) => _tuning.PathStorageOf(path) switch
+    {
+        { Media.PhysicalDisks.Count: > 0 } storage => new VolumeDisks(storage.VolumeRoot, storage.Media.PhysicalDisks),
+        { Media.Reason: MediaUnknownReason.None } storage => new VolumeDisks(storage.VolumeRoot, []),
+        { } storage => new VolumeDisks(storage.VolumeRoot, null),
+        null => VolumeDisks.Unknown,
+    };
 
     /// <summary>The volume's build, started by the first read of its <c>Build</c>, and its priority.</summary>
     private (Lazy<Task<Built>> Build, BuildPriorities.Build Priority) Entry(char driveLetter)
@@ -169,7 +185,7 @@ public sealed class MftVolumeIndexCache
         // File table first waits for the table, so its build is the answer and keeps normal priority.
         if (_tuning.Route is Configuration.ScanRoute.Auto)
         {
-            _priorities.Yield(priority, volume, DisksOf([$@"{driveLetter}:\"]));
+            _priorities.Yield(priority, volume, PlaceOf($@"{driveLetter}:\"));
         }
 
         // A build Invalidate or the last hold ends stops at its next check of the token, with the handle

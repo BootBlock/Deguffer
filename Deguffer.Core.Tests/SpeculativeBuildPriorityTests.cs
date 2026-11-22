@@ -9,10 +9,14 @@ using Deguffer.Testing;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// Under Auto a volume's index build reads its table at low priority while a walk is in flight on a
-/// disk its volume is on, at normal priority otherwise, and at normal priority from the moment a caller
-/// waits for it alone. File table first never lowers it, and Explore opens its own volume without the
+/// Under Auto a volume's index build reads its table at low priority while a walk of another volume
+/// is in flight on a disk its volume is on, at normal priority otherwise, and at normal priority from
+/// the moment a caller waits for it alone. A walk of its own volume, which is the walk it races, never
+/// lowers it (#1081). File table first never lowers it, and Explore opens its own volume without the
 /// cache, so never does either (<see cref="BuildPriorities"/>, #478).
+///
+/// <para>A tuner that places no volume, as <see cref="RouteTuners.Auto"/> is, takes every walk to be
+/// of another volume on every disk, so the tests built on it see each walk lower the build.</para>
 ///
 /// <para>The builds are held with <see cref="HeldMftSourceFactory"/>, whose table is not read until
 /// the test says, so a build is still running whenever a test asks what priority it reads at.</para>
@@ -124,6 +128,79 @@ public sealed class SpeculativeBuildPriorityTests : IDisposable
     }
 
     /// <summary>
+    /// A walk of the build's own volume is the walk it races, and yielding to it buys the walk nothing
+    /// (#477, #478), so it leaves the build at normal priority. A walk that also reads another volume on
+    /// the build's disk still lowers it.
+    /// </summary>
+    [Fact]
+    public void AWalkOfTheBuildsOwnVolumeLeavesItAtNormalPriority()
+    {
+        var (path, sources) = HeldTree();
+        var build = char.ToUpperInvariant(path[0]);
+        var (sameDisk, _) = OtherLetters(build);
+        var cache = new MftVolumeIndexCache(sources, OnDisks((build, 0), (sameDisk, 0)));
+        using var hold = cache.Hold();
+
+        try
+        {
+            cache.Get(build);
+
+            using (cache.Walking([path, $@"{build}:\elsewhere"]))
+            {
+                Assert.Empty(sources.Opened!.Priorities);
+            }
+
+            using (cache.Walking([path, $@"{sameDisk}:\projects"]))
+            {
+                Assert.Equal([ReadPriority.Low], sources.Opened!.Priorities);
+            }
+        }
+        finally
+        {
+            sources.Release();
+        }
+    }
+
+    /// <summary>
+    /// The build's own volume is its own whatever its disks say, so a walk of it leaves the build at
+    /// normal priority though neither names a disk. Another volume that names none may be on the build's,
+    /// so a walk of it lowers the build.
+    /// </summary>
+    [Fact]
+    public void OnlyAWalkOfAnotherVolumeOnDisksItDidNotNameLowersTheBuild()
+    {
+        var (path, sources) = HeldTree();
+        var build = char.ToUpperInvariant(path[0]);
+        var (unnamed, _) = OtherLetters(build);
+        var queries = new FakeStorageQueries()
+            .VolumeAnswer($@"{build}:\", StorageAnswer.Failed(1))
+            .VolumeAnswer($@"{unnamed}:\", StorageAnswer.Failed(1));
+        var inventory = new FakeVolumeInventory().With($@"{build}:\").With($@"{unnamed}:\");
+        var cache = new MftVolumeIndexCache(
+            sources, new ScanTuner(new FakePreferences(AppPreferences.Default), new VolumeMediaCache(queries), inventory));
+        using var hold = cache.Hold();
+
+        try
+        {
+            cache.Get(build);
+
+            using (cache.Walking([path]))
+            {
+                Assert.Empty(sources.Opened!.Priorities);
+            }
+
+            using (cache.Walking([$@"{unnamed}:\projects"]))
+            {
+                Assert.Equal([ReadPriority.Low], sources.Opened!.Priorities);
+            }
+        }
+        finally
+        {
+            sources.Release();
+        }
+    }
+
+    /// <summary>
     /// A volume that did not say which disks hold it may share the build's, and the walk is the answer
     /// being waited for, so the build yields to it.
     /// </summary>
@@ -179,19 +256,21 @@ public sealed class SpeculativeBuildPriorityTests : IDisposable
     }
 
     /// <summary>
-    /// A folder mounted from a volume on another disk is walked through that disk, though its path
-    /// starts with the build's drive letter.
+    /// A folder mounted from another volume is a walk of that volume, though its path starts with the
+    /// build's drive letter: one on another disk lowers nothing, and one on the build's disk lowers it.
     /// </summary>
     [Fact]
-    public void AWalkUnderAFolderMountedFromAnotherDiskLowersNothing()
+    public void AWalkUnderAFolderMountedFromAnotherVolumeIsAWalkOfThatVolume()
     {
         var (path, sources) = HeldTree();
         var build = char.ToUpperInvariant(path[0]);
         var mount = $@"{build}:\mounted\";
+        var sameDiskMount = $@"{build}:\beside\";
         var queries = new FakeStorageQueries()
             .Volume($@"{build}:\", 0).Disk(0, Nvme, seekPenalty: false)
-            .Volume(mount, 1).Disk(1, Nvme, seekPenalty: false);
-        var inventory = new FakeVolumeInventory().With($@"{build}:\").With(mount);
+            .Volume(mount, 1).Disk(1, Nvme, seekPenalty: false)
+            .Volume(sameDiskMount, 0);
+        var inventory = new FakeVolumeInventory().With($@"{build}:\").With(mount).With(sameDiskMount);
         var cache = new MftVolumeIndexCache(
             sources, new ScanTuner(new FakePreferences(AppPreferences.Default), new VolumeMediaCache(queries), inventory));
         using var hold = cache.Hold();
@@ -205,7 +284,7 @@ public sealed class SpeculativeBuildPriorityTests : IDisposable
                 Assert.Empty(sources.Opened!.Priorities);
             }
 
-            using (cache.Walking([$@"{build}:\elsewhere"]))
+            using (cache.Walking([sameDiskMount + "projects"]))
             {
                 Assert.Equal([ReadPriority.Low], sources.Opened!.Priorities);
             }
@@ -344,8 +423,32 @@ public sealed class SpeculativeBuildPriorityTests : IDisposable
     }
 
     /// <summary>
+    /// The walk a measurement races is of the build's own volume, so the build reads at normal priority
+    /// throughout, and the walk that answers first leaves it reading for the questions after it (#1081).
+    /// </summary>
+    [Fact]
+    public async Task TheRacedWalkOfTheBuildsOwnVolumeLeavesItAtNormalPriority()
+    {
+        var (path, sources) = HeldTree();
+        var scanner = new DirectoryScanner(sources, tuning: OnDisks((char.ToUpperInvariant(path[0]), 0)));
+        using var hold = scanner.Hold();
+
+        try
+        {
+            var result = await scanner.MeasureAsync(path).AsTask().WaitAsync(Bound);
+
+            Assert.Equal(ScanStrategy.ParallelEnumeration, result.Strategy);
+            Assert.Empty(sources.Opened!.Priorities);
+        }
+        finally
+        {
+            sources.Release();
+        }
+    }
+
+    /// <summary>
     /// A walk that answers first leaves the build reading for the questions after it, at normal priority
-    /// once nothing walks its disk.
+    /// once nothing walks its disk. Of a volume the tuner could not place, so taken to be of another.
     /// </summary>
     [Fact]
     public async Task TheRacedWalkLowersTheBuildUntilItEnds()

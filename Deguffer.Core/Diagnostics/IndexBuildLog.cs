@@ -1,3 +1,5 @@
+using Deguffer.Core.Scanning;
+
 namespace Deguffer.Core.Diagnostics;
 
 /// <summary>
@@ -61,6 +63,34 @@ internal sealed class IndexBuildLog
     /// Nothing is recorded where no log is.
     /// </summary>
     internal static void Answered(char driveLetter, bool byTable) => Current?.Of(driveLetter).Answered(byTable);
+
+    /// <summary>
+    /// Which route answered each path of one measurement's <paramref name="pipeline"/> on a drive
+    /// letter, from what it read: <paramref name="results"/>, indexed as the pipeline's folders are.
+    /// Nothing is recorded where no log records the current flow.
+    /// </summary>
+    internal static void Answered(IReadOnlyList<VolumeFolders> pipeline, ScanResult[][] results)
+    {
+        if (Current is not { } log)
+        {
+            return;
+        }
+
+        foreach (var volume in pipeline)
+        {
+            if (volume.DriveLetter is not { } driveLetter)
+            {
+                continue;
+            }
+
+            var trace = log.Of(driveLetter);
+
+            foreach (var folder in volume.Folders)
+            {
+                trace.Answered(results[folder.Index][0].Strategy is ScanStrategy.MasterFileTable);
+            }
+        }
+    }
 
     /// <summary>The trace of <paramref name="driveLetter"/>, begun the first time the volume is met.</summary>
     internal IndexBuildTrace Of(char driveLetter)

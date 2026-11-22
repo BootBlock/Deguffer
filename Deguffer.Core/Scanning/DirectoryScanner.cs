@@ -141,7 +141,7 @@ public sealed class DirectoryScanner : IDirectoryScanner
         IProgress<ScanSize>? progress = null,
         CancellationToken ct = default)
     {
-        ThrowIfAnyPathIsBlank(asked);
+        ScanRequest.ThrowIfAnyPathIsBlank(asked);
 
         using var remembering = _estimates?.Hold() ?? PassHold.Nothing;
 
@@ -180,7 +180,7 @@ public sealed class DirectoryScanner : IDirectoryScanner
     /// </summary>
     public async ValueTask<IReadOnlyList<ScanResult>> MeasureFromDiskAsync(IReadOnlyList<ScanRequest> asked, CancellationToken ct = default)
     {
-        ThrowIfAnyPathIsBlank(asked);
+        ScanRequest.ThrowIfAnyPathIsBlank(asked);
 
         using var remembering = _estimates?.Hold() ?? PassHold.Nothing;
         using var walking = _volumes.Walking([.. asked.Select(request => request.Path)]);
@@ -196,16 +196,6 @@ public sealed class DirectoryScanner : IDirectoryScanner
         }
 
         return results;
-    }
-
-    private static void ThrowIfAnyPathIsBlank(IReadOnlyList<ScanRequest> asked)
-    {
-        ArgumentNullException.ThrowIfNull(asked);
-
-        foreach (var question in asked)
-        {
-            ArgumentException.ThrowIfNullOrWhiteSpace(question.Path, nameof(asked));
-        }
     }
 
     /// <summary>
@@ -428,32 +418,7 @@ public sealed class DirectoryScanner : IDirectoryScanner
             }
         }
 
-        RecordAnswers(pipeline, results);
-    }
-
-    /// <summary>
-    /// Which route answered each path of <paramref name="pipeline"/> on a drive letter, for the
-    /// benchmark's <see cref="Diagnostics.IndexBuildLog"/>, where one records this flow.
-    /// </summary>
-    private static void RecordAnswers(IReadOnlyList<VolumeFolders> pipeline, ScanResult[][] results)
-    {
-        if (Diagnostics.IndexBuildLog.Current is null)
-        {
-            return;
-        }
-
-        foreach (var volume in pipeline)
-        {
-            if (volume.DriveLetter is not { } driveLetter)
-            {
-                continue;
-            }
-
-            foreach (var folder in volume.Folders)
-            {
-                Diagnostics.IndexBuildLog.Answered(driveLetter, results[folder.Index][0].Strategy is ScanStrategy.MasterFileTable);
-            }
-        }
+        Diagnostics.IndexBuildLog.Answered(pipeline, results);
     }
 
     /// <summary>

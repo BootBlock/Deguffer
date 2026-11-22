@@ -75,7 +75,14 @@ public sealed class ScanTuner
     /// is <see cref="StorageMedia.Network"/> on no disk of this machine, without asking anything. Asks
     /// the device the first time a volume is met, so never call it on the UI thread.
     /// </summary>
-    public VolumeMedia? StorageOf(string path)
+    public VolumeMedia? StorageOf(string path) => PathStorageOf(path)?.Media;
+
+    /// <summary>
+    /// What <see cref="StorageOf"/> answers, with the volume that holds <paramref name="path"/> named
+    /// by its root, so two paths can be told apart as of one volume or of two on the same disk. Asks
+    /// the device the first time a volume is met, so never call it on the UI thread.
+    /// </summary>
+    public PathStorage? PathStorageOf(string path)
     {
         if (_media is null || _volumes is null)
         {
@@ -84,10 +91,10 @@ public sealed class ScanTuner
 
         if (LongPath.IsShare(path))
         {
-            return new VolumeMedia(StorageMedia.Network, []);
+            return new PathStorage(null, new VolumeMedia(StorageMedia.Network, []));
         }
 
-        return HostVolume.For(_volumes, path) is { } volume ? _media.Of(volume) : null;
+        return HostVolume.For(_volumes, path) is { } volume ? new PathStorage(volume.RootPath, _media.Of(volume)) : null;
     }
 
     /// <summary>
