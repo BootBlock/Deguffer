@@ -201,6 +201,7 @@ public sealed class ClaudeCodeSessionReadingAgeTests : IDisposable
                 },
                 runReach: null,
                 residue: null,
+                activity: null,
                 progress: null,
                 underway: null,
                 ct: CancellationToken.None);

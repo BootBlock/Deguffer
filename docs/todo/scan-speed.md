@@ -7,7 +7,8 @@
 > #676 to #690, and a fourth audit of the running App, real tools, real drives and elevated passes,
 > filed as #691 to #710 and #737 to #743, a fifth audit of every hot path again, filed as #1014
 > to #1046, and a sixth audit of finding providers' files and cleaning them, filed as #1057 to
-> #1075 and tracked by #1076. Work each in its own order below:
+> #1075 and tracked by #1076, and a seventh audit of the elevated file-table read, filed as #1079
+> to #1084 and tracked by #1085. Work each in its own order below:
 > the measurements in each stage 0 decide the larger items after them. Flip to ✅ COMPLETE and
 > `git mv` into `done/` when every issue below is closed or rejected, or supersede it with a newer
 > plan.
@@ -551,14 +552,15 @@ path. In the clean, plans run strictly in turn, each after the last one's verifi
 
 | Issue | Note |
 | --- | --- |
-| #1057 | Rows wait for every row's declarations before measuring, holding a slot idle. The largest gain for the pass's tail. |
+| #1057 | Rows wait for every row's declarations before measuring, holding a slot idle. The largest gain for the pass's tail. Done: every row that asks which spared children another row offers starts the question once its walk exists, measures, and awaits the answer only where its plan reads it, and `CodeRuleSweepTests` refuses an `await` written on the question itself. Not timed. |
 | #1060 | The Temporary files row's tenant claims, one at a time, two of them listed after it. Measured 1.49-2.50 s against 0.73-1.59 s at once. Done: `TenantClaims` starts every claim on a worker thread of its own and reads the answers in the tenants' order, and `CreateDefault` lists every tenant ahead of the row. |
 | #1059 | uv and NuGet never adopted the remembered tool answers (#447). NuGet 1.2-1.8 s, uv 0.35-0.70 s per pass. `safety` for NuGet's claim. Done: both rows declare their inputs (`UvInputs`, `NuGetInputs`) and ask through `ToolAnswerMemory`. NuGet's plan, NuGet's and uv's cleaned places, and uv's Explore declarations read the memory: asked four times in a row against the real tools, it started `dotnet` the first time only and uv the first two times. NuGet's claim and uv's plan ask afresh, because each decides what a deletion spares (§5.2), so a planning pass still starts `dotnet` once, for the claim, and uv three times, for the plan. The NuGet row no longer waits on `dotnet` once the answer is trusted, and an Explore build or duplicate search starts neither tool. |
 | #1061 | `RunningTotal` re-adds every path per report: 237 ms for 10,000 paths, measured. |
 | #1062, #1063, #1064, #1065 | The process table read in series under a lock (`safety`), the status line posted per change, two stores written before the pass returns, and volume lookups per path. #1063 done: a change to the status line is recorded under its lock, and the line is built and posted at once after a quiet spell and otherwise at most once per 100 ms, with a timer posting the latest line at the interval's end, so a burst of starts, ends and figures costs one post an interval and the last change is never left unsaid. |
 | #1066, #1067, #1068, #1071 | The hard-link scanner without the index, PlatformIO's plan-time walk, Poetry's two measurements in turn, and cloud sync roots walked in turn. |
 | #1073, #1069, #1075 | A second DISM analysis with both component-store rows, synchronous registered-storage readers, and the registered read and the residue probe in turn. #1069 and #1075 are `safety`. |
-| #1070, #1074 | Hyper-V's WMI calls in series, and a Disk Cleanup look beside `GetSpaceUsed` (`safety`). Each is measured before it is built. |
+| #1070 | Hyper-V's WMI calls in series. Measured before it is built. |
+| #1074 | A Disk Cleanup look beside `GetSpaceUsed` (`safety`). Measured elevated over an uncached 4 GB `Windows.old`: the look took 2.2-4.4 s and the handler's measurement 22.6-63.5 s alone, and the two at once took 25.8-44.0 s against 36.7-66.6 s in turn in five pairs of six, and 32.9 s against 24.8 s in the sixth. Warm, one pair took 19.3 s against 19.7 s and the other 26.5 s against 21.8 s, on a loaded machine. Done: the handler measures while the look runs and purges only once the look has passed. A refused look lets it go without purging and waits for it to return, which can take the rest of its measurement: told to stop 3 s in, it returned 22.2 s after it started. |
 
 ### Waiting on a decision
 
@@ -590,3 +592,47 @@ path. In the clean, plans run strictly in turn, each after the last one's verifi
 | A second listing call per directory to prove the listing ended | A short buffer does not prove the end, so skipping it risks a partial listing. |
 | STM32Cube's zips read in turn; the reset logs dated beside their measurement | Rare, or 1-2 ms; #1044 is closed. |
 | Firefox profiles, Nx workspaces, Yarn Berry zips, Restic and Vagrant listings, `LookupAccountSid` per profile | 1-90 ms per pass, or sensitive to change for a small gain. |
+
+## Seventh audit: the elevated file-table read
+
+A seventh audit read, in four parallel lanes, what an elevated scan does with the NTFS file table: the
+volume open and the reads of the table and of the attribute lists kept outside it, the per-record
+parse, the volume index and how a planning pass races it, and the Explore tree assembled from the
+table. Each finding was checked against the code and against every open and closed issue, and the
+survivors were filed as #1079 to #1084, each with an estimated before-and-after benchmark. #1085
+tracks them. Figures come from `Deguffer.Benchmark` (`table`, `index`, `explore`, `scan`), elevated,
+at the tuning a scan uses on NVMe (16 MiB reads, 8 in flight, 4 parse threads, 32 list reads in
+flight), from builds of the benchmark with `MftReadGap` changed that were never committed, and from
+throwaway programs against the Release `Deguffer.Core.dll`, on one machine (32 logical processors,
+NVMe only) with other work running.
+
+### What it found, in one paragraph
+
+**The first pass is bound by the drive; what follows it is not.** On the system volume, 2.94 million
+records of which 1.77 million in use, `table` took a median of 3.70 s: 3.04 s for the first pass,
+with 0.4 processors busy, and 0.44-0.55 s for the attribute lists, read only after the pass and
+with a queue refilled only from its oldest read. On another volume the lists were 21 % of the read.
+The parse costs 57-190 ns a record, far below what the drive delivers. An index build also yields
+to walks of its own volume, which #478 never measured.
+
+### Order of work
+
+| Issue | Note |
+| --- | --- |
+| #1079 | The list reader refills its 32 reads only from the oldest. The stage on C: 440-554 ms, estimated 120-200 ms after. |
+| #1080 | The lists are read only after the first pass ends. `table C:` 3.70 s, estimated 3.25-3.40 s. #363 left this for later. |
+| #1081 | An index build yields to walks of its own volume. Measure a whole elevated `plan` first. |
+| #1082 | The first pass ends by sorting 200-byte extension records by value: 45-90 ms, estimated 3-10 ms. |
+| #1084, #1083 | The benchmark cannot time a file-table Explore read with snapshots, and the finished tree allocates its scratch and name keys again (about 70 MB on C:). |
+
+### Checked and not filed
+
+| Finding | Why no issue |
+| --- | --- |
+| Reading across fewer free records: C: reads 1.15 GiB of them, 40 % of its table | Measured: a 16 KiB gap made 14,483 reads and `table C:` took 5.53 s, a 4 KiB gap 60,066 reads and 15.7 s, against 2,534 reads and 4.23 s at 64 KiB. A read costs more than the free records it skips. |
+| Reading across more free records, or more reads in flight | Measured: 256 KiB and 1 MiB gaps (660 and 336 reads) took 4.76-6.47 s and 5.03-5.48 s against 4.40-5.49 s at 64 KiB in the same rounds, and 16 or 32 in flight gained nothing clear of the noise. The first pass took about 3.1-3.4 s whatever the read shape. |
+| The per-record parse: fix-up, attribute walk, sinks, locks, false sharing, vectorising | Timed at 57-114 ns a record warm and 170-190 ns cold on one thread. The pass is bound by the drive. |
+| Tree assembly on several threads, lazy or radix sorting, keeping names | Prototyped: the parent inversion 36-45 ms to 17-21 ms and the roll-up 51 ms to 45 ms, inside the run-to-run spread. #552 and #553 already cut the names and the sort. |
+| Keeping a volume handle across scans to skip the flush at record 0 | The flush keeps the raw read in step with the cache (#543, #544). |
+| Building the lists from extension records' back-pointers instead of reading them | The list is what proves every name is found; a missed hard link would leave a folder short with nothing to say so. |
+| Per-query resolution, subtree tallies, and the stages after the lists in an index build | Under 2 % of a build together, or covered by #480, #1002, #1024 and #1025. |

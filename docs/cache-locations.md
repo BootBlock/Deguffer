@@ -8669,9 +8669,10 @@ system files* runs. It never deletes these folders itself. Windows registers the
 cleanup to remove the uninstall record as well, which is what Settings offers to go back from, and a
 folder deleted by hand would leave that record behind, naming something that is gone.
 
-Immediately before Windows is asked, Deguffer looks inside the folders once more. An Outlook data
-file, a file changed since the preview that your recent-files setting would keep, a subfolder Windows
-will not let Deguffer look inside, or an update that has started since, and nothing is removed.
+Immediately before Windows removes them, Deguffer looks inside the folders once more, while Windows
+works out how much they hold. An Outlook data file, a file changed since the preview that your
+recent-files setting would keep, a subfolder Windows will not let Deguffer look inside, or an update
+that has started since, and Windows is told to remove nothing.
 
 A folder is offered only when all of these are true:
 

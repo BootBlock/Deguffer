@@ -54,6 +54,7 @@ public sealed class PlanExecutorCancellationTests : IDisposable
                 new ProtectedPath(settings, "The tool's settings.", PathPresence.Present)),
             runReach: null,
             residue: null,
+            activity: null,
             CancelOnFirstWork(cts),
             underway: null,
             cts.Token);
@@ -100,6 +101,7 @@ public sealed class PlanExecutorCancellationTests : IDisposable
                 new ProtectedPath(inside, "Somebody else's folder.", PathPresence.Present)),
             runReach: null,
             residue: null,
+            activity: null,
             CancelOnFirstWork(cts),
             underway: null,
             cts.Token);
@@ -136,6 +138,7 @@ public sealed class PlanExecutorCancellationTests : IDisposable
                 new ProtectedPath(root, "The tool's own folder.", PathPresence.Present)),
             runReach: null,
             residue: null,
+            activity: null,
             progress: null,
             underway: null,
             cts.Token);
@@ -178,6 +181,7 @@ public sealed class PlanExecutorCancellationTests : IDisposable
                 new ProtectedPath(root, "The tool's own folder.", PathPresence.Present)),
             runReach: null,
             residue: null,
+            activity: null,
             progress: null,
             underway: null,
             cts.Token);
@@ -226,6 +230,7 @@ public sealed class PlanExecutorCancellationTests : IDisposable
             ]),
             runReach: null,
             residue: null,
+            activity: null,
             progress: null,
             underway,
             CancellationToken.None);
@@ -255,6 +260,7 @@ public sealed class PlanExecutorCancellationTests : IDisposable
             Plan([new RunCommandStep("tool", "clean", "Clean") { WhenCancelled = CancelledCommand.Ended }]),
             runReach: null,
             residue: null,
+            activity: null,
             progress: null,
             underway,
             cts.Token);
@@ -276,6 +282,7 @@ public sealed class PlanExecutorCancellationTests : IDisposable
             Plan([new DeleteDirectoryStep(Tree("cache"), "The cache")]),
             runReach: null,
             residue: null,
+            activity: null,
             progress: null,
             underway,
             CancellationToken.None);
@@ -296,6 +303,7 @@ public sealed class PlanExecutorCancellationTests : IDisposable
             Plan([new RunCommandStep("tool", "clean", "Clean") { WhenCancelled = CancelledCommand.Ended }]),
             runReach: null,
             residue: null,
+            activity: null,
             progress: null,
             underway: null,
             CancellationToken.None);
@@ -318,6 +326,7 @@ public sealed class PlanExecutorCancellationTests : IDisposable
                 new ProtectedPath(root, "The tool's own folder.", PathPresence.Present)),
             runReach: null,
             residue: null,
+            activity: null,
             progress: null,
             underway: null,
             cts.Token);

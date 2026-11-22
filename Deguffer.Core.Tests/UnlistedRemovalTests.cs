@@ -32,7 +32,7 @@ public sealed class UnlistedRemovalTests : IDisposable
 
     private async Task<CleanupResult> Execute(CleanupStep step) =>
         await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog)
-            .ExecuteAsync(PlanDeleting(step), runReach: null, residue: null, progress: null, underway: null, default);
+            .ExecuteAsync(PlanDeleting(step), runReach: null, residue: null, activity: null, progress: null, underway: null, default);
 
     /// <summary>
     /// The removal names the folder it could not list, in display form, as standing and as unlisted,

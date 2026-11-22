@@ -44,8 +44,24 @@ public sealed class FakeDiskCleanupHandlers : IDiskCleanupHandlers
 
     public FakeDiskCleanupHandlers(Func<string, string, DiskCleanupOutcome> behaviour) => _behaviour = behaviour;
 
-    /// <summary>Every call, in order: the handler's name and the volume it was given.</summary>
+    /// <summary>
+    /// Every run, in order: the handler's name and the volume it was given. A run is hosted and
+    /// measures before the step's look decides whether it purges, so this holds runs that cleared
+    /// nothing. <see cref="Purged"/> holds the ones that cleared.
+    /// </summary>
     public List<(string Handler, string Volume)> Calls { get; } = [];
+
+    /// <summary>Every run that was let purge, in order: the handler's name and the volume it was given.</summary>
+    public List<(string Handler, string Volume)> Purged { get; } = [];
+
+    /// <summary>
+    /// How long a run measures, given how it is told to stop. Returns at once unless a test holds it,
+    /// as one does to keep a run measuring past the step's look.
+    /// </summary>
+    private Action<CancellationToken> Measurement { get; init; } = _ => { };
+
+    /// <summary>Every run that has returned, so a test can tell that none was left running past its step.</summary>
+    public List<string> RunsReturned { get; } = [];
 
     /// <summary>
     /// The handlers Windows registers for what an upgrade and a reset leave behind, clearing what each
@@ -62,6 +78,13 @@ public sealed class FakeDiskCleanupHandlers : IDiskCleanupHandlers
             [Path.Combine("$SysReset", "Logs"), Path.Combine("$SysReset", "OldOSLogs"), Path.Combine("Windows", "Logs", "PBR")],
     });
 
+    /// <summary>
+    /// <see cref="Windows()"/>, measuring for as long as <paramref name="measurement"/> holds it, given
+    /// how the run is told to stop.
+    /// </summary>
+    public static FakeDiskCleanupHandlers Windows(Action<CancellationToken> measurement) =>
+        new(Windows()._behaviour) { Measurement = measurement };
+
     /// <summary>A handler that refuses, as one does with a failing HRESULT.</summary>
     public static FakeDiskCleanupHandlers Refusing(string message) =>
         new((_, _) => new DiskCleanupOutcome(Ran: false, message));
@@ -75,7 +98,7 @@ public sealed class FakeDiskCleanupHandlers : IDiskCleanupHandlers
     /// </summary>
     public static FakeDiskCleanupHandlers AlsoRemoving(string directory) => new((handler, volume) =>
     {
-        var outcome = Windows().Run(handler, volume, CancellationToken.None);
+        var outcome = Windows()._behaviour(handler, volume);
         Directory.Delete(LongPath.Extended(directory), recursive: true);
         return outcome;
     });
@@ -139,6 +162,7 @@ public sealed class FakeDiskCleanupHandlers : IDiskCleanupHandlers
     };
 
     private readonly Lock _surveys = new();
+    private readonly Lock _runs = new();
     private readonly TaskCompletionSource _surveyStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _surveyReturned = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -176,9 +200,35 @@ public sealed class FakeDiskCleanupHandlers : IDiskCleanupHandlers
         return answer;
     }
 
-    public DiskCleanupOutcome Run(string handler, string volume, CancellationToken ct)
+    public DiskCleanupOutcome Run(string handler, string volume, PurgeDecision mayPurge, CancellationToken ct)
     {
-        Calls.Add((handler, volume));
-        return _behaviour(handler, volume);
+        try
+        {
+            lock (_runs)
+            {
+                Calls.Add((handler, volume));
+            }
+
+            Measurement(ct);
+
+            if (!mayPurge.Wait(ct))
+            {
+                return new DiskCleanupOutcome(Ran: false, "Windows was not asked to clear anything.");
+            }
+
+            lock (_runs)
+            {
+                Purged.Add((handler, volume));
+            }
+
+            return _behaviour(handler, volume);
+        }
+        finally
+        {
+            lock (_runs)
+            {
+                RunsReturned.Add(handler);
+            }
+        }
     }
 }

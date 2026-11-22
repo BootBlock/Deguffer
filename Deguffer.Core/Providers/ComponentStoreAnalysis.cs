@@ -10,8 +10,9 @@ namespace Deguffer.Core.Providers;
 /// <para><b>One analysis for both component store rows.</b> The analysis is read-only but takes a
 /// minute or more, and the cleanup and the reset ask it the same question, so the planner builds one
 /// and hands it to both. What a planning pass read is kept until the next pass clears it (G4). What
-/// the run asks of <see cref="FreshReadingAsync"/> is never kept: it is a figure subtracted from another,
-/// and a remembered one would report nothing freed.</para>
+/// a clean asks of <see cref="RunReadingAsync"/> is a figure subtracted from another, so it stands only
+/// until anything in the clean acts. A command acts, so the figure after it is always asked afresh, and
+/// a remembered figure can never make a command look as if it freed nothing.</para>
 ///
 /// <para><b>Every call is recorded in <see cref="OwnServicingCalls"/>.</b> Windows starts its servicing
 /// stack for the analysis and keeps it running for minutes afterwards, and the hold on an unfinished
@@ -41,6 +42,8 @@ public sealed class ComponentStoreAnalysis(
 
     private readonly PassMemo<Task<ComponentStoreReading>> _reading = new();
 
+    private KeptReading? _lastInRun;
+
     /// <summary>DISM, as Windows ships it for this machine's architecture.</summary>
     public string Dism { get; } = NativeSystemTool.In(system, "Dism.exe");
 
@@ -56,8 +59,39 @@ public sealed class ComponentStoreAnalysis(
     /// <summary>Forgets the last pass's reading, for a planning pass that starts afresh.</summary>
     public void Invalidate() => _reading.Forget();
 
-    /// <summary>What the store holds now, from an analysis asked afresh rather than remembered.</summary>
-    public Task<ComponentStoreReading> FreshReadingAsync(CancellationToken ct) => ReadAsync(ct);
+    /// <summary>
+    /// What the store holds now, for a clean: from an analysis asked afresh, or from the last one this
+    /// clean asked where nothing in it has acted since that analysis began.
+    ///
+    /// <para><b>Why the last one can stand.</b> The cleanup's analysis after its command and the reset's
+    /// before its own are adjacent in a clean of both rows, and nothing runs between them, so asking
+    /// again would spend a minute or more reading what was just read. <paramref name="run"/> says
+    /// whether anything ran: a command, DISM's included, a removal, a release that closes a program, or
+    /// a Disk Cleanup handler, from any plan in it. An analysis only reads, so it is none of these. Any
+    /// of those, a reading begun while one acted, or a clean other than the one the reading was taken
+    /// in, asks afresh.</para>
+    ///
+    /// <para>Only an analysis that gave a report is kept. A failure or a refusal is asked again, because
+    /// an answer the run could not use is no saving, and the next analysis may give one.</para>
+    /// </summary>
+    public async Task<ComponentStoreReading> RunReadingAsync(RunActivity run, CancellationToken ct)
+    {
+        if (Volatile.Read(ref _lastInRun) is { } last && run.StillQuiet(last.Mark))
+        {
+            return last.Reading;
+        }
+
+        // Taken before DISM starts, so a step that starts acting while DISM reads breaks the mark.
+        var mark = run.Quiet();
+        var reading = await ReadAsync(ct).ConfigureAwait(false);
+
+        if (mark is { } quiet && reading.Report is not null)
+        {
+            Volatile.Write(ref _lastInRun, new KeptReading(quiet, reading));
+        }
+
+        return reading;
+    }
 
     private async Task<ComponentStoreReading> ReadAsync(CancellationToken ct)
     {
@@ -89,6 +123,9 @@ public sealed class ComponentStoreAnalysis(
 
         return error >= 0 ? string.Join(' ', lines[error..]) : lines.Length > 0 ? lines[^1] : message;
     }
+
+    /// <summary>A clean's last analysis, and where the clean's activity stood as it began.</summary>
+    private sealed record KeptReading(QuietMark Mark, ComponentStoreReading Reading);
 }
 
 /// <summary>What DISM said about the component store.</summary>

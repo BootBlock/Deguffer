@@ -194,10 +194,24 @@ public sealed class VsCodeLogProvider : CleanupProviderBase
             notes.Add(UnreadableRoot.Note(root));
         }
 
+        // Every editor is walked, and its survivors asked, before either is awaited: the measurement needs
+        // only the targets, and the first survivors question in a pass reads every row's declarations.
+        List<(LevelWalk Walk, Task<IReadOnlyList<(string Path, string Reason)>> Sparing)> walks = [];
+
         foreach (var editor in editors)
         {
             ct.ThrowIfCancellationRequested();
 
+            var walk = CacheLevelWalk.Under([new CacheLevel(string.Empty, FolderChildren)], editor.Path, ct);
+
+            targets.AddRange(walk.Targets.Select(target => target with { Group = editor.Name }));
+            walks.Add((walk, walk.SurvivorsAsync(_declarations, ct)));
+        }
+
+        var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
+
+        foreach (var (editor, (walk, sparing)) in editors.Zip(walks))
+        {
             survivors.Add((
                 editor.Path,
                 $"The '{editor.Name}' folder itself must survive — only its logs and crash reports "
@@ -205,10 +219,8 @@ public sealed class VsCodeLogProvider : CleanupProviderBase
             survivors.AddRange(VsCodeUserDataDiscovery.NeverOffered
                 .Select(n => (Path.Combine(editor.Path, n.RelativePath), n.Reason)));
 
-            var walk = CacheLevelWalk.Under([new CacheLevel(string.Empty, FolderChildren)], editor.Path, ct);
-            var spares = await walk.SurvivorsAsync(_declarations, ct).ConfigureAwait(false);
+            var spares = await sparing.ConfigureAwait(false);
 
-            targets.AddRange(walk.Targets.Select(target => target with { Group = editor.Name }));
             declined.AddRange(walk.Declined);
             survivors.AddRange(spares);
             notes.AddRange(walk.Notes);
@@ -230,8 +242,6 @@ public sealed class VsCodeLogProvider : CleanupProviderBase
         {
             return EmptyPlan("No editor on this machine has written a log or a crash report.");
         }
-
-        var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
 
         if (measured.Note is { } scanNote)
         {

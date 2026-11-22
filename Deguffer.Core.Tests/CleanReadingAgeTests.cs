@@ -148,6 +148,7 @@ public sealed class CleanReadingAgeTests : IDisposable
                 },
                 runReach: null,
                 residue: null,
+                activity: null,
                 progress: null,
                 underway: null,
                 ct: CancellationToken.None);

@@ -195,26 +195,17 @@ public readonly record struct LevelWalk(
     /// <summary>
     /// The children this walk spared that no row offers, which are what a plan asserts survived and
     /// what it counts as left alone. A child another row offers is that row's to take. See
-    /// <see cref="RowDeclarations"/>.
+    /// <see cref="RowDeclarations.UnofferedAsync"/>, which also says why a plan starts this as soon as
+    /// the walk exists and awaits it only after it has measured.
     ///
     /// <para>Asked while the plan is built, never during the walk. A row may declare what its own
     /// walk found, as Claude Code's leftovers row does, so reading every row's declarations from
     /// inside a walk would ask that row for a declaration it is still building.</para>
     /// </summary>
-    public async Task<IReadOnlyList<(string Path, string Reason)>> SurvivorsAsync(RowDeclarations declarations, CancellationToken ct)
+    public Task<IReadOnlyList<(string Path, string Reason)>> SurvivorsAsync(RowDeclarations declarations, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(declarations);
 
-        List<(string Path, string Reason)> survivors = [];
-
-        foreach (var child in Unrecognised)
-        {
-            if (!await declarations.OfferedByARowAsync(child.Path, ct).ConfigureAwait(false))
-            {
-                survivors.Add(child);
-            }
-        }
-
-        return survivors;
+        return declarations.UnofferedAsync(Unrecognised, ct);
     }
 }

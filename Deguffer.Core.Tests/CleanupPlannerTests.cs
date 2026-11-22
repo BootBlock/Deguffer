@@ -1058,6 +1058,32 @@ public sealed class CleanupPlannerTests
     }
 
     /// <summary>
+    /// A tool's reading one plan took may stand for the next plan's only where no step of any plan acted
+    /// between them, so every plan in a clean is handed the one record of what the clean set acting, and
+    /// a second clean starts a record of its own: the time between two cleans is time Windows can change
+    /// its component store in.
+    /// </summary>
+    [Fact]
+    public async Task EveryPlanInACleanIsHandedOneRecordOfWhatTheCleanSetActing()
+    {
+        var first = new StubProvider("first", bytes: 1_000);
+        var second = new StubProvider("second", bytes: 1_000);
+        var planner = new CleanupPlanner([first, second]);
+        var plans = await planner.PlanAllAsync();
+
+        await planner.ExecuteAsync(plans);
+        var firstClean = first.ActivityHandedOver;
+
+        Assert.NotNull(firstClean);
+        Assert.Same(firstClean, second.ActivityHandedOver);
+
+        await planner.ExecuteAsync(plans);
+
+        Assert.NotNull(first.ActivityHandedOver);
+        Assert.NotSame(firstClean, first.ActivityHandedOver);
+    }
+
+    /// <summary>
     /// A survivor that had gone before the clean began is somebody else's doing, whichever plan in the
     /// run was working in the folder around it. The run reads what has gone before its first deletion.
     /// </summary>
@@ -1149,6 +1175,9 @@ public sealed class CleanupPlannerTests
 
         /// <summary>The record of what the run's removals left standing, as the planner handed it over.</summary>
         public RunResidue? ResidueHandedOver { get; private set; }
+
+        /// <summary>The record of what the run set acting on the machine, as the planner handed it over.</summary>
+        public RunActivity? ActivityHandedOver { get; private set; }
 
         public void InvalidateCaches() => Note($"invalidate:{id}");
 
@@ -1246,6 +1275,7 @@ public sealed class CleanupPlannerTests
             CleanupPlan plan,
             RunReach? runReach = null,
             RunResidue? residue = null,
+            RunActivity? activity = null,
             IProgress<double>? progress = null,
             IProgress<CommandUnderway?>? underway = null,
             CancellationToken ct = default)
@@ -1253,6 +1283,7 @@ public sealed class CleanupPlannerTests
             WasExecuted = true;
             ReachHandedOver = runReach;
             ResidueHandedOver = residue;
+            ActivityHandedOver = activity;
             Note($"execute:{id}");
 
             // Stands in for what a plan's own removal does to the disk, for a test of what a later plan

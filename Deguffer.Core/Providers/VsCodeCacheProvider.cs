@@ -286,10 +286,24 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
             notes.Add(UnreadableRoot.Note(root));
         }
 
+        // Every editor is walked, and its survivors asked, before either is awaited: the measurement needs
+        // only the targets, and the first survivors question in a pass reads every row's declarations.
+        List<(LevelWalk Walk, Task<IReadOnlyList<(string Path, string Reason)>> Sparing)> walks = [];
+
         foreach (var editor in editors)
         {
             ct.ThrowIfCancellationRequested();
 
+            var walk = CacheLevelWalk.Under(LevelsOf(editor), editor.UserData.Path, ct);
+
+            targets.AddRange(walk.Targets.Select(target => target with { Group = editor.UserData.Name }));
+            walks.Add((walk, walk.SurvivorsAsync(_declarations, ct)));
+        }
+
+        var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
+
+        foreach (var (editor, (walk, sparing)) in editors.Zip(walks))
+        {
             var folder = editor.UserData.Path;
 
             survivors.Add((
@@ -312,10 +326,8 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
                 unreadable = true;
             }
 
-            var walk = CacheLevelWalk.Under(LevelsOf(editor), folder, ct);
-            var spares = await walk.SurvivorsAsync(_declarations, ct).ConfigureAwait(false);
+            var spares = await sparing.ConfigureAwait(false);
 
-            targets.AddRange(walk.Targets.Select(target => target with { Group = editor.UserData.Name }));
             declined.AddRange(walk.Declined);
             survivors.AddRange(spares);
             notes.AddRange(walk.Notes);
@@ -348,8 +360,6 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
         {
             return EmptyPlan("No editor on this machine keeps a cache in its own folder.");
         }
-
-        var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
 
         if (measured.Note is { } scanNote)
         {

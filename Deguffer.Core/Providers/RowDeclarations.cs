@@ -30,7 +30,7 @@ namespace Deguffer.Core.Providers;
 /// <para><b>Asked while a plan is assembled, never from a walk or from a declaration.</b> Answering
 /// reads every row's <see cref="ICleanupProvider.ToolRoots"/>, and a row may build those from its own
 /// walk, so a question asked from inside either would ask a row for the declaration it is still
-/// building. <see cref="LevelWalk.SurvivorsAsync"/> is the one place a walk's children meet it.</para>
+/// building. <see cref="UnofferedAsync"/> is the one place a plan's spared children meet it.</para>
 ///
 /// <para><b>Asked from several plans at once, and awaited.</b> A pass plans several rows together,
 /// and the first question reads every row's declaration, which takes seconds where a row builds its
@@ -70,11 +70,43 @@ public sealed class RowDeclarations
     /// Checked before each row is read. A row's declaration cannot be stopped part-way, but
     /// the first question in a pass reads every row's, for whichever row asked.
     /// </param>
-    public async Task<bool> OfferedByARowAsync(string folder, CancellationToken ct = default) =>
+    private async Task<bool> OfferedByARowAsync(string folder, CancellationToken ct) =>
         Path.GetDirectoryName(folder) is { } parent
         && LongPath.Entry(parent) is { } key
         && (await ByFolderAsync(ct).ConfigureAwait(false)).TryGetValue(key, out var roots)
         && roots.Exists(root => root.Recognises(new ToolRootChild(Path.GetFileName(folder), ChildKind.Folder)));
+
+    /// <summary>
+    /// The children in <paramref name="spared"/> that no row declares it removes: what a plan asserts
+    /// survived and counts as left alone. Each is asked about as a directory, so a file spared beside
+    /// them is never excused by a row's offer, and stays asserted.
+    ///
+    /// <para>The only way a plan asks, so the sweep rule on awaiting it holds for every row.</para>
+    ///
+    /// <para><b>Started where the children are known, and awaited where the plan reads them.</b> The
+    /// first question in a pass reads every row's declaration, which takes seconds, and a row that
+    /// awaited it before measuring its own targets would hold its planning slot for that time doing
+    /// nothing. The measurement needs only the targets, so it runs while this is answered.
+    /// <c>CodeRuleSweepTests</c> refuses an <c>await</c> written on the question itself.</para>
+    /// </summary>
+    public async Task<IReadOnlyList<(string Path, string Reason)>> UnofferedAsync(
+        IReadOnlyList<(string Path, string Reason)> spared,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(spared);
+
+        List<(string Path, string Reason)> unoffered = [];
+
+        foreach (var child in spared)
+        {
+            if (!await OfferedByARowAsync(child.Path, ct).ConfigureAwait(false))
+            {
+                unoffered.Add(child);
+            }
+        }
+
+        return unoffered;
+    }
 
     /// <summary>Built once per planning pass (G4), because a plan asks once per spared child.</summary>
     private async Task<Dictionary<string, List<ToolRoot>>> ByFolderAsync(CancellationToken ct)

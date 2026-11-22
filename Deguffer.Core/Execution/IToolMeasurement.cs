@@ -26,15 +26,21 @@ public interface IToolMeasurement
     /// <summary>
     /// What the tool says its cache holds now, in bytes, or null where it would not say. Asked of the
     /// machine at the moment of the call, never from anything the planning pass remembered, because the
-    /// answer is subtracted from a figure taken before the command ran.
+    /// answer is subtracted from a figure taken before the command ran. A reading the clean itself took
+    /// may stand for it only where <paramref name="run"/> says nothing has acted since that reading began.
     /// </summary>
     /// <param name="when">
     /// Where the command is: about to run, or finished and how. Most tools answer alike either way.
     /// The component store's measurement is the exception: what Windows' cleanup left is the evidence
     /// that running it again on the same store frees nothing.
     /// </param>
+    /// <param name="run">
+    /// What the clean has set acting on the machine, for a tool whose measurement is slow enough that a
+    /// reading taken since nothing acted is worth standing for the next. The component store's is: its
+    /// analysis takes a minute or more. See <see cref="RunActivity"/>.
+    /// </param>
     /// <param name="ct">Ends the measurement.</param>
-    Task<long?> MeasureAsync(MeasuredWhen when, CancellationToken ct);
+    Task<long?> MeasureAsync(MeasuredWhen when, RunActivity run, CancellationToken ct);
 }
 
 /// <summary>Where a command is when the run asks its tool for a figure.</summary>

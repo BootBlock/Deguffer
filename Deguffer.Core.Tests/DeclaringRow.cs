@@ -66,6 +66,7 @@ internal sealed class DeclaringRow(
         CleanupPlan plan,
         RunReach? runReach = null,
         RunResidue? residue = null,
+        RunActivity? activity = null,
         IProgress<double>? progress = null,
         IProgress<CommandUnderway?>? underway = null,
         CancellationToken ct = default) =>

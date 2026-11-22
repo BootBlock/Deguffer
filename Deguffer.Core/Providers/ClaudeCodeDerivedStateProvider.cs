@@ -282,6 +282,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
         }
 
         var survey = Look(ct)!;
+        var sparing = survey.Root.SurvivorsAsync(_declarations, ct);
         var kinds = survey.Kinds;
 
         var targets = kinds.SelectMany(kind => kind.Targets).ToList();
@@ -305,9 +306,8 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
         // write the same handshake file, so the removal keeps anything written since the evidence was read.
         // CleanupProviderBase.PlanAsync will not loosen it.
         var effective = MinimumAge.Stricter(keep, survey.Looked);
-
         var (steps, measured) = await PlanDeletionsAsync(targets, effective, ct).ConfigureAwait(false);
-        var spared = await survey.Root.SurvivorsAsync(_declarations, ct).ConfigureAwait(false);
+        var spared = await sparing.ConfigureAwait(false);
 
         if (measured.Note is { } scanNote)
         {
