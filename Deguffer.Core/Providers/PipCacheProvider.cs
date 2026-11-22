@@ -93,24 +93,23 @@ public sealed class PipCacheProvider : CleanupProviderBase
     public string LocalRoot => Path.Combine(Environment.LocalAppData, "pip");
 
     /// <summary>
-    /// §5.2 as §7.1 needs it read from outside. <c>pip.ini</c> is the one thing under
-    /// <c>%LOCALAPPDATA%\pip</c> that is not cache, and pip reads a second copy of it from the
-    /// roaming profile — a folder this provider never reaches into, so that copy is declared as a
-    /// root of its own with nothing inside it.
+    /// §5.2 as §7.1 needs it read from outside. Only <c>Cache</c> is recognised under
+    /// <c>%LOCALAPPDATA%\pip</c>. Each configuration file pip reads (<see cref="PipConfigurationFiles"/>)
+    /// is in a folder this provider never reaches into, so each is declared as a root of its own with
+    /// nothing inside it.
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
     [
         ToolRoot.Folders(
             LocalRoot,
-            "This is pip's own folder. Deguffer clears the cache inside it and nothing else, because "
-            + "the pip.ini beside it may hold private index URLs and credentials.",
+            "This is pip's own folder. Deguffer clears the cache inside it and nothing else.",
             static name => name.Equals("Cache", StringComparison.OrdinalIgnoreCase)),
 
-        new ToolRoot(
-            Path.Combine(Environment.RoamingAppData, "pip", "pip.ini"),
-            "This is your roaming pip configuration, and it may hold private index URLs and "
+        .. ConfigurationFiles.Select(static file => new ToolRoot(
+            file.Path,
+            $"This is your {file.Scope} pip configuration, and it may hold private index URLs and "
             + "credentials. Deguffer never removes it.",
-            static _ => false),
+            static _ => false)),
     ];
 
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
@@ -208,26 +207,24 @@ public sealed class PipCacheProvider : CleanupProviderBase
     }
 
     /// <summary>
-    /// §5.6. <c>pip.ini</c> is the one thing under <c>%LOCALAPPDATA%\pip</c> that is not cache —
-    /// it holds index URLs and may carry credentials for a private package index — and it sits in
-    /// the parent of the cache directory pip reports. Naming the parent as well is what stops a
-    /// future change from reclaiming the cache by removing the directory that contains it.
+    /// §5.6. Naming the parent of the default cache is what stops a future change from reclaiming the
+    /// cache by removing the directory that contains it. pip's configuration files hold index URLs
+    /// and may carry credentials for a private package index, and any of them may be the one that
+    /// exists, so every one is named: §5.6's list is then a statement of what survived rather than a
+    /// guess at which file this machine uses.
     /// </summary>
-    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(CancellationToken ct)
-    {
-        var localRoot = Path.Combine(Environment.LocalAppData, "pip");
-
-        // pip reads pip.ini from both the local and roaming profile directories, and either may be
-        // the one that exists. Naming both keeps §5.6's list an honest statement of what survived
-        // rather than a guess at which copy this machine happens to use.
-        return ProtectAsync(
+    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(CancellationToken ct) =>
+        ProtectAsync(
             [
-                (localRoot, "pip's directory must survive — only the cache within it is cleared."),
-                (Path.Combine(localRoot, "pip.ini"), "pip configuration, which may hold private index URLs and credentials."),
-                (Path.Combine(Environment.RoamingAppData, "pip", "pip.ini"), "Roaming pip configuration, which may hold private index URLs and credentials."),
+                (LocalRoot, "pip's directory must survive — only the cache within it is cleared."),
+                .. ConfigurationFiles.Select(static file => (
+                    file.Path,
+                    $"The {file.Scope} pip configuration, which may hold private index URLs and credentials.")),
             ],
             ct);
-    }
+
+    private IReadOnlyList<PipConfigurationFile> ConfigurationFiles =>
+        PipConfigurationFiles.Of(Environment, _systemDirectories);
 
     private string? FindPip() => PipCommand.Find(Environment);
 
