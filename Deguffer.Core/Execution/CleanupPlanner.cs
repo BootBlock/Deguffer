@@ -557,7 +557,7 @@ public sealed class CleanupPlanner
             // The account's folders are followed to their mounts once for the pass.
             var terms = new PassTerms(registrars, AnotherAccountPlan.For(_account, _volumes), keep);
 
-            using var pass = new PlanningPass(providers, terms, _volumes, clock, start, ct);
+            using var pass = new PlanningPass(providers, terms, _volumes, _time, clock, start, ct);
             return await pass.RunAsync(status, found, timed).ConfigureAwait(false);
         }
         finally

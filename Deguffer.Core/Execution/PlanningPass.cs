@@ -35,6 +35,7 @@ internal sealed class PlanningPass : IDisposable
     private readonly IReadOnlyList<ICleanupProvider> _providers;
     private readonly PassTerms _terms;
     private readonly IVolumeInventory _volumes;
+    private readonly TimeProvider _time;
     private readonly PassClock _clock;
     private readonly PassStart _start;
 
@@ -51,11 +52,13 @@ internal sealed class PlanningPass : IDisposable
 
     private readonly Lock _reporting = new();
 
+    /// <param name="time">What the status line is paced by (<see cref="PlanningStatus"/>), the clock <paramref name="clock"/> reads.</param>
     /// <param name="ct">The caller's, which ends the slots when it is cancelled.</param>
     public PlanningPass(
         IReadOnlyList<ICleanupProvider> providers,
         PassTerms terms,
         IVolumeInventory volumes,
+        TimeProvider time,
         PassClock clock,
         PassStart start,
         CancellationToken ct)
@@ -63,6 +66,7 @@ internal sealed class PlanningPass : IDisposable
         _providers = providers;
         _terms = terms;
         _volumes = volumes;
+        _time = time;
         _clock = clock;
         _start = start;
         _slots = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -81,7 +85,8 @@ internal sealed class PlanningPass : IDisposable
         // Before any slot is handed out, on the planner's thread, as PassStart asks.
         var registered = _start.Begin(ReadRegisteredAsync);
 
-        var checking = new PlanningStatus(status);
+        // Disposed before the pass returns, so no line is reported after it, a timed one included.
+        using var checking = new PlanningStatus(status, _time);
         var options = new ParallelOptions { MaxDegreeOfParallelism = CleanupPlanner.ProvidersAtOnce, CancellationToken = _slots.Token };
 
         var planning = Parallel.ForEachAsync(
