@@ -153,7 +153,7 @@ public sealed class DirectoryScanner : IDirectoryScanner
         IProgress<ScanSize>? progress = null,
         CancellationToken ct = default)
     {
-        ThrowIfAnyPathIsBlank(asked);
+        ScanRequest.ThrowIfAnyPathIsBlank(asked);
 
         using var remembering = _estimates?.Hold() ?? PassHold.Nothing;
 
@@ -192,7 +192,7 @@ public sealed class DirectoryScanner : IDirectoryScanner
     /// </summary>
     public async ValueTask<IReadOnlyList<ScanResult>> MeasureFromDiskAsync(IReadOnlyList<ScanRequest> asked, CancellationToken ct = default)
     {
-        ThrowIfAnyPathIsBlank(asked);
+        ScanRequest.ThrowIfAnyPathIsBlank(asked);
 
         using var remembering = _estimates?.Hold() ?? PassHold.Nothing;
         using var walking = _volumes.Walking([.. asked.Select(request => request.Path)]);
@@ -208,16 +208,6 @@ public sealed class DirectoryScanner : IDirectoryScanner
         }
 
         return results;
-    }
-
-    private static void ThrowIfAnyPathIsBlank(IReadOnlyList<ScanRequest> asked)
-    {
-        ArgumentNullException.ThrowIfNull(asked);
-
-        foreach (var question in asked)
-        {
-            ArgumentException.ThrowIfNullOrWhiteSpace(question.Path, nameof(asked));
-        }
     }
 
     /// <summary>

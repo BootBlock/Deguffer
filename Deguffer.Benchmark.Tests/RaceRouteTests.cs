@@ -194,17 +194,18 @@ public sealed class RaceRouteTests : IDisposable
     }
 
     /// <summary>
-    /// A build yields where it was asked to, unless it reads a volume on another disk, as Auto's would
-    /// not, and the route and its description follow the same answer.
+    /// A build yields where it was asked to, unless it reads a volume on another disk or the walked
+    /// folder's own volume, as Auto's would not (#1081), and the route and its description follow the
+    /// same answer.
     /// </summary>
     [Fact]
-    public void ABuildYieldsWhereAskedUnlessItIsOfAnotherDisk()
+    public void ABuildYieldsWhereAskedUnlessItIsOfAnotherDiskOrTheWalksOwnVolume()
     {
-        Assert.True(RaceRoute.BuildYields(asked: true, DiskRelation.SameVolume));
+        Assert.False(RaceRoute.BuildYields(asked: true, DiskRelation.SameVolume));
         Assert.True(RaceRoute.BuildYields(asked: true, DiskRelation.SameDisk));
         Assert.True(RaceRoute.BuildYields(asked: true, DiskRelation.Unknown));
         Assert.False(RaceRoute.BuildYields(asked: true, DiskRelation.OtherDisk));
-        Assert.False(RaceRoute.BuildYields(asked: false, DiskRelation.SameVolume));
+        Assert.False(RaceRoute.BuildYields(asked: false, DiskRelation.SameDisk));
     }
 
     /// <summary>

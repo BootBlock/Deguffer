@@ -78,17 +78,19 @@ internal sealed class RaceRoute
     }
 
     /// <summary>
-    /// Whether the race's build yields to its walk: where it was <paramref name="asked"/> to, unless it
-    /// reads a volume on another disk, which shares nothing the hint could protect, so Auto would not
-    /// lower it either. The one rule the route and its description both follow.
+    /// Whether the race's build yields to its walk: where it was <paramref name="asked"/> to, and Auto
+    /// would lower it too (<see cref="VolumeDisks.Contends"/>). Not where it reads a volume on another
+    /// disk, which shares nothing the hint could protect, nor the walked folder's own volume, whose walk
+    /// it races. The one rule the route and its description both follow.
     /// </summary>
-    public static bool BuildYields(bool asked, DiskRelation relation) => asked && relation is not DiskRelation.OtherDisk;
+    public static bool BuildYields(bool asked, DiskRelation relation) =>
+        asked && relation is DiskRelation.SameDisk or DiskRelation.Unknown;
 
     /// <summary>
     /// <paramref name="walk"/> and <paramref name="build"/>, the build reading at low priority while
     /// the walk runs and at normal priority otherwise where <paramref name="yields"/>, through the
-    /// priorities a scan's builds use (<see cref="BuildPriorities"/>). The disks are taken to be shared,
-    /// which the caller has decided.
+    /// priorities a scan's builds use (<see cref="BuildPriorities"/>). The walk is taken to be of another
+    /// volume on the build's disks, which the caller has decided.
     /// </summary>
     /// <param name="build">The build, handed what to call with its volume once the volume is open.</param>
     internal static (Func<CancellationToken, RunTally> Walk, Func<CancellationToken, RunTally> Build) Yielding(
@@ -106,14 +108,14 @@ internal sealed class RaceRoute
         return (
             ct =>
             {
-                using var walking = priorities.Walking(disks: null);
+                using var walking = priorities.Walking([VolumeDisks.Unknown]);
                 return walk(ct);
             },
             ct =>
             {
                 try
                 {
-                    return build(volume => priorities.Yield(new BuildPriorities.Build(), volume, disks: null), ct);
+                    return build(volume => priorities.Yield(new BuildPriorities.Build(), volume, VolumeDisks.Unknown), ct);
                 }
                 finally
                 {

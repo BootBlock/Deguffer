@@ -165,6 +165,8 @@ internal sealed class VolumeRoutes(
                 results[indexes[j]] = walked[j];
             }
         }
+
+        Diagnostics.IndexBuildLog.Answered(pipeline, results);
     }
 
     /// <summary>

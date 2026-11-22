@@ -621,7 +621,7 @@ to walks of its own volume, which #478 never measured.
 | --- | --- |
 | #1079 | The list reader refills its 32 reads only from the oldest. The stage on C: 440-554 ms, estimated 120-200 ms after. |
 | #1080 | The lists are read only after the first pass ends. `table C:` 3.70 s, estimated 3.25-3.40 s. #363 left this for later. |
-| #1081 | An index build yields to walks of its own volume. Measure a whole elevated `plan` first. |
+| #1081 | An index build yields to walks of its own volume. Measure a whole elevated `plan` first. Done: `plan` now reports each volume's build (when it was ready, its time at low priority, and which route answered its questions) and plans with the machine's drives, as the app does. A build yields only to walks of other volumes on its disks. The system volume's build read at low priority for 6.4-9.0 s against 0.12-0.25 s after, its index was ready 18.5-28.3 s into the pass against 10.4-19.4 s, and the pass took 33.4-54.6 s against 11.5-19.8 s, alternated on a loaded machine with the passes that stalled under either rule left out (`BuildPriorities`). |
 | #1082 | The first pass ends by sorting 200-byte extension records by value: 45-90 ms, estimated 3-10 ms. |
 | #1084, #1083 | The benchmark cannot time a file-table Explore read with snapshots, and the finished tree allocates its scratch and name keys again (about 70 MB on C:). |
 

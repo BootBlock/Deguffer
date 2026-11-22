@@ -9,7 +9,14 @@ namespace Deguffer.Benchmark;
 /// How many of each costly question to Windows the pass asked, and the time they took, indexed by
 /// <see cref="MachineCall"/> (#516).
 /// </param>
-internal sealed record PlanRun(IReadOnlyList<ProviderPlanTime> Times, IReadOnlyList<MachineCallCount> Calls)
+/// <param name="Builds">
+/// What each volume's index build did in the pass, and which route answered its questions, in order
+/// of drive letter (#1081).
+/// </param>
+internal sealed record PlanRun(
+    IReadOnlyList<ProviderPlanTime> Times,
+    IReadOnlyList<MachineCallCount> Calls,
+    IReadOnlyList<IndexBuildTimes> Builds)
 {
     /// <summary>Every kind of call <paramref name="tally"/> counted, in the order of <see cref="MachineCall"/>.</summary>
     public static IReadOnlyList<MachineCallCount> CallsOf(MachineCallTally tally) =>
