@@ -5,9 +5,9 @@ namespace Deguffer.Benchmark;
 /// assembling them, summed.
 ///
 /// <para>Assembled beside the read or walk rather than as a stage of it, so the time is not part of
-/// the run's elapsed time in the way a stage's is. It is processor time taken from the run, and the
-/// difference between a run with snapshots and one without is what it cost the run's elapsed time.
-/// </para>
+/// the run's elapsed time in the way a stage's is. It is the time each assembling ran for, on
+/// whichever thread, and the difference between a run with snapshots and one without is what they
+/// cost the run's elapsed time.</para>
 /// </summary>
 /// <param name="Count">
 /// How many snapshots were started. The last can be stopped part of the way through when the run

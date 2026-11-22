@@ -23,8 +23,8 @@ namespace Deguffer.Benchmark;
 /// <param name="Snapshots">
 /// Whether an Explore route assembles the pictures of the tree so far that Explore draws while it
 /// scans. Timed both ways, the difference is what they cost the walk or the read. On by default for
-/// the Explore walk, as Explore walks, and off for the table's, so a read is timed as it was before
-/// the option. No other route takes any.
+/// the Explore walk, as Explore walks, and off for the table's, so a read's figures compare with any
+/// other run that takes none. No other route takes any.
 /// </param>
 /// <param name="ReadBy">How the links route reads each file. No other route reads any.</param>
 /// <param name="Folders">

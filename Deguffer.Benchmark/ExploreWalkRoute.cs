@@ -14,11 +14,10 @@ namespace Deguffer.Benchmark;
 /// </summary>
 internal static class ExploreWalkRoute
 {
-    public static RunTally Run(string folder, WalkTuning tuning, bool snapshots, CancellationToken ct)
+    /// <param name="snapshots">The snapshots the walk assembles and times, or null to take none.</param>
+    public static RunTally Run(string folder, WalkTuning tuning, TimedSnapshots? snapshots, CancellationToken ct)
     {
-        var timed = snapshots ? new TimedSnapshots(TimeProvider.System) : null;
-
-        // Each snapshot is still a whole pass over the tree so far, which is the cost being timed.
+        // Each snapshot is a whole pass over the tree so far, which is the cost being timed.
         var tree = WalkExploreReader.Read(
             folder,
             tuning,
@@ -26,11 +25,11 @@ internal static class ExploreWalkRoute
             DiscardedProgress.Instance,
             TimeProvider.System,
             ct,
-            snapshotAssembly: timed?.Assembly);
+            snapshotAssembly: snapshots?.Assembly);
 
         // A folder the walk was refused, or a file it could not measure, leaves the root's size
         // unknown, and the run timed less than the folder holds.
         return new RunTally(
-            tree.NodeCount - 1, BytesRead: 0, Complete: !tree.HasUnknownSizes, Kept: new KeptResult(tree), Snapshots: timed?.Times);
+            tree.NodeCount - 1, BytesRead: 0, Complete: !tree.HasUnknownSizes, Kept: new KeptResult(tree), Snapshots: snapshots?.Times);
     }
 }

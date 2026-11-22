@@ -155,8 +155,8 @@ public sealed class TableRoutesTests
     {
         var volumes = new StepTimingSources(FakeMftSourceFactory.Serving(Drive, Volume().WithoutBitmap()));
 
-        var first = TableRoutes.Run(Route.Table, volumes, $@"{Drive}:\", TableTuning.Default, snapshots: false, opened: null, CancellationToken.None);
-        var second = TableRoutes.Run(Route.Table, volumes, $@"{Drive}:\", TableTuning.Default, snapshots: false, opened: null, CancellationToken.None);
+        var first = TableRoutes.Run(Route.Table, volumes, $@"{Drive}:\", TableTuning.Default, snapshots: null, opened: null, CancellationToken.None);
+        var second = TableRoutes.Run(Route.Table, volumes, $@"{Drive}:\", TableTuning.Default, snapshots: null, opened: null, CancellationToken.None);
 
         Assert.Equal([MftOpenStep.FirstRecord], Assert.IsType<MftOpenTimings>(first.Open).Steps.Select(step => step.Step));
         Assert.NotSame(first.Open, second.Open);
@@ -172,7 +172,7 @@ public sealed class TableRoutesTests
         var volumes = new RememberingSources(FakeMftSourceFactory.Serving(Drive, Volume().WithoutBitmap()));
         var handed = new List<IMftVolume>();
 
-        TableRoutes.Run(Route.Index, volumes, $@"{Drive}:\", TableTuning.Default, snapshots: false, handed.Add, CancellationToken.None);
+        TableRoutes.Run(Route.Index, volumes, $@"{Drive}:\", TableTuning.Default, snapshots: null, handed.Add, CancellationToken.None);
 
         Assert.Same(volumes.Opened, Assert.Single(handed));
     }
@@ -184,7 +184,7 @@ public sealed class TableRoutesTests
             FakeMftSourceFactory.Unavailable(FallbackReason.VolumeNotAddressable),
             $@"{Drive}:\",
             TableTuning.Default,
-            snapshots: false,
+            snapshots: null,
             opened: null,
             CancellationToken.None));
 
@@ -236,8 +236,8 @@ public sealed class TableRoutesTests
         static MftFixture OneReportLong() =>
             Volume().AddFile(MftPassProgress.Interval + 5, 16, "late.bin", allocated: 4096, logical: 10).WithoutBitmap();
 
-        var with = Run(route, OneReportLong(), target, snapshots: true);
-        var without = Run(route, OneReportLong(), target, snapshots: false);
+        var with = Run(route, OneReportLong(), target, new TimedSnapshots(TimeProvider.System));
+        var without = Run(route, OneReportLong(), target);
 
         Assert.Equal(1, with.Snapshots?.Count);
         Assert.Null(without.Snapshots);
@@ -253,7 +253,7 @@ public sealed class TableRoutesTests
     [InlineData("Table")]
     [InlineData("Index")]
     public void ARouteThatBuildsNoTreeTakesNoSnapshots(string route) =>
-        Assert.Null(Run(route, Volume().WithoutBitmap(), snapshots: true).Snapshots);
+        Assert.Null(Run(route, Volume().WithoutBitmap(), snapshots: new TimedSnapshots(TimeProvider.System)).Snapshots);
 
     /// <summary>A folder the table does not hold is answered by no tree, so the run is not complete.</summary>
     [Fact]
@@ -287,7 +287,7 @@ public sealed class TableRoutesTests
         }
     }
 
-    private static RunTally Run(string route, MftFixture volume, string? target = null, bool snapshots = false) =>
+    private static RunTally Run(string route, MftFixture volume, string? target = null, TimedSnapshots? snapshots = null) =>
         TableRoutes.Run(
             Enum.Parse<Route>(route),
             FakeMftSourceFactory.Serving(Drive, volume),

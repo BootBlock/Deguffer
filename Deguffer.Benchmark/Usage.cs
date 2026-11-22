@@ -85,7 +85,8 @@ internal static class Usage
                                assembles the pictures of the tree so far that Explore draws
                                while it scans, and reports how many it assembled and their
                                time. The default is on for explorewalk, as Explore walks, and
-                               off for explore and explorefolder, so a read is timed as before.
+                               off for explore and explorefolder, so a read's figures compare
+                               with any other run that takes none.
         --files N              Remove only. How many empty files the tree holds, 0 to 10000000.
                                The default is 100000.
         --depth N              Remove only. How many levels of folders the tree has below its

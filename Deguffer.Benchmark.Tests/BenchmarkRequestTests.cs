@@ -351,8 +351,9 @@ public sealed class BenchmarkRequestTests
     }
 
     /// <summary>
-    /// The Explore routes that read the table take no snapshots unless told to, so a read is timed as
-    /// it was before they could be, and take them when told to, as the App's elevated Explore does.
+    /// The Explore routes that read the table take no snapshots unless told to, so a read's figures
+    /// compare with any other run that takes none, and take them when told to, as the App's elevated
+    /// Explore does.
     /// </summary>
     [Theory]
     [InlineData("explore", "C", new string[0], false)]

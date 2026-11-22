@@ -52,8 +52,9 @@ internal static class TableRoutes
     /// The volume's root, or for <see cref="Route.ExploreFolder"/> the folder, fully qualified.
     /// </param>
     /// <param name="snapshots">
-    /// Whether an Explore route assembles snapshots of the tree so far as it reads, as an Explore scan
-    /// does once the table is the only route answering. Read by no other route.
+    /// The snapshots of the tree so far an Explore route assembles and times as it reads, as an
+    /// Explore scan does once the table is the only route answering, or null to take none. Read by no
+    /// other route.
     /// </param>
     /// <param name="opened">
     /// Called with the volume once it is open and before its table is read, as a scan's build hands
@@ -64,7 +65,7 @@ internal static class TableRoutes
         IMftSourceFactory volumes,
         string target,
         TableTuning tuning,
-        bool snapshots,
+        TimedSnapshots? snapshots,
         Action<IMftVolume>? opened,
         CancellationToken ct)
     {
@@ -112,33 +113,31 @@ internal static class TableRoutes
     ///
     /// <para>With snapshots, the read is handed somewhere to report and the scan's own assembly, so it
     /// copies and assembles each on the scan's cadence (<see cref="ScanSnapshots"/>). Without, it
-    /// reports nothing and takes none, as the read was timed before snapshots could be.</para>
+    /// reports nothing and takes none, so its figures compare with any other run that takes none.</para>
     /// </summary>
     private static RunTally Explore(
         CountingMftSource source,
         string rootPath,
         IReadOnlyList<string> components,
         TableTuning tuning,
-        bool snapshots,
+        TimedSnapshots? snapshots,
         MftStageTimings timings,
         CancellationToken ct)
     {
-        var timed = snapshots ? new TimedSnapshots(TimeProvider.System) : null;
-
         var read = MftExploreReader.Read(
             source,
             rootPath,
             components,
             tuning,
-            timed is null ? null : DiscardedProgress.Instance,
+            snapshots is null ? null : DiscardedProgress.Instance,
             ct,
-            timed?.Assembly,
+            snapshots?.Assembly,
             timings: timings);
 
         return Tally(source, read is { Tree: not null, WholeTable: true }, timings) with
         {
             Kept = read.Tree is { } tree ? new KeptResult(tree) : null,
-            Snapshots = timed?.Times,
+            Snapshots = snapshots?.Times,
         };
     }
 

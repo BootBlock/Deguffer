@@ -26,7 +26,8 @@ public sealed class ExploreWalkRouteTests : IDisposable
         _temp.CreateFile(10, "root", "a", "two.bin");
         _temp.CreateDirectory("root", "b");
 
-        var tally = ExploreWalkRoute.Run(root, WalkTuning.Default, snapshots, CancellationToken.None);
+        var tally = ExploreWalkRoute.Run(
+            root, WalkTuning.Default, snapshots ? new TimedSnapshots(TimeProvider.System) : null, CancellationToken.None);
 
         // a and b at the top, and the two files in a.
         Assert.Equal(4, tally.Items);
@@ -45,7 +46,7 @@ public sealed class ExploreWalkRouteTests : IDisposable
 
         using var denied = new DeniedDirectory(refused);
 
-        var tally = ExploreWalkRoute.Run(root, WalkTuning.Default, snapshots: true, CancellationToken.None);
+        var tally = ExploreWalkRoute.Run(root, WalkTuning.Default, new TimedSnapshots(TimeProvider.System), CancellationToken.None);
 
         // open, refused and the file in open. Nothing inside the refused folder.
         Assert.Equal(3, tally.Items);
