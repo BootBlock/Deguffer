@@ -30,11 +30,15 @@ internal static class MftExploreRooting
     /// </param>
     /// <param name="Snapshot">
     /// For a snapshot, taken while the parse threads still write the read's columns: the copies of
-    /// their flags and parents it roots by, and what the tree reuses. Null for the finished read,
-    /// which roots by the read's own and hands them over.
+    /// their flags and parents it roots by. Null for the finished read, which roots by the read's own
+    /// and hands them over.
+    /// </param>
+    /// <param name="Scratch">
+    /// What the tree reuses from the read's trees before it, or null for room of its own: a
+    /// snapshot's, and the finished read's where a snapshot made it.
     /// </param>
     internal readonly record struct AssembledAs(
-        ExploreChildOrder ChildOrder, bool LowerBound, bool MatchCaseOnly, MftSnapshotColumns? Snapshot);
+        ExploreChildOrder ChildOrder, bool LowerBound, bool MatchCaseOnly, MftSnapshotColumns? Snapshot, SnapshotScratch? Scratch);
 
     /// <summary>
     /// Root a tree at the folder <paramref name="components"/> name, or say why the table cannot
@@ -97,9 +101,8 @@ internal static class MftExploreRooting
             new TreeAssemblyOptions(
                 Links: links,
                 Snapshot: snapshot is not null,
-                OrderBuffer: snapshot?.Order,
                 DrawnRoot: new DrawnRoot(rootName, Unread: root == volumeRoot && !volumeRootRead),
-                Scratch: snapshot?.Scratch),
+                Scratch: assembled.Scratch),
             ct);
 
         return (tree, FallbackReason.None);
