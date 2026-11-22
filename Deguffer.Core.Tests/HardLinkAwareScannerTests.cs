@@ -193,6 +193,26 @@ public sealed class HardLinkAwareScannerTests : IDisposable
         Assert.Equal(7000, progress.Reports[^1].Logical);
     }
 
+    /// <summary>
+    /// Files are read whole before any walk starts, and go on as one figure rather than one for each
+    /// file, as <see cref="ParallelEnumerationScannerTests.FilesAnsweredBeforeTheWalkAreReportedOnce"/>
+    /// asks of the plain walk.
+    /// </summary>
+    [Fact]
+    public async Task FilesReadBeforeTheWalkAreReportedOnce()
+    {
+        var files = Enumerable.Range(0, 40).Select(i => _temp.CreateFile(100 + i, $"{i}.bin")).ToList();
+
+        var progress = new ProgressRecorder<ScanSize>();
+
+        await HardLinkAwareScanner.Default.MeasureManyAsync(
+            [.. files.Select(file => new ScanRequest(file)), new ScanRequest(Path.Combine(_temp.Path, "never-created"))],
+            MinimumAge.Off,
+            progress);
+
+        Assert.Equal(Enumerable.Range(0, 40).Sum(i => 100L + i), Assert.Single(progress.Reports).Logical);
+    }
+
     [Fact]
     public async Task AnAbsentPathMeasuresZero()
     {
