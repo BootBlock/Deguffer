@@ -14,7 +14,7 @@ public sealed record MapPresetOption(MapPreset Preset)
 {
     /// <summary>Every preset, in the order the window lists them, built once for the life of the app (G5).</summary>
     public static IReadOnlyList<MapPresetOption> All { get; } =
-        [.. MapPreset.All.Select(preset => new MapPresetOption(preset))];
+        (MapPresetOption[])[.. MapPreset.All.Select(preset => new MapPresetOption(preset))];
 
     public string Name => Preset.Name;
 

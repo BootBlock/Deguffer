@@ -28,15 +28,15 @@ public sealed partial class ExploreFiles : ObservableObject
     private static readonly long[] Minimums = [0, 10L << 20, 100L << 20, 1L << 30, 10L << 30];
 
     /// <summary>The three boxes' entries, built once for the life of the app (G5).</summary>
-    private static readonly IReadOnlyList<string> Types = ["Any type", .. FileCategories.All.Select(FileCategories.Label)];
+    private static readonly IReadOnlyList<string> Types = (string[])["Any type", .. FileCategories.All.Select(FileCategories.Label)];
 
     private static readonly IReadOnlyList<string> MinimumSizes =
-        ["Any size", "10 MB or more", "100 MB or more", "1 GB or more", "10 GB or more"];
+        (string[])["Any size", "10 MB or more", "100 MB or more", "1 GB or more", "10 GB or more"];
 
-    private static readonly IReadOnlyList<string> Ages = [.. FileAges.All.Select(FileAges.Label)];
+    private static readonly IReadOnlyList<string> Ages = (string[])[.. FileAges.All.Select(FileAges.Label)];
 
     /// <summary>The listings the List box offers, in the order of <see cref="FileListing"/>.</summary>
-    private static readonly IReadOnlyList<string> Listings = ["Largest files", "Broken shortcuts and links"];
+    private static readonly IReadOnlyList<string> Listings = (string[])["Largest files", "Broken shortcuts and links"];
 
     private readonly ExploreActions _actions;
     private readonly TimeProvider _time;

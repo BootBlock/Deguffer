@@ -189,7 +189,7 @@ public sealed partial class StorageSelection : ObservableObject
             return;
         }
 
-        Remember([row]);
+        Remember((FindingViewModel[])[row]);
     }
 
     /// <summary>
