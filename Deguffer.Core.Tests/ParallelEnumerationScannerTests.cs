@@ -181,8 +181,7 @@ public class ParallelEnumerationScannerTests
 
     /// <summary>
     /// Files and absent paths are answered whole before any walk starts, and go on as one figure
-    /// rather than one for each file. A row offering thousands of files sent a report for each, and
-    /// each one added up every path again.
+    /// rather than one for each file, so a row offering thousands of files sends one report for them.
     /// </summary>
     [Fact]
     public async Task FilesAnsweredBeforeTheWalkAreReportedOnce()

@@ -40,7 +40,7 @@ public class DirectoryScannerTests
     /// The table answers each path in a lookup of its own, and a list's running figure adds every
     /// answer up rather than reporting each path's figure in turn, which would read as a count that
     /// went down. The answers one volume's table gives go on as one figure, rather than one for each
-    /// path, which for thousands of paths added every path up again for each of them.
+    /// path.
     /// </summary>
     [Fact]
     public async Task AListAnsweredByTheTableReportsTheSumOfEveryPath()
