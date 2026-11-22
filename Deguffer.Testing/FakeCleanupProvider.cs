@@ -216,7 +216,7 @@ public sealed class FakeCleanupProvider(string id, SafetyTier tier = SafetyTier.
             ProviderName = Name,
             Steps = outcomes,
             Interrupted = interrupted,
-            Verification = PlanVerifier.Verify(plan, runReach, residue, CancellationToken.None, volumes: _volumes),
+            Verification = PlanVerifier.Verify(plan, runReach, residue, CancellationToken.None, new VerificationSources(Volumes: _volumes)),
         });
     }
 
@@ -225,5 +225,5 @@ public sealed class FakeCleanupProvider(string id, SafetyTier tier = SafetyTier.
         RunReach? runReach = null,
         RunResidue? residue = null,
         CancellationToken ct = default) =>
-        Task.FromResult(PlanVerifier.Verify(plan, runReach, residue, ct, volumes: _volumes));
+        Task.FromResult(PlanVerifier.Verify(plan, runReach, residue, ct, new VerificationSources(Volumes: _volumes)));
 }

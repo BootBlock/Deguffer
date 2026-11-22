@@ -23,38 +23,14 @@ public static class PlanVerifier
     /// What the run's removals have left standing so far, and which spared entries they left alone.
     /// Null means nothing was removed, which is true of a verification with no execution behind it.
     /// </param>
-    /// <param name="cloud">
-    /// What describes the files a <see cref="ReleaseLocalCopiesStep"/> named. Asked only of a plan that
-    /// holds one, and the machine's own where none is given.
-    /// </param>
-    /// <param name="protection">
-    /// What lists the restore points, shadow copies and storage a <see cref="RemoveRestorePointsStep"/>
-    /// must leave, on the terms <paramref name="cloud"/> is given: it only reads.
-    /// </param>
-    /// <param name="profiles">
-    /// What lists the profiles a plan's <see cref="RemoveProfileStep"/>s must leave, on the terms
-    /// <paramref name="cloud"/> is given: it only reads.
-    /// </param>
-    /// <param name="volumes">
-    /// Asked every other path a protected path and each of the run's paths are reachable at, because a
-    /// step may name a folder through a letter <c>subst</c> made, or another mount of its volume, that
-    /// the protected path does not. The machine's own where none is given.
-    /// </param>
-    /// <param name="tuning">
-    /// What the walks of each volume run with (<see cref="IDirectoryScanner.Tuning"/>), which bounds how
-    /// many protected paths are checked at once on each. The shipped tuning where none is given.
-    /// </param>
+    /// <param name="sources">What the verification reads the machine through. The machine's own where none is given.</param>
     public static VerificationResult Verify(
         CleanupPlan plan,
         RunReach? runReach = null,
         RunResidue? residue = null,
         CancellationToken ct = default,
-        ICloudFiles? cloud = null,
-        ISystemProtection? protection = null,
-        IVolumeInventory? volumes = null,
-        IUserProfiles? profiles = null,
-        ScanTuner? tuning = null) =>
-        Verify(plan, runReach, residue, cloud, protection, volumes, profiles, tuning ?? ScanTuner.Shipped, LongPath.ProbeEntry, ct);
+        VerificationSources? sources = null) =>
+        Verify(plan, runReach, residue, sources ?? VerificationSources.Machine, LongPath.ProbeEntry, ct);
 
     /// <summary>
     /// The same, with each protected path's presence after the run given by <paramref name="probe"/>:
@@ -70,17 +46,13 @@ public static class PlanVerifier
         CleanupPlan plan,
         RunReach? runReach,
         RunResidue? residue,
-        ICloudFiles? cloud,
-        ISystemProtection? protection,
-        IVolumeInventory? volumes,
-        IUserProfiles? profiles,
-        ScanTuner tuning,
+        VerificationSources sources,
         Func<string, PathPresence> probe,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(plan);
 
-        var inventory = volumes ?? VolumeInventory.Current;
+        var inventory = sources.Volumes ?? VolumeInventory.Current;
         var places = runReach?.PlacesOn(inventory) ?? new RunPlaces(RunReach.Of([plan]), inventory);
 
         // Read once for the whole verification rather than once for each protected path. A plan is
@@ -93,7 +65,7 @@ public static class PlanVerifier
             .. DiskBoundWork.Each(
                 plan.ProtectedPaths,
                 protectedPath => protectedPath.Path,
-                tuning,
+                sources.Tuning ?? ScanTuner.Shipped,
                 ListingBudget.Shared,
                 protectedPath => SurvivalCheck.Of(protectedPath, places, residue, enteredRoots, probe),
                 ct),
@@ -102,19 +74,19 @@ public static class PlanVerifier
         foreach (var release in plan.Steps.OfType<ReleaseLocalCopiesStep>())
         {
             checks.AddRange(ReleasedFileProof.Checks(
-                release, cloud ?? CloudFiles.Default, missing => SurvivalCheck.Of(missing, places, residue, enteredRoots, probe), ct));
+                release, sources.Cloud ?? CloudFiles.Default, missing => SurvivalCheck.Of(missing, places, residue, enteredRoots, probe), ct));
         }
 
         foreach (var removal in plan.Steps.OfType<RemoveRestorePointsStep>())
         {
             ct.ThrowIfCancellationRequested();
-            checks.AddRange(RestorePointProof.Checks(removal, protection ?? WindowsSystemProtection.Default));
+            checks.AddRange(RestorePointProof.Checks(removal, sources.Protection ?? WindowsSystemProtection.Default));
         }
 
         if (plan.Steps.OfType<RemoveProfileStep>().ToList() is { Count: > 0 } removals)
         {
             ct.ThrowIfCancellationRequested();
-            checks.AddRange(ProfileRemovalProof.Checks(removals, profiles ?? WindowsUserProfiles.Default));
+            checks.AddRange(ProfileRemovalProof.Checks(removals, sources.Profiles ?? WindowsUserProfiles.Default));
         }
 
         return new VerificationResult { Checks = checks };

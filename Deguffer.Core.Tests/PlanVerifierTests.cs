@@ -46,7 +46,7 @@ public sealed class PlanVerifierTests : IDisposable
     /// </summary>
     private static VerificationResult Verify(
         CleanupPlan plan, RunReach? runReach = null, RunResidue? residue = null, IVolumeInventory? volumes = null) =>
-        PlanVerifier.Verify(plan, runReach, residue, volumes: volumes ?? new FakeVolumeInventory());
+        PlanVerifier.Verify(plan, runReach, residue, sources: new VerificationSources(Volumes: volumes ?? new FakeVolumeInventory()));
 
     private static ProtectedPath Protect(string path) => new(path, "It must survive.", PresenceBefore: PathPresence.Present);
 

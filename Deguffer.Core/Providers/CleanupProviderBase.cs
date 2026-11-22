@@ -46,9 +46,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
 
     private readonly PlanExecutor _executor;
     private readonly RefusalRecord _refusals;
-    private readonly ICloudFiles? _cloud;
-    private readonly ISystemProtection? _protection;
-    private readonly IUserProfiles? _profiles;
+    private readonly VerificationSources _proof;
 
     /// <param name="emptier">
     /// How an <see cref="EmptyRecycleBinStep"/> is carried out, given by the one provider that plans one
@@ -114,15 +112,13 @@ public abstract class CleanupProviderBase : ICleanupProvider
         Inspector = inspector;
         Scanner = scanner ?? DirectoryScanner.For(environment);
         _refusals = RefusalRecord.For(environment);
-        _cloud = cloud;
-        _protection = protection;
-        _profiles = profiles;
         Servicing = servicing ?? WindowsServicing.Current;
         _planningServicing = PlanningServicing.For(Servicing, inspector);
         _executor = new PlanExecutor(
             runner, Scanner, _refusals, emptier, cloud, handlers, Servicing, inspector, time, environment,
             protection: protection, volumes: machine, profiles: profiles);
         Runner = runner;
+        _proof = new VerificationSources(cloud, protection, machine, profiles, Scanner.Tuning);
     }
 
     protected IUserEnvironment Environment { get; }
@@ -348,7 +344,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         CancellationToken ct = default) =>
         // On a thread of the proof's own, never the pool's, which watches the token itself. See ListWorkers.
         WorkerThreads.Shared.RunAsync(
-            () => PlanVerifier.Verify(plan, runReach, residue, ct, _cloud, _protection, _machine, _profiles, Scanner.Tuning),
+            () => PlanVerifier.Verify(plan, runReach, residue, ct, _proof),
             CancellationToken.None);
 
     /// <summary>A plan with nothing to do, and the reason the user is shown.</summary>

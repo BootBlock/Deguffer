@@ -107,6 +107,7 @@ public sealed class PlanExecutor(
     private readonly IUserEnvironment _environment = environment ?? UserEnvironment.Current;
     private readonly ISystemDirectories _system = system ?? SystemDirectories.Current;
     private readonly IVolumeInventory _volumes = volumes ?? VolumeInventory.Current;
+    private readonly VerificationSources _proof = new(cloud, protection, volumes ?? VolumeInventory.Current, profiles, scanner.Tuning);
     private readonly IFileSystem _fileSystem = fileSystem ?? WindowsFileSystem.Default;
 
     /// <param name="runReach">
@@ -194,10 +195,7 @@ public sealed class PlanExecutor(
                     runReach,
                     runResidue,
                     CancellationToken.None,
-                    _cloud,
-                    _protection,
-                    _volumes,
-                    _profiles, scanner.Tuning),
+                    _proof),
                 CancellationToken.None).ConfigureAwait(false),
         };
     }

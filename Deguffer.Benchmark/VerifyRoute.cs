@@ -70,11 +70,7 @@ internal sealed class VerifyRoute
             _plan,
             runReach: null,
             residue: null,
-            cloud: null,
-            protection: null,
-            volumes: VolumeInventory.Current,
-            profiles: null,
-            _tuning,
+            new VerificationSources(Volumes: VolumeInventory.Current, Tuning: _tuning),
             folder =>
             {
                 using var probe = probes.Enter();
@@ -95,7 +91,7 @@ internal sealed class VerifyRoute
     {
         _site.ProveBesideStanding();
 
-        if (_verified!.Checks.Any(check => check.Outcome is not VerificationOutcome.Survived))
+        if (_verified is not { } verified || verified.Checks.Any(check => check.Outcome is not VerificationOutcome.Survived))
         {
             throw new InvalidOperationException("The verification did not prove a folder the benchmark built standing (§5.6).");
         }

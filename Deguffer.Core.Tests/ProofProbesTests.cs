@@ -12,7 +12,7 @@ namespace Deguffer.Core.Tests;
 /// <summary>
 /// §5.6's two reads of a clean's protected paths, the one before its first deletion
 /// (<see cref="RunResidue.BeginAsync(IReadOnlyList{CleanupPlan}, ScanTuner)"/>) and the one after each
-/// plan (<see cref="PlanVerifier.Verify(CleanupPlan, RunReach?, RunResidue?, CancellationToken, ICloudFiles?, SystemProtection.ISystemProtection?, IVolumeInventory?, Profiles.IUserProfiles?, ScanTuner?)"/>),
+/// plan (<see cref="PlanVerifier.Verify(CleanupPlan, RunReach?, RunResidue?, CancellationToken, VerificationSources?)"/>),
 /// probe several paths at once and still answer each path as it was answered alone, in the plan's order.
 ///
 /// <para>The paths that are never touched are on a share of their own, so no walk another test runs
@@ -114,7 +114,7 @@ public sealed class ProofProbesTests : IDisposable
     /// A plan protecting one path of each kind, checked several at a time, is answered for each path as
     /// it is when checked alone, and in the plan's order: a survivor, a path never there, a folder
     /// emptied, a folder marked for removal, one Windows will not describe, a link standing, and a path
-    /// missing from a folder still standing. Run over every ordering of the paths, so no order the
+    /// missing from a folder still standing. Run over every rotation of the paths, so no order the
     /// workers finish in can line the report up by chance.
     /// </summary>
     [Fact]
@@ -157,7 +157,7 @@ public sealed class ProofProbesTests : IDisposable
     }
 
     private static IReadOnlyList<VerificationCheck> Verify(CleanupPlan plan, ScanTuner tuning, Func<string, PathPresence> probe) =>
-        PlanVerifier.Verify(plan, null, null, null, null, new FakeVolumeInventory(), null, tuning, probe, CancellationToken.None).Checks;
+        PlanVerifier.Verify(plan, null, null, new VerificationSources(Volumes: new FakeVolumeInventory(), Tuning: tuning), probe, CancellationToken.None).Checks;
 
     private static CleanupPlan Plan(params ProtectedPath[] protectedPaths) => new()
     {
