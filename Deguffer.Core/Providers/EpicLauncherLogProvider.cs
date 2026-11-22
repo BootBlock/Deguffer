@@ -224,7 +224,7 @@ public sealed class EpicLauncherLogProvider : CleanupProviderBase
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
-                $"{spared} other {(spared == 1 ? "item is" : "items are")} left alone beside the "
+                $"{Counted.Of(spared, "other item is", "other items are")} left alone beside the "
                 + "logs. Your launcher settings, your cloud saves and the store's own data are in "
                 + "that folder."));
         }

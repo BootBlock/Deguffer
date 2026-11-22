@@ -107,9 +107,12 @@ public sealed class DriveInterpretationTests
     public void ANamedWrittenCounterStatesASize() =>
         Assert.Equal("1.0 MB", Row(Attribute(241, raw: 2048), SamsungCovered).Reading);
 
-    [Fact]
-    public void HoursStateTheTimeTheyComeTo() =>
-        Assert.Equal("9,000 hours (1 year 10 days)", HealthText.Hours(9000));
+    [Theory]
+    [InlineData(1UL, "1 hour")]
+    [InlineData(2UL, "2 hours")]
+    [InlineData(9_000UL, "9,000 hours (1 year 10 days)")]
+    public void HoursStateTheTimeTheyComeTo(ulong hours, string expected) =>
+        Assert.Equal(expected, HealthText.Hours(hours));
 
     [Theory]
     [InlineData(1UL, "1 minute")]

@@ -301,12 +301,9 @@ internal static partial class SquirrelPackages
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
-                $"Left the update packages of {indexesUnread} "
-                + (indexesUnread == 1
-                    ? "application alone: Deguffer could not read the record of which packages it "
-                      + "still needs"
-                    : "applications alone: Deguffer could not read the record of which packages "
-                      + "they still need")
+                $"Left the update packages of {Counted.Of(indexesUnread, "application", "applications")} alone: "
+                + "Deguffer could not read the record of which packages "
+                + Counted.Form(indexesUnread, "it still needs", "they still need")
                 + ", and without it a spent package cannot be told from the one the next update is "
                 + "built from."));
         }
@@ -315,12 +312,9 @@ internal static partial class SquirrelPackages
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
-                $"Left the update packages of {unordered} "
-                + (unordered == 1
-                    ? "application alone: Deguffer could not work out which build is installed, and "
-                      + "a spent package is only spent by comparison with it."
-                    : "applications alone: Deguffer could not work out which builds are installed, "
-                      + "and a spent package is only spent by comparison with them.")));
+                $"Left the update packages of {Counted.Of(unordered, "application", "applications")} alone: "
+                + $"Deguffer could not work out which {Counted.Form(unordered, "build is", "builds are")} installed, "
+                + $"and a spent package is only spent by comparison with {Counted.Form(unordered, "it", "them")}."));
         }
 
         return new SquirrelPackageScan(targets, survivors, notes, declined, unreadable);

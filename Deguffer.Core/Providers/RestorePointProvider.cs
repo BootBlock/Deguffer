@@ -225,7 +225,7 @@ public sealed class RestorePointProvider : CleanupProviderBase
                 new RemoveRestorePointsStep(
                     removes,
                     newest,
-                    $"Remove {Count(removes.Count, "restore point")} older than the newest, using System Restore's own removal")
+                    $"Remove {Counted.Of(removes.Count, "restore point", "restore points")} older than the newest, using System Restore's own removal")
                 {
                     // All the storage Windows states, which holds the restore point kept and every other
                     // program's shadow copies too. Windows gives no figure for one restore point, so this is
@@ -291,7 +291,7 @@ public sealed class RestorePointProvider : CleanupProviderBase
         {
             yield return new PlanNote(
                 PlanNoteSeverity.Information,
-                $"{Count(others, "shadow copy", "shadow copies")} on this machine cannot be System Restore's, and the "
+                $"{Counted.Of(others, "shadow copy", "shadow copies")} on this machine cannot be System Restore's, and the "
                 + "clean checks afterwards that each is still there.");
         }
 
@@ -320,9 +320,6 @@ public sealed class RestorePointProvider : CleanupProviderBase
     }
 
     private static string Limit(long? maximum) => maximum is { } bytes ? FreeSpace.Format(bytes) : "no limit";
-
-    private static string Count(int count, string one, string? many = null) =>
-        count == 1 ? $"1 {one}" : $"{count} {many ?? one + "s"}";
 
     /// <summary>Whether <paramref name="listing"/> holds a restore point older than the newest, which the rest of the plan is asked for.</summary>
     private static bool MayOffer(RestorePointListing listing) =>

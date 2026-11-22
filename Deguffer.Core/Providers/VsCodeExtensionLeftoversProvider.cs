@@ -333,7 +333,7 @@ public sealed partial class VsCodeExtensionLeftoversProvider : CleanupProviderBa
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
-                $"Left {(recent == 1 ? "one folder" : $"{recent} folders")} alone that the editor wrote to in "
+                $"Left {Counted.Form(recent, "one folder", $"{recent:N0} folders")} alone that the editor wrote to in "
                 + $"the last {effective.Describe()}. An install in progress writes into one, so a folder is "
                 + $"offered only once nothing in it has changed for {floor.Describe()}."));
         }

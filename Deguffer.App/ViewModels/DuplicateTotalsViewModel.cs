@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.Text;
 
 namespace Deguffer.App.ViewModels;
 
@@ -21,7 +22,7 @@ public sealed partial class DuplicateTotalsViewModel : ObservableObject
 
     public string Groups => _groups.ToString("N0", System.Globalization.CultureInfo.CurrentCulture);
 
-    public string GroupsLabel => _groups == 1 ? "group" : "groups";
+    public string GroupsLabel => Counted.Form(_groups, "group", "groups");
 
     public string Files => _files.ToString("N0", System.Globalization.CultureInfo.CurrentCulture);
 

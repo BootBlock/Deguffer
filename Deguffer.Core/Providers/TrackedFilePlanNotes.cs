@@ -43,9 +43,10 @@ internal static class TrackedFilePlanNotes
     /// reached to ask it — so the directories in question were left alone, and saying nothing would
     /// make a safeguard that could not run look like a safeguard that found nothing.
     /// </summary>
-    private static string Unchecked(int count) => count == 1
-        ? "1 directory could not be checked against git, so it was left alone."
-        : $"{count} directories could not be checked against git, so they were left alone.";
+    private static string Unchecked(int count) => Counted.Form(
+        count,
+        "1 directory could not be checked against git, so it was left alone.",
+        $"{count:N0} directories could not be checked against git, so they were left alone.");
 
     /// <summary>
     /// Information rather than a warning, because nothing was left alone and nothing went wrong: the
@@ -53,11 +54,13 @@ internal static class TrackedFilePlanNotes
     /// plan where the check never ran would otherwise read the same as one where it ran and found
     /// nothing tracked.
     /// </summary>
-    private static string Unasked(int count) => count == 1
-        ? "Git could not be found, so 1 directory inside a repository was not checked for tracked files. Its project files alone confirmed it as build output."
-        : $"Git could not be found, so {count} directories inside a repository were not checked for tracked files. Their project files alone confirmed them as build output.";
+    private static string Unasked(int count) => Counted.Form(
+        count,
+        "Git could not be found, so 1 directory inside a repository was not checked for tracked files. Its project files alone confirmed it as build output.",
+        $"Git could not be found, so {count:N0} directories inside a repository were not checked for tracked files. Their project files alone confirmed them as build output.");
 
-    private static string Tracked(int count) => count == 1
-        ? "1 directory is tracked in git, so despite looking like build output it holds committed files and was left alone."
-        : $"{count} directories are tracked in git, so despite looking like build output they hold committed files and were left alone.";
+    private static string Tracked(int count) => Counted.Form(
+        count,
+        "1 directory is tracked in git, so despite looking like build output it holds committed files and was left alone.",
+        $"{count:N0} directories are tracked in git, so despite looking like build output they hold committed files and were left alone.");
 }

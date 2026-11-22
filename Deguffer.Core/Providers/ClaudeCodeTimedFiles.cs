@@ -105,9 +105,9 @@ internal static partial class ClaudeCodeTimedFiles
         {
             sorting.Note(
                 PlanNoteSeverity.Information,
-                $"Left {ClaudeCodeClassificationBuilder.Count(inUse, "shell capture", "shell captures")} alone: "
+                $"Left {Counted.Of(inUse, "shell capture", "shell captures")} alone: "
                 + "a Claude Code session that is still running may have made "
-                + $"{(inUse == 1 ? "it" : "them")}.");
+                + $"{Counted.Form(inUse, "it", "them")}.");
         }
 
         return sorting.Build();

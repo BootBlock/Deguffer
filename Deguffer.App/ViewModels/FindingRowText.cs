@@ -1,3 +1,5 @@
+using Deguffer.Core.Text;
+
 namespace Deguffer.App.ViewModels;
 
 /// <summary>
@@ -15,7 +17,7 @@ namespace Deguffer.App.ViewModels;
 public sealed class FindingRowText(string name, int stepCount, bool awaitingSourceFolders)
 {
     /// <summary>What the row's link to its item list says: how many items the list holds.</summary>
-    public string ItemsLinkLabel { get; } = stepCount == 1 ? "1 item" : $"{stepCount} items";
+    public string ItemsLinkLabel { get; } = Counted.Of(stepCount, "item", "items");
 
     /// <summary>
     /// What a screen reader calls that link. The words on screen are a count, and a count says nothing
@@ -24,9 +26,10 @@ public sealed class FindingRowText(string name, int stepCount, bool awaitingSour
     public string ItemsLinkName { get; } = $"Choose from the items in {name}";
 
     /// <summary>What the Contents tab says about a row whose steps are listed as items on the Storage page.</summary>
-    public string ItemsSentence { get; } = stepCount == 1
-        ? "One item, listed on the Storage page with its size and its age."
-        : $"{stepCount} items, listed on the Storage page, where each can be chosen on its own.";
+    public string ItemsSentence { get; } = Counted.Form(
+        stepCount,
+        "One item, listed on the Storage page with its size and its age.",
+        $"{stepCount:N0} items, listed on the Storage page, where each can be chosen on its own.");
 
     /// <summary>
     /// What the Contents tab holds, named for which of the three things it is.

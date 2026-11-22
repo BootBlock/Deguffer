@@ -25,7 +25,7 @@ public sealed record InstalledAppsPrompt(string Title, string Consequence, IRead
             $"Remove {subject} from the installed apps list?",
             "Deguffer deletes each entry's registry key. Nothing is uninstalled and no file is touched. " + backup,
             [.. entries.Select(e => $"{e.Name} ({e.Key.Scope.Describe()})")],
-            entries.Count == 1 ? "Remove entry" : "Remove entries");
+            Counted.Form(entries.Count, "Remove entry", "Remove entries"));
     }
 
     public static InstalledAppsPrompt ForRestore(RegistryBackupFile backup) => new(
@@ -57,7 +57,9 @@ public sealed record InstalledAppsPrompt(string Title, string Consequence, IRead
     public static InstalledAppsPrompt ForNextUninstall(UninstallReport previous, PreparedUninstall next, int after) => new(
         $"Uninstall '{next.Entry.Name}' next?",
         $"{previous.Summary} Its uninstaller may still be working in another window, so wait until it has finished. "
-        + (after == 0 ? "This is the last program queued." : after == 1 ? "One more program is queued after this one." : $"{after} more programs are queued after this one.")
+        + (after == 0
+            ? "This is the last program queued."
+            : Counted.Form(after, "One more program is queued after this one.", $"{after:N0} more programs are queued after this one."))
         + " Cancel starts no more uninstallers.",
         [next.Launch.Display],
         "Uninstall next");

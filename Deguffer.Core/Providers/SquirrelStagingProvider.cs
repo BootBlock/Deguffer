@@ -482,10 +482,10 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Warning,
-                $"Left {live.Vetoed.Count} staging "
-                + (live.Vetoed.Count == 1 ? "directory" : "directories")
+                $"Left {live.Vetoed.Count:N0} staging "
+                + Counted.Form(live.Vetoed.Count, "directory", "directories")
                 + " alone: an application may be installing or updating through "
-                + (live.Vetoed.Count == 1 ? "it" : "them")
+                + Counted.Form(live.Vetoed.Count, "it", "them")
                 + " right now. Every Squirrel application shares this folder."));
         }
 

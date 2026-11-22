@@ -1,6 +1,7 @@
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Duplicates;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.Text;
 
 namespace Deguffer.App.ViewModels;
 
@@ -23,7 +24,7 @@ public static class DuplicateSearchSummary
 
         if (references > 0)
         {
-            parts.Add(references == 1 ? "1 reference" : $"{references:N0} references");
+            parts.Add(Counted.Of(references, "reference", "references"));
         }
 
         parts.Add(preferences.Criteria.ReadsContent()

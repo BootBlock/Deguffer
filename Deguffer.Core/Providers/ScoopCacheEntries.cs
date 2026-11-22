@@ -82,7 +82,7 @@ internal sealed partial record ScoopCacheEntries(IReadOnlyList<string> Recognise
     {
         var named = string.Join(", ", Unrecognised.Take(EntriesNamed).Select(entry => $"'{Path.GetFileName(entry)}'"));
         var rest = Unrecognised.Count > EntriesNamed ? $" and {Unrecognised.Count - EntriesNamed} more" : string.Empty;
-        var count = Unrecognised.Count == 1 ? "1 entry" : $"{Unrecognised.Count} entries";
+        var count = Counted.Of(Unrecognised.Count, "entry", "entries");
 
         return $"{count} that Scoop did not make: {named}{rest}";
     }

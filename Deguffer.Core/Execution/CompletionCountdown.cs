@@ -85,7 +85,7 @@ public sealed class CompletionCountdown
             return $"Deguffer will {doing} {Seconds} seconds after {RunningActionText.List(current)} {finishes}.";
         }
 
-        var when = SecondsLeft == 1 ? "1 second" : $"{SecondsLeft} seconds";
+        var when = Counted.Of(SecondsLeft, "second", "seconds");
 
         return $"Deguffer will {doing} in {when}." + Action switch
         {

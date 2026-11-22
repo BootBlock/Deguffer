@@ -320,9 +320,9 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
                 PlanNoteSeverity.Warning,
                 $"Left the older builds of {Join([.. installations.Where(i => running.Contains(i.Root)).Select(i => i.Name)])} "
                 + "alone: "
-                + (live.Vetoed.Count == 1 ? "it is" : "they are")
+                + Counted.Form(live.Vetoed.Count, "it is", "they are")
                 + " running. Close "
-                + (live.Vetoed.Count == 1 ? "it" : "them")
+                + Counted.Form(live.Vetoed.Count, "it", "them")
                 + " and scan again to include the builds."));
         }
 
@@ -332,7 +332,7 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
                 PlanNoteSeverity.Warning,
                 $"Left the older builds of {Join([.. installations.Where(i => unsure.Contains(i.Root)).Select(i => i.Name)])} "
                 + "alone: Deguffer could not check whether "
-                + (unsure.Count == 1 ? "it is" : "they are")
+                + Counted.Form(unsure.Count, "it is", "they are")
                 + " running. Scan again to include the builds."));
         }
 

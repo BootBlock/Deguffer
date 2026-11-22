@@ -27,12 +27,12 @@ public sealed record EntryRemovalReport(IReadOnlyList<EntryRemovalOutcome> Items
     public string Summary =>
         (Removed.Count, NotRemoved.Count) switch
         {
-            (var removed, 0) => $"Removed {Plural(removed)}. {Verification.Summary}",
-            (0, var refused) => $"Removed nothing: {Plural(refused)} could not be removed. {Verification.Summary}",
-            var (removed, refused) => $"Removed {Plural(removed)}, and {Plural(refused)} could not be removed. {Verification.Summary}",
+            (var removed, 0) => $"Removed {Counted.Of(removed, "entry", "entries")}. {Verification.Summary}",
+            (0, var refused) => $"Removed nothing: {Counted.Of(refused, "entry", "entries")} could not be removed. {Verification.Summary}",
+            var (removed, refused) =>
+                $"Removed {Counted.Of(removed, "entry", "entries")}, and {Counted.Of(refused, "entry", "entries")} could not be removed. "
+                + Verification.Summary,
         };
-
-    private static string Plural(int count) => count == 1 ? "1 entry" : $"{count} entries";
 }
 
 /// <summary>
