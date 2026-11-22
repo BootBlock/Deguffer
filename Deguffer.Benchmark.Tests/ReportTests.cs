@@ -182,6 +182,39 @@ public sealed class ReportTests
             Deguffer.Benchmark.Tuning.Describe(Route.ExploreWalk, new WalkTuning(3, 8 * 1024), TableTuning.Default, snapshots, LinkRead.Name, BenchmarkRequest.DefaultTree, trees: 1));
 
     /// <summary>
+    /// The Explore routes that read the table state it too, after the reads, and the routes that build
+    /// no tree say nothing of snapshots they cannot take.
+    /// </summary>
+    [Theory]
+    [InlineData("Explore", true, "2048 KiB reads, 8 in flight, parsed on 3 threads, 24 list reads in flight, snapshots on")]
+    [InlineData("ExploreFolder", false, "2048 KiB reads, 8 in flight, parsed on 3 threads, 24 list reads in flight, snapshots off")]
+    [InlineData("Table", true, "2048 KiB reads, 8 in flight, parsed on 3 threads, 24 list reads in flight")]
+    public void AnExploreReadSaysWhetherItTookSnapshots(string route, bool snapshots, string expected) =>
+        Assert.Equal(
+            expected,
+            Deguffer.Benchmark.Tuning.Describe(Enum.Parse<Route>(route), WalkTuning.Default, new TableTuning(2048 * 1024, 8, 3, 24), snapshots, LinkRead.Name, BenchmarkRequest.DefaultTree, trees: 1));
+
+    /// <summary>
+    /// A run that took snapshots says how many and what assembling them took, first run apart from the
+    /// median of the rest. A run that took none says nothing of them.
+    /// </summary>
+    [Fact]
+    public void ARunThatTookSnapshotsReportsHowManyAndTheirTime()
+    {
+        static RunSample Snapshotted(int count, double milliseconds)
+        {
+            var run = Run(1);
+            return run with { Tally = run.Tally with { Snapshots = new SnapshotTimes(count, TimeSpan.FromMilliseconds(milliseconds)) } };
+        }
+
+        var text = Render(Route.Explore, Snapshotted(5, 40), Snapshotted(3, 20), Snapshotted(7, 60), Snapshotted(4, 30));
+
+        Assert.Equal("snapshots          5               4 (3 to 7)", Line(text, "snapshots"));
+        Assert.Equal("  assembling took  40.0 ms         30.0 ms (20.0 ms to 60.0 ms)", Line(text, "  assembling took"));
+        Assert.DoesNotContain("snapshots ", Render(Route.Explore, Run(1), Run(1)), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The Explore walk counts what its walk listed, as the walk does, so the two results name the
     /// same thing per second.
     /// </summary>
