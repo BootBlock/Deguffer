@@ -86,6 +86,10 @@ public sealed class FakeVolumeInventory : IVolumeInventory
     /// <summary>
     /// Pretend the volume at <paramref name="rootPath"/> has been taken away. With
     /// <see cref="With"/> after it, the same volume read again with other figures.
+    ///
+    /// <para>That replacement is two steps, so a reading under way on another thread can find no
+    /// volume between them. A test with one under way moves the free space through
+    /// <see cref="FreeNow"/> instead.</para>
     /// </summary>
     public FakeVolumeInventory Without(string rootPath)
     {
