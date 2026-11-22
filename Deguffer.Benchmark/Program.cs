@@ -144,7 +144,7 @@ static async Task<int> BenchmarkAsync(BenchmarkRequest request, ScanTuner tuner,
                 buildYields,
                 request.BeforePart).Timed,
             Route.Scan => AutoScanRoute.On(VolumeMftSourceFactory.Default, request.Path, tuner),
-            Route.Plan => new PlanRoute(CleanupPlanner.CreateDefault()).Timed,
+            Route.Plan => new PlanRoute(CleanupPlanner.CreateDefault(tuning: tuner)).Timed,
             _ => RouteRun.Blocking(ct => TableRoutes.Run(
                 request.Route, VolumeMftSourceFactory.Default, request.Path, request.Table, opened: null, ct)),
         };

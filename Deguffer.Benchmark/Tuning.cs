@@ -58,7 +58,7 @@ internal static class Tuning
         {
             return string.Create(
                 CultureInfo.InvariantCulture,
-                $"the default planner under the shipped settings, {CleanupPlanner.ProvidersAtOnce} providers at once, one planner for every run");
+                $"the default planner under the shipped settings, with this machine's drives as the app knows them, {CleanupPlanner.ProvidersAtOnce} providers at once, one planner for every run");
         }
 
         if (route is Route.Scan)
