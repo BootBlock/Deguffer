@@ -75,28 +75,28 @@ public static class DuplicateSearchNotes
                 + "installed in were not known, and may have been searched.");
         }
 
-        Counted(leftOut.Links,
+        Note(leftOut.Links,
             "link was not followed: a link is never a file to match.",
             "links were not followed: a link is never a file to match.");
-        Counted(leftOut.Empty,
+        Note(leftOut.Empty,
             "empty file was left out: empty files are never matched.",
             "empty files were left out: empty files are never matched.");
-        Counted(leftOut.UnknownLength,
+        Note(leftOut.UnknownLength,
             "file was left out because the scan could not tell how long it is.",
             "files were left out because the scan could not tell how long they are.");
-        Counted(leftOut.OnlyInTheCloud,
+        Note(leftOut.OnlyInTheCloud,
             "cloud file was left out because it is not on this device, and reading it would download it.",
             "cloud files were left out because they are not on this device, and reading one would download it.");
-        Counted(leftOut.Gone,
+        Note(leftOut.Gone,
             "file was gone by the time the search looked at it.",
             "files were gone by the time the search looked at them.");
-        Counted(leftOut.Unidentified,
+        Note(leftOut.Unidentified,
             "file was left out because Windows would not describe it. It may still be there.",
             "files were left out because Windows would not describe them. They may still be there.");
-        Counted(leftOut.ReadFailed,
+        Note(leftOut.ReadFailed,
             "file was left out because it could not be read: another program held it, or Windows refused. It may still be there.",
             "files were left out because they could not be read: another program held them, or Windows refused. They may still be there.");
-        Counted(leftOut.Changed,
+        Note(leftOut.Changed,
             "file was left out because it changed while the search read it.",
             "files were left out because they changed while the search read them.");
 
@@ -108,11 +108,11 @@ public static class DuplicateSearchNotes
         return notes;
 
         // A sentence for each number, because the rest of the sentence agrees with it as well.
-        void Counted(int count, string one, string many)
+        void Note(int count, string one, string many)
         {
             if (count > 0)
             {
-                notes.Add($"{count:N0} {(count == 1 ? one : many)}");
+                notes.Add(Counted.Of(count, one, many));
             }
         }
     }

@@ -3,6 +3,7 @@ using System.Text;
 using Deguffer.Core.Duplicates;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Scanning.Mft;
+using Deguffer.Core.Text;
 
 namespace Deguffer.Benchmark;
 
@@ -48,7 +49,7 @@ internal static class Report
         // The plan route names no place: each provider looks where it looks.
         if (places.Count > 0)
         {
-            Field(text, places.Count == 1 ? "place" : "places", string.Join(", ", places));
+            Field(text, Counted.Form(places.Count, "place", "places"), string.Join(", ", places));
         }
 
         Field(text, "tuning", tuning);

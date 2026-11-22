@@ -25,6 +25,9 @@ namespace Deguffer.Core.Scanning.Mft;
 /// and the second pass reads the lists as it does after a pass read without this, spending the budget
 /// as it reads. Holding every want of a hostile table would grow without bound.</para>
 ///
+/// <para><b>One buffer per read in flight serves every batch</b>, as it serves every read of one
+/// batch, so reading in batches makes no more buffers than reading after the pass.</para>
+///
 /// <para><b>Nothing is released while a read is in flight.</b> Every way out, a failure of the pass or
 /// of a list read, or a cancellation, cancels the reads and waits for the thread reading them.</para>
 /// </summary>
@@ -32,6 +35,7 @@ internal sealed class MftListReadAhead : IDisposable
 {
     private readonly IMftSource _source;
     private readonly int _readsInFlight;
+    private readonly VolumeReadBuffer?[] _buffers;
     private readonly long _most;
     private readonly CancellationTokenSource _cancel;
     private readonly ManualResetEventSlim _ready = new(initialState: false);
@@ -50,6 +54,7 @@ internal sealed class MftListReadAhead : IDisposable
     {
         _source = source;
         _readsInFlight = readsInFlight;
+        _buffers = new VolumeReadBuffer?[readsInFlight];
         _most = most;
         _cancel = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
@@ -122,6 +127,7 @@ internal sealed class MftListReadAhead : IDisposable
         Task.WaitAny(_reading);
         _ = _reading.Exception;
 
+        MftAttributeListReader.Release(_buffers);
         _cancel.Dispose();
         _ready.Dispose();
     }
@@ -152,7 +158,7 @@ internal sealed class MftListReadAhead : IDisposable
 
             var landedAll = true;
 
-            MftAttributeListReader.Read(_source, batch, _readsInFlight, (record, entries) =>
+            MftAttributeListReader.Read(_source, batch, _buffers, (record, entries) =>
             {
                 wanted += record.Land(entries);
                 landedAll = wanted <= _most;

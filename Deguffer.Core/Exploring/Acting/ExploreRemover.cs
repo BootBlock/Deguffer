@@ -167,8 +167,8 @@ public sealed record ExploreRemovalReport(
             : $"Moved {What(moved)} to the Recycle Bin. The drive gets the space once the bin is emptied.";
         var lost = outright.Count == 0
             ? string.Empty
-            : $"Windows deleted {What(outright)} outright rather than moving {(outright.Count == 1 ? "it" : "them")} to the "
-              + $"Recycle Bin, so {(outright.Count == 1 ? "it cannot" : "they cannot")} be restored from there.";
+            : $"Windows deleted {What(outright)} outright rather than moving {Counted.Form(outright.Count, "it", "them")} to the "
+              + $"Recycle Bin, so {Counted.Form(outright.Count, "it cannot", "they cannot")} be restored from there.";
 
         return string.Join(" ", new[] { binned, lost }.Where(sentence => sentence.Length > 0));
     }

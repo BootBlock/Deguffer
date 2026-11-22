@@ -102,11 +102,12 @@ public sealed record RunOutcome(string Statement, RunVerdict Verdict, bool Cance
             // Nothing about the folder holding the path, and nothing about when it went. A path whose
             // folder went too, and one a running program removed from a folder the run emptied around
             // it, are both this verdict, and the second can go while the clean runs. See PlanVerifier.
-            var went = count == 1
-                ? $"One protected path for {Names(outside)} went missing after the scan, and "
-                  + "nothing in this run took it"
-                : $"{count} protected paths for {Names(outside)} went missing after the scan, and "
-                  + "nothing in this run took them";
+            var went = Counted.Form(
+                count,
+                $"One protected path for {Names(outside)} went missing after the scan, and "
+                + "nothing in this run took it",
+                $"{count:N0} protected paths for {Names(outside)} went missing after the scan, and "
+                + "nothing in this run took them");
 
             // What the run left behind stays on this one, because it is not an alarm and because
             // both facts explain the same thing: why the figures are not what the preview implied.
@@ -150,11 +151,12 @@ public sealed record RunOutcome(string Statement, RunVerdict Verdict, bool Cance
             return string.Empty;
         }
 
-        var paths = count == 1
-            ? $" Windows would not describe one protected path for {Names(unverified)} after the clean, "
-              + "so Deguffer could not check that it survived."
-            : $" Windows would not describe {count} protected paths for {Names(unverified)} after the "
-              + "clean, so Deguffer could not check that they survived.";
+        var paths = Counted.Form(
+            count,
+            $" Windows would not describe one protected path for {Names(unverified)} after the clean, "
+            + "so Deguffer could not check that it survived.",
+            $" Windows would not describe {count:N0} protected paths for {Names(unverified)} after the "
+            + "clean, so Deguffer could not check that they survived.");
 
         return paths + " An access rule, or a link Windows declines to follow, is the usual cause.";
     }

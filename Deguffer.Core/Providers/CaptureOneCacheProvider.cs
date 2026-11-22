@@ -153,20 +153,21 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
             $"Deguffer could not read Capture One's settings at '{path}', so a catalog or session only "
             + "they list was neither cleared nor ruled out.")));
 
-        if (examination.Gone.Count > 0)
+        if (examination.Gone.Count is > 0 and var gone)
         {
             examination.Notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
-                $"Capture One still lists {Count(examination.Gone.Count)} that no longer "
-                + $"{(examination.Gone.Count == 1 ? "exists" : "exist")}: "
+                $"Capture One still lists {Counted.Form(gone, "a catalog or session", $"{gone:N0} catalogs and sessions")} that no longer "
+                + $"{Counted.Form(gone, "exists", "exist")}: "
                 + $"{string.Join(", ", examination.Gone.Select(g => $"'{g}'"))}."));
         }
 
-        if (examination.Disconnected.Count > 0)
+        if (examination.Disconnected.Count is > 0 and var disconnected)
         {
             examination.Notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
-                $"Capture One lists {Count(examination.Disconnected.Count)} that {(examination.Disconnected.Count == 1 ? "is" : "are")} "
+                $"Capture One lists {Counted.Form(disconnected, "a catalog or session", $"{disconnected:N0} catalogs and sessions")} "
+                + $"that {Counted.Form(disconnected, "is", "are")} "
                 + $"not on this computer now: {string.Join(", ", examination.Disconnected.Select(d => $"'{d}'"))}. "
                 + "A drive that is not connected is the usual reason."));
         }
@@ -312,8 +313,6 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
 
     /// <summary>The folder at <paramref name="path"/>, or none where the environment names no such folder.</summary>
     private ReachedFolder[] Reached(string path) => path.Length > 0 ? [Reach(path)] : [];
-
-    private static string Count(int count) => count == 1 ? "a catalog or session" : $"{count} catalogs and sessions";
 
     /// <summary>
     /// One catalog: prove it by its database, then offer its <c>Cache</c> and name everything

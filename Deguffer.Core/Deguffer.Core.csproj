@@ -107,4 +107,9 @@
     <InternalsVisibleTo Include="Deguffer.Benchmark.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Every sentence that states a count goes through Counted, so it is in scope everywhere. -->
+    <Using Include="Deguffer.Core.Text" />
+  </ItemGroup>
+
 </Project>

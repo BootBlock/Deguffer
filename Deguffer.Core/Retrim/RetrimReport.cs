@@ -49,8 +49,8 @@ public static class RetrimReport
         ArgumentNullException.ThrowIfNull(candidates);
 
         return !isElevated ? "Restart as administrator and retrim"
-            : candidates.Count == 1 ? $"Retrim {Shown(candidates[0].Volume.RootPath)}"
-            : $"Retrim {candidates.Count} drives";
+            : candidates is [var only] ? $"Retrim {Shown(only.Volume.RootPath)}"
+            : $"Retrim {candidates.Count:N0} drives";
     }
 
     /// <summary>What the page says where the user dismissed Windows' prompt for administrator rights.</summary>

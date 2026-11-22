@@ -116,7 +116,7 @@ public static class DuplicateCsv
 
         return new DuplicateCsvSaving(
             true,
-            $"Saved {groups.Count:N0} {(groups.Count == 1 ? "group" : "groups")} and {copies:N0} copies as {Path.GetFileName(path)}.");
+            $"Saved {Counted.Of(groups.Count, "group", "groups")} and {copies:N0} copies as {Path.GetFileName(path)}.");
     }
 
     private static void WriteRow(TextWriter writer, ReadOnlySpan<string> fields)

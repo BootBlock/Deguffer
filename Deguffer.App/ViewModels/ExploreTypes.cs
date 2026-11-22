@@ -5,6 +5,7 @@ using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Files;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.Text;
 using Deguffer.Core.Viewing;
 using Windows.UI;
 
@@ -71,7 +72,7 @@ public sealed partial class ExploreTypeRow : ObservableObject
 
         Size = FreeSpace.Format(share.Bytes);
         Share = total > 0 ? 100.0 * share.Bytes / total : 0;
-        Files = share.Files == 1 ? "1 file" : $"{share.Files:N0} files";
+        Files = Counted.Of(share.Files, "file", "files");
         Extensions = string.Join(", ", share.Extensions.Select(extension =>
             $"{(extension.Extension.Length > 0 ? extension.Extension : "no extension")} {FreeSpace.Format(extension.Bytes)}"));
     }

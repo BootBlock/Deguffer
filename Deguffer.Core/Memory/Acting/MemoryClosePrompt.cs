@@ -41,10 +41,11 @@ public sealed record MemoryClosePrompt(string Title, string Consequence, string 
 
         // Both grammatical forms written out rather than an "(s)", because this sentence is the one
         // the user reads before a program is asked to give up unsaved work.
-        var asking = windows == 1
-            ? "Deguffer asks its window to close, the way that window's own close button does."
-            : $"Deguffer asks each of its {windows} windows to close, the way each window's own close "
-              + "button does. A program with several documents open asks about each in its own words.";
+        var asking = Counted.Form(
+            windows,
+            "Deguffer asks its window to close, the way that window's own close button does.",
+            $"Deguffer asks each of its {windows:N0} windows to close, the way each window's own close "
+            + "button does. A program with several documents open asks about each in its own words.");
 
         return new MemoryClosePrompt(
             $"Ask {target.Named} to close?",

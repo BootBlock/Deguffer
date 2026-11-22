@@ -26,13 +26,11 @@ public static class FreeSpace
     /// </summary>
     public static string Format(ScanSize size) => size switch
     {
-        { Reclaimable: 0, Entries: > 0 } => Items(size.Entries),
+        { Reclaimable: 0, Entries: > 0 } => Counted.Of(size.Entries, "item", "items"),
         { IsCeiling: true } => $"up to {Format(size.Reclaimable)}",
         { IsApproximate: true } => $"about {Format(size.Reclaimable)}",
         _ => Format(size.Reclaimable),
     };
-
-    private static string Items(long entries) => entries == 1 ? "1 item" : $"{entries:N0} items";
 
     /// <summary>Human-readable size, in the binary units Windows itself reports.</summary>
     public static string Format(long bytes) => Scaled(Math.Abs((double)bytes), bytes < 0 ? "-" : string.Empty);

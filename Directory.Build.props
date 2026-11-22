@@ -11,11 +11,16 @@
         workflow publishes any version with a suffix as a pre-release.
     -->
     <PropertyGroup>
-        <Version>0.72.0-beta</Version>
+        <Version>0.73.0-beta</Version>
 
         <Product>Deguffer</Product>
         <Company>BootBlock</Company>
         <Authors>BootBlock</Authors>
         <Copyright>Copyright (c) 2026 Joe Cox</Copyright>
+    </PropertyGroup>
+
+    <!-- Every test run ends a test that hangs, rather than waiting on it: see the file's own remarks. -->
+    <PropertyGroup>
+        <RunSettingsFilePath>$(MSBuildThisFileDirectory)Deguffer.runsettings</RunSettingsFilePath>
     </PropertyGroup>
 </Project>

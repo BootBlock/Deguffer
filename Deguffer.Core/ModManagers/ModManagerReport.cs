@@ -52,7 +52,7 @@ internal static class ModManagerReport
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
                 $"Mod managers keep {FreeSpace.Format(total)} of downloaded mod archives in "
-                + $"{(reached.Count == 1 ? "1 folder" : $"{reached.Count} folders")}."));
+                + $"{Counted.Of(reached.Count, "folder", "folders")}."));
         }
 
         foreach (var folder in inventory.Vortex)

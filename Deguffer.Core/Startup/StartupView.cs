@@ -36,8 +36,9 @@ public sealed record StartupView(StartupReading Reading, StartupMemoryReading Me
             var counts = entries.Count switch
             {
                 0 => "Nothing is set to start at sign-in.",
-                _ => $"{Plural(entries.Count, "entry", "entries")}: {starting} {(starting == 1 ? "starts" : "start")} at sign-in and {disabled} {(disabled == 1 ? "is" : "are")} disabled"
-                    + (unknown > 0 ? $", and {unknown} {(unknown == 1 ? "is" : "are")} unknown." : "."),
+                _ => $"{Counted.Of(entries.Count, "entry", "entries")}: {starting:N0} {Counted.Form(starting, "starts", "start")} at sign-in "
+                    + $"and {disabled:N0} {Counted.Form(disabled, "is", "are")} disabled"
+                    + (unknown > 0 ? $", and {unknown:N0} {Counted.Form(unknown, "is", "are")} unknown." : "."),
             };
 
             var notes = Memory.Complete ? Reading.Notes : [.. Reading.Notes, "The process table was cut short, so a program may be running that this page does not show."];
@@ -45,6 +46,4 @@ public sealed record StartupView(StartupReading Reading, StartupMemoryReading Me
             return string.Join(" ", [counts, .. notes]);
         }
     }
-
-    private static string Plural(int count, string one, string many) => count == 1 ? $"1 {one}" : $"{count} {many}";
 }

@@ -523,10 +523,10 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
         ? null
         : new PlanNote(
             PlanNoteSeverity.Information,
-            (owned.Paths.Count == 1
-                ? "One entry in these folders is offered on the row of the tool that wrote it"
-                : $"{owned.Paths.Count} entries in these folders are offered on the rows of the tools that wrote them")
-            + $", so this row leaves {(owned.Paths.Count == 1 ? "it" : "them")} out: "
+            Counted.Form(owned.Paths.Count,
+                "One entry in these folders is offered on the row of the tool that wrote it",
+                $"{owned.Paths.Count:N0} entries in these folders are offered on the rows of the tools that wrote them")
+            + $", so this row leaves {Counted.Form(owned.Paths.Count, "it", "them")} out: "
             + $"{string.Join(", ", owned.Rows)}.");
 
     private IEnumerable<string> DeclaredPaths() => Roots.Folders;
