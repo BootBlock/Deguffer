@@ -4,7 +4,7 @@ using System.Text;
 namespace Deguffer.Testing;
 
 /// <summary>An ATA attribute to put in a synthesised table.</summary>
-public readonly record struct AtaEntry(byte Id, byte Value, ulong Raw = 0, bool PreFail = false, byte Worst = 100);
+public readonly record struct AtaEntry(byte Id, byte Value, ulong Raw = 0, bool PreFail = false, byte Worst = 100, byte Reserved = 0);
 
 /// <summary>
 /// The structures a drive answers with, built from their documented layouts, so a test states a drive
@@ -166,9 +166,12 @@ public static class DriveBytes
         return bytes;
     }
 
-    public static byte[] Identify(int rotation, int capabilitiesGenerations = 0, int currentGeneration = 0)
+    public static byte[] Identify(int rotation, int capabilitiesGenerations = 0, int currentGeneration = 0, string model = "", string firmware = "")
     {
         var sector = new byte[SectorBytes];
+
+        AtaString(sector, 23, 4, firmware);
+        AtaString(sector, 27, 20, model);
 
         BinaryPrimitives.WriteUInt16LittleEndian(sector.AsSpan(76 * 2), (ushort)capabilitiesGenerations);
         BinaryPrimitives.WriteUInt16LittleEndian(sector.AsSpan(77 * 2), (ushort)(currentGeneration << 1));
@@ -195,6 +198,18 @@ public static class DriveBytes
         return sector;
     }
 
+    /// <summary>An ATA string, space-padded, two characters to a word with the first in the high byte.</summary>
+    private static void AtaString(byte[] sector, int firstWord, int words, string text)
+    {
+        var padded = text.PadRight(words * 2);
+
+        for (var i = 0; i < words; i++)
+        {
+            sector[(firstWord + i) * 2] = (byte)padded[(2 * i) + 1];
+            sector[((firstWord + i) * 2) + 1] = (byte)padded[2 * i];
+        }
+    }
+
     private static void Table(Span<byte> table, AtaEntry[] entries)
     {
         for (var i = 0; i < entries.Length; i++)
@@ -211,6 +226,8 @@ public static class DriveBytes
             {
                 at[5 + b] = (byte)(raw >> (b * 8));
             }
+
+            at[11] = entries[i].Reserved;
         }
     }
 

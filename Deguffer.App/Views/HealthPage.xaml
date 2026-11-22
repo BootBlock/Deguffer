@@ -22,7 +22,9 @@
         </DataTemplate>
 
         <!-- One reading: its name and value, what it means, its standing in a word, and the numbers
-             as the drive holds them. -->
+             as the drive holds them. A reading the installed smartmontools drive database named wears
+             a chip saying so beside its standing, as a researched row does on Clean, so it is never
+             taken for one Deguffer documents (#751). -->
         <DataTemplate x:Key="AttributeTemplate" x:DataType="health:HealthAttribute">
             <Grid Padding="0,8" ColumnSpacing="12" RowSpacing="2" ColumnDefinitions="*,200,Auto" RowDefinitions="Auto,Auto,Auto"
                   BorderThickness="0,0,0,1" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
@@ -30,8 +32,16 @@
                   AutomationProperties.HelpText="{x:Bind Meaning}">
                 <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
                 <TextBlock Grid.Column="1" Text="{x:Bind Reading}" TextWrapping="Wrap" />
-                <ContentControl Grid.Column="2" Content="{x:Bind Standing}"
-                                Style="{x:Bind Standing, Converter={StaticResource AttributeStandingChipStyle}}" />
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                    <ContentControl Content="{x:Bind BasisLabel}"
+                                    Visibility="{x:Bind IsFromDriveDatabase}"
+                                    Style="{StaticResource BasisChip}"
+                                    ToolTipService.ToolTip="{x:Bind BasisExplanation}"
+                                    AutomationProperties.Name="{x:Bind BasisLabel}"
+                                    AutomationProperties.HelpText="{x:Bind BasisExplanation}" />
+                    <ContentControl Content="{x:Bind Standing}"
+                                    Style="{x:Bind Standing, Converter={StaticResource AttributeStandingChipStyle}}" />
+                </StackPanel>
                 <TextBlock Grid.Row="1" Grid.ColumnSpan="3" Text="{x:Bind Meaning}" TextWrapping="Wrap" />
                 <TextBlock Grid.Row="2" Grid.ColumnSpan="3" Text="{x:Bind Raw}" TextWrapping="Wrap"
                            Style="{StaticResource SecondaryText}" IsTextSelectionEnabled="True" />

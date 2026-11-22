@@ -55,6 +55,16 @@ public enum AttributeStanding
     Failing,
 }
 
+/// <summary>Where a reading's name and layout come from.</summary>
+public enum ReadingBasis
+{
+    /// <summary>The standard, a manufacturer's document Deguffer cites, or the drive's own report.</summary>
+    Deguffer,
+
+    /// <summary>The smartmontools drive database installed on this computer, which Deguffer reads and does not ship.</summary>
+    DriveDatabase,
+}
+
 /// <summary>One reading of a drive, in words, with the numbers behind it.</summary>
 /// <param name="Key">What the reading is, stable from one read to the next.</param>
 /// <param name="Name">The reading's name.</param>
@@ -62,7 +72,19 @@ public enum AttributeStanding
 /// <param name="Meaning">What the value means for the reader.</param>
 /// <param name="Standing">Whether the value is a concern.</param>
 /// <param name="Raw">The numbers as the drive holds them.</param>
-public sealed record HealthAttribute(string Key, string Name, string Reading, string Meaning, AttributeStanding Standing, string Raw);
+/// <param name="Basis">Where its name and layout come from, which the page shows beside a reading Deguffer does not document.</param>
+public sealed record HealthAttribute(string Key, string Name, string Reading, string Meaning, AttributeStanding Standing, string Raw, ReadingBasis Basis = ReadingBasis.Deguffer)
+{
+    public bool IsFromDriveDatabase => Basis is ReadingBasis.DriveDatabase;
+
+    /// <summary>The words on the chip that marks a reading from the drive database.</summary>
+    public string BasisLabel => IsFromDriveDatabase ? "smartmontools" : string.Empty;
+
+    /// <summary>What the chip says when it is read or pointed at.</summary>
+    public string BasisExplanation => IsFromDriveDatabase
+        ? "Named and laid out by the smartmontools drive database installed on this computer, not by a document Deguffer cites. Deguffer does not judge it beyond the drive's own limit."
+        : string.Empty;
+}
 
 /// <summary>What the page says overall about one drive.</summary>
 public enum DriveVerdict

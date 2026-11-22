@@ -13,7 +13,13 @@ internal static class HealthText
 
     internal static int Celsius(int kelvin) => kelvin - KelvinOffset;
 
+    private const int TenthsPerDegree = 10;
+
     internal static string Temperature(int celsius) => $"{celsius} °C";
+
+    /// <summary>A temperature a drive counts in tenths of a degree, to the tenth it gives.</summary>
+    internal static string TemperatureInTenths(uint tenths) =>
+        $"{tenths / TenthsPerDegree}.{tenths % TenthsPerDegree} °C";
 
     internal static string Count(UInt128 count) => count.ToString("N0", null);
 
