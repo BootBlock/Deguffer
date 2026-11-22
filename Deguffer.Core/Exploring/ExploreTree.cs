@@ -409,9 +409,8 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
     /// and without this those read as a forest of node-zero children that would attach the whole
     /// volume to the root a second time.
     ///
-    /// <paramref name="childOrder"/> settles the last of the three. See
-    /// <see cref="ExploreChildOrder"/> for why a tree still being filled in wants a different one
-    /// from a finished tree.
+    /// <paramref name="childOrder"/> settles the last of the three. See <see cref="ExploreChildOrder"/>
+    /// for why a tree still being filled in wants a different one from a finished tree.
     ///
     /// <paramref name="options"/> holds what only one route has, and what a caller assembling one tree
     /// after another reuses: see <see cref="TreeAssemblyOptions"/>.
@@ -453,15 +452,16 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
 
         var count = sizes.Length;
         var after = links ?? MftExploreColumns.None;
+        scratch?.MakeRoom(count + after.Count);
 
         var (childStart, children) = ExploreTreeAssembly.InvertParentLinks(count, parents, flags, after, nameRanks, scratch);
         ct.ThrowIfCancellationRequested();
 
-        var order = ExploreTreeAssembly.TopDownOrder(childStart, children, rootNode, orderBuffer);
+        var order = ExploreTreeAssembly.TopDownOrder(childStart, children, rootNode, scratch?.Order ?? orderBuffer);
         ct.ThrowIfCancellationRequested();
 
         // Wherever there are links, even with every node reached, because only this joins their
-        // slots to the others, and wherever the reader is still writing the columns.
+        // slots to the others, and wherever the child lists are the scratch's, which no tree keeps.
         var compacted = scratch is not null || after.Count > 0 || order.Length < count;
         var readNames = names;
 

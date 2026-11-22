@@ -26,7 +26,7 @@ internal sealed class ReachedNodes
     private const int NotReached = -1;
 
     // The number each kept node had, in the order they are kept, and the reverse. Either can be
-    // longer than it needs to be, where it is a snapshot's scratch: see SnapshotScratch.
+    // longer than it needs to be, where it is a file-table read's scratch: see SnapshotScratch.
     private readonly int[] _kept;
     private readonly int[] _renumbered;
     private readonly int _keptCount;
