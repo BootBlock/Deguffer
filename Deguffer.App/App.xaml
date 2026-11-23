@@ -84,7 +84,7 @@
             <Style x:Key="TierChipBase" TargetType="ContentControl">
                 <Setter Property="CornerRadius" Value="10" />
                 <Setter Property="Padding" Value="9,2" />
-                <Setter Property="FontSize" Value="11" />
+                <Setter Property="FontSize" Value="{StaticResource CaptionTextBlockFontSize}" />
                 <Setter Property="FontWeight" Value="SemiBold" />
                 <Setter Property="IsTabStop" Value="False" />
                 <Setter Property="VerticalAlignment" Value="Center" />
@@ -186,15 +186,52 @@
                 <Setter Property="Padding" Value="{StaticResource CardPadding}" />
             </Style>
 
+            <!--
+                The type ramp: one style per role, each a step of Fluent's ramp (Caption 12, Body 14,
+                Body Large 18, Subtitle 20, Title 28, Title Large 40) by its resource, so a role is
+                changed in one place and no page decides a size of its own. No text is smaller than
+                Caption. DesignTypographyTests holds the pages to these styles and these setters to
+                the ramp. A row's name is BodyStrongTextBlockStyle, and a row's figure is RowFigure,
+                which is never larger or heavier than the name, so the eye reads what a number is for
+                before the number.
+            -->
+            <Style x:Key="PageTitle" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                <Setter Property="FontSize" Value="{StaticResource TitleTextBlockFontSize}" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+            </Style>
+
             <Style x:Key="SectionHeading" TargetType="TextBlock">
                 <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
-                <Setter Property="FontSize" Value="20" />
+                <Setter Property="FontSize" Value="{StaticResource SubtitleTextBlockFontSize}" />
                 <Setter Property="FontWeight" Value="SemiBold" />
+            </Style>
+
+            <!-- The heading of a card that sits beside other cards in one section, such as Explore's. -->
+            <Style x:Key="CardHeading" TargetType="TextBlock" BasedOn="{StaticResource BodyLargeStrongTextBlockStyle}">
+                <Setter Property="AutomationProperties.HeadingLevel" Value="Level3" />
+            </Style>
+
+            <!-- The heading of a group of rows within a section, such as each group of settings. -->
+            <Style x:Key="GroupHeading" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
+                <Setter Property="AutomationProperties.HeadingLevel" Value="Level3" />
             </Style>
 
             <Style x:Key="SecondaryText" TargetType="TextBlock">
                 <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
                 <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+
+            <!-- Secondary text a step down: a row's detail, a note under a control, a count. -->
+            <Style x:Key="Caption" TargetType="TextBlock" BasedOn="{StaticResource SecondaryText}">
+                <Setter Property="FontSize" Value="{StaticResource CaptionTextBlockFontSize}" />
+            </Style>
+
+            <!-- A sentence that reports a §5.6 failure. Colour only reinforces the words, which say
+                 it outright, because §6.5 forbids a claim that needs the colour to read. -->
+            <Style x:Key="CriticalStatement" TargetType="TextBlock" BasedOn="{StaticResource SecondaryText}">
+                <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                <Setter Property="FontWeight" Value="SemiBold" />
             </Style>
 
             <!-- A line of secondary text nobody sees, laid in the same cell as a line that comes and
@@ -211,60 +248,64 @@
                 <Setter Property="AutomationProperties.AccessibilityView" Value="Raw" />
             </Style>
 
+            <!-- The label above a figure: small, letter-spaced and quiet, so the number carries. -->
+            <Style x:Key="FieldLabel" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Setter Property="FontSize" Value="{StaticResource CaptionTextBlockFontSize}" />
+                <Setter Property="CharacterSpacing" Value="60" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+
+            <!-- A figure in a list row, at the size of the row's name and lighter than it. -->
+            <Style x:Key="RowFigure" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                <Setter Property="FontSize" Value="{StaticResource BodyTextBlockFontSize}" />
+            </Style>
+
+            <!-- A figure in a card's summary, under or beside its FieldLabel. -->
+            <Style x:Key="Figure" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                <Setter Property="FontSize" Value="{StaticResource BodyLargeTextBlockFontSize}" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+            </Style>
+
+            <!-- The figures that stand beside a HeroFigure and qualify it. -->
+            <Style x:Key="LargeFigure" TargetType="TextBlock" BasedOn="{StaticResource Figure}">
+                <Setter Property="FontSize" Value="{StaticResource TitleTextBlockFontSize}" />
+            </Style>
+
+            <!-- The one number a page exists to show. -->
+            <Style x:Key="HeroFigure" TargetType="TextBlock" BasedOn="{StaticResource Figure}">
+                <Setter Property="FontSize" Value="{StaticResource TitleLargeTextBlockFontSize}" />
+                <Setter Property="LineHeight" Value="52" />
+            </Style>
+
+            <!--
+                Glyph sizes, each named for the text a glyph sits beside, so an icon keeps its
+                proportion to its label when either changes.
+            -->
+            <x:Double x:Key="GlyphSizeCompact">10</x:Double>
+            <x:Double x:Key="GlyphSizeCaption">12</x:Double>
+            <x:Double x:Key="GlyphSizeBody">14</x:Double>
+            <x:Double x:Key="GlyphSizeStandard">16</x:Double>
+            <x:Double x:Key="GlyphSizeLarge">20</x:Double>
+            <x:Double x:Key="GlyphSizeEmptyState">44</x:Double>
+
             <!-- The parts of EmptyState, the banner a list shows in place of its rows. -->
             <Style x:Key="EmptyStateGlyph" TargetType="FontIcon">
-                <Setter Property="FontSize" Value="44" />
+                <Setter Property="FontSize" Value="{StaticResource GlyphSizeEmptyState}" />
                 <Setter Property="HorizontalAlignment" Value="Center" />
                 <Setter Property="Foreground" Value="{ThemeResource TextFillColorTertiaryBrush}" />
                 <Setter Property="AutomationProperties.AccessibilityView" Value="Raw" />
             </Style>
 
-            <Style x:Key="EmptyStateTitle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
-                <Setter Property="FontSize" Value="16" />
+            <Style x:Key="EmptyStateTitle" TargetType="TextBlock" BasedOn="{StaticResource BodyLargeStrongTextBlockStyle}">
                 <Setter Property="TextAlignment" Value="Center" />
                 <Setter Property="TextWrapping" Value="Wrap" />
             </Style>
 
             <Style x:Key="EmptyStateMessage" TargetType="TextBlock" BasedOn="{StaticResource SecondaryText}">
                 <Setter Property="TextAlignment" Value="Center" />
-            </Style>
-
-            <!-- A card's own sentence about what it is showing, under the figures rather than beside
-                 them: it is a statement, not a value, and it has room to wrap. -->
-            <Style x:Key="CardStatement" TargetType="TextBlock" BasedOn="{StaticResource SecondaryText}">
-                <Setter Property="FontSize" Value="13" />
-            </Style>
-
-            <!-- The same sentence when it reports a §5.6 failure. Colour only reinforces the words,
-                 which say it outright, because §6.5 forbids a claim that needs the colour to read. -->
-            <Style x:Key="CardStatementCritical" TargetType="TextBlock" BasedOn="{StaticResource CardStatement}">
-                <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
-                <Setter Property="FontWeight" Value="SemiBold" />
-            </Style>
-
-            <!-- The label above a figure: small, letter-spaced and quiet, so the number carries. -->
-            <Style x:Key="FieldLabel" TargetType="TextBlock">
-                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
-                <Setter Property="FontSize" Value="12" />
-                <Setter Property="CharacterSpacing" Value="60" />
-                <Setter Property="TextWrapping" Value="Wrap" />
-            </Style>
-
-            <Style x:Key="Figure" TargetType="TextBlock">
-                <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
-                <Setter Property="FontSize" Value="18" />
-                <Setter Property="FontWeight" Value="SemiBold" />
-            </Style>
-
-            <Style x:Key="HeroFigure" TargetType="TextBlock" BasedOn="{StaticResource Figure}">
-                <Setter Property="FontSize" Value="34" />
-                <Setter Property="LineHeight" Value="40" />
-            </Style>
-
-            <Style x:Key="PageTitle" TargetType="TextBlock">
-                <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
-                <Setter Property="FontSize" Value="26" />
-                <Setter Property="FontWeight" Value="SemiBold" />
             </Style>
 
             <!--

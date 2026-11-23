@@ -138,7 +138,7 @@ internal sealed class VolumeRoutes(
             // be read has a reason the walk has to carry, which a race would let a quick walk hide.
             var answered = !building.IsCompleted && tuner.Route is ScanRoute.Auto
                 ? await RaceAsync(asked, questions, keeps, driveLetter, building, running, storages, ct).ConfigureAwait(false)
-                : FromIndex((await WaitAloneAsync(driveLetter, building, ct).ConfigureAwait(false)).Index, questions);
+                : FromIndex((await WaitAloneAsync(driveLetter, building, ct).ConfigureAwait(false)).Index, questions, ct);
 
             // The paths the table answered, reported together once its answers are in rather than one at a time.
             var finished = new List<int>(questions.Count);
@@ -205,7 +205,7 @@ internal sealed class VolumeRoutes(
         CancellationToken ct)
     {
         var raced = await RouteRace.FirstAsync<IReadOnlyList<ScanResult[]?>>(
-            async stop => Answered(FromIndex((await building.WaitAsync(stop).ConfigureAwait(false)).Index, questions)),
+            async stop => Answered(FromIndex((await building.WaitAsync(stop).ConfigureAwait(false)).Index, questions, stop)),
             async stop =>
             {
                 using var walking = volumes.Walking([.. questions.Select(question => question.Asked.Path)], storages);
@@ -259,8 +259,9 @@ internal sealed class VolumeRoutes(
         fromTable.Any(answer => answer is not null) ? fromTable : null;
 
     /// <summary>What the index says about each of <paramref name="questions"/>. See the overload below.</summary>
-    private IReadOnlyList<ScanResult[]?> FromIndex(MftVolumeIndex? index, IReadOnlyList<(int Index, Asked Asked)> questions) =>
-        [.. questions.Select(question => FromIndex(index, question.Asked))];
+    private IReadOnlyList<ScanResult[]?> FromIndex(
+        MftVolumeIndex? index, IReadOnlyList<(int Index, Asked Asked)> questions, CancellationToken ct) =>
+        [.. questions.Select(question => FromIndex(index, question.Asked, ct))];
 
     /// <summary>
     /// What the index says about the path <paramref name="asked"/> names, one reading for each of its
@@ -271,13 +272,17 @@ internal sealed class VolumeRoutes(
     /// table declines sends every reading to the walk, which answers them all in the one pass it would
     /// have made for the first.</para>
     /// </summary>
-    private ScanResult[]? FromIndex(MftVolumeIndex? index, Asked asked)
+    /// <param name="ct">
+    /// The caller's, or the race's once the walk has answered, so a total nobody will read stops in its
+    /// pass over the subtree.
+    /// </param>
+    private ScanResult[]? FromIndex(MftVolumeIndex? index, Asked asked, CancellationToken ct)
     {
         var volume = asked.Volume;
 
         if (index is null
             || LeftOutNodes(index, asked) is not { } leftOut
-            || index.TryMeasure(volume.Components, asked.Keeps, asked.Bounds.KeepRoot, leftOut, counting) is not { } measured)
+            || index.TryMeasure(volume.Components, asked.Keeps, asked.Bounds.KeepRoot, leftOut, ct, counting) is not { } measured)
         {
             return null;
         }

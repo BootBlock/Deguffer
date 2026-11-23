@@ -32,13 +32,10 @@ public sealed record VolumeHealthNote(DriveVerdict Verdict, string Word, string 
             ? new VolumeHealthNote(
                 worst,
                 worst.Word(),
-                $"{Names(named)} {(one ? "reports" : "report")} a serious problem. Back up what is on this drive before cleaning it or anything else.")
+                $"{Listed.And(named)} {(one ? "reports" : "report")} a serious problem. Back up what is on this drive before cleaning it or anything else.")
             : new VolumeHealthNote(
                 worst,
                 worst.Word(),
-                $"{Names(named)} {(one ? "has a reading that needs" : "have readings that need")} attention. Back up important files, and see Health for the details.");
+                $"{Listed.And(named)} {(one ? "has a reading that needs" : "have readings that need")} attention. Back up important files, and see Health for the details.");
     }
-
-    private static string Names(IReadOnlyList<string> names) =>
-        names.Count == 1 ? names[0] : $"{string.Join(", ", names.Take(names.Count - 1))} and {names[^1]}";
 }

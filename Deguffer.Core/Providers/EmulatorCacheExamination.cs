@@ -174,7 +174,7 @@ internal sealed class EmulatorCacheExamination
     }
 
     private static string Names(IReadOnlyList<EmulatorLayout> layouts) =>
-        string.Join(", ", layouts.SkipLast(1).Select(l => l.Name)) + " or " + layouts[^1].Name;
+        Listed.Or([.. layouts.Select(l => l.Name)]);
 
     /// <summary>
     /// Record <paramref name="root"/> if it is <paramref name="layout"/>'s. A root that is a link, or one

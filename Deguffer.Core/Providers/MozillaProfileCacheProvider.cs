@@ -9,6 +9,11 @@ namespace Deguffer.Core.Providers;
 /// the same engine and keeps its profiles the same way. What differs between them is data, in
 /// <see cref="MozillaApplication"/>, and each derived provider is that data and its own row's text.
 ///
+/// <para><b>An application can be several installations.</b> A Firefox fork keeps a Firefox profile
+/// under a folder named for itself, so it is one more <see cref="MozillaInstallation"/> of the
+/// Firefox row rather than a row of its own: the caches, the tier and the cost are Firefox's. What
+/// the installations' registers established is <see cref="MozillaRegisters"/>'.</para>
+///
 /// <para><b>Mozilla splits a profile across two roots, and only one of them is ever touched.</b>
 /// The roaming half under <c>%APPDATA%</c> holds the user's data — bookmarks and history for
 /// Firefox, mail and address books for Thunderbird, and saved passwords and every preference for
@@ -45,8 +50,7 @@ public abstract class MozillaProfileCacheProvider : CleanupProviderBase
         "A link rather than a directory, so what it points at was never classified.";
 
     private readonly MozillaApplication _application;
-    private readonly MozillaProfileDiscovery _discovery;
-    private readonly MozillaToolRoots _toolRootDeclarations;
+    private readonly MozillaRegisters _registers;
     private readonly PassMemo<IReadOnlyList<MozillaProfile>> _profiles = new();
     private readonly PassMemo<IReadOnlyList<ToolRoot>> _toolRoots = new();
 
@@ -75,8 +79,7 @@ public abstract class MozillaProfileCacheProvider : CleanupProviderBase
             scanner)
     {
         _application = application;
-        _discovery = new MozillaProfileDiscovery(Environment, application.Directory);
-        _toolRootDeclarations = new MozillaToolRoots(application, _discovery);
+        _registers = new MozillaRegisters(application, Environment);
         _declaredNames = application.Kept is { } kept
             ? [.. application.Children.DisposableNames, kept.Name]
             : [.. application.Children.DisposableNames];
@@ -86,23 +89,22 @@ public abstract class MozillaProfileCacheProvider : CleanupProviderBase
 
     public sealed override StepGrain Grain => StepGrain.Parts;
 
-    private string App => _application.Name;
-
     /// <summary>
-    /// The profiles <c>profiles.ini</c> names, memoised for the life of a planning pass (G4).
-    /// Presence, planning and <see cref="ToolRoots"/> all ask the same question of the same file.
+    /// The profiles every installation's <c>profiles.ini</c> names, memoised for the life of a
+    /// planning pass (G4). Presence, planning and <see cref="ToolRoots"/> all ask the same question of
+    /// the same files.
     ///
     /// Exposed so tests can assert that no roaming profile is ever a target.
     /// </summary>
     public IReadOnlyList<MozillaProfile> Profiles(CancellationToken ct = default) =>
-        _profiles.Get(() => _discovery.Discover(ct));
+        _profiles.Get(() => _registers.Discover(ct));
 
     /// <summary>
     /// §5.2 as §7.1 needs it read from outside, memoised with the profiles it is built from. See
-    /// <see cref="MozillaToolRoots.Declared"/>.
+    /// <see cref="MozillaRegisters.Declared"/>.
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
-        _toolRoots.Get(() => _toolRootDeclarations.Declared(Profiles(), LocatedElsewhere()));
+        _toolRoots.Get(() => _registers.Declared(Profiles()));
 
     /// <summary>
     /// Anywhere, because a profile the register names by an absolute path is declared where it is,
@@ -111,46 +113,16 @@ public abstract class MozillaProfileCacheProvider : CleanupProviderBase
     public override ToolRootScope ToolRootScope => ToolRootScope.Anywhere;
 
     /// <summary>
-    /// A profile at the top of a drive or share. See <see cref="MozillaToolRoots.AtTheTopOfADrive"/>.
+    /// A profile at the top of a drive or share. See <see cref="MozillaRegisters.AtTheTopOfADrive"/>.
     /// </summary>
-    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
-        Task.FromResult(_toolRootDeclarations.AtTheTopOfADrive(LocatedElsewhere(ct)));
-
-    /// <summary>
-    /// Each profile kept outside the application's folder that names a directory, with that
-    /// directory.
-    /// </summary>
-    private IEnumerable<(string Name, string Path)> LocatedElsewhere(CancellationToken ct = default)
+    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
     {
-        // Discovery is what fills the list, and it is memoised, so this costs nothing after the
-        // first read of the pass.
+        // Discovery is what fills each list of profiles kept elsewhere, and it is memoised, so this
+        // costs nothing after the first read of the pass.
         Profiles(ct);
 
-        foreach (var profile in _discovery.ProfilesElsewhere)
-        {
-            if (profile.Path is { } path)
-            {
-                yield return (profile.Name, path);
-            }
-        }
+        return Task.FromResult(_registers.AtTheTopOfADrive());
     }
-
-    /// <summary>The named user data in one roaming directory, for §5.6.</summary>
-    private IEnumerable<(string Path, string Reason)> UserDataIn(string directory) =>
-        _application.UserData.Select(data => (Path.Combine(directory, data.Name), data.Reason));
-
-    /// <summary>
-    /// §5.6 for the profiles kept outside the application's folder: each directory, and the user data
-    /// inside it by name, for the reason <see cref="MozillaApplication.UserData"/> gives.
-    /// </summary>
-    private IEnumerable<(string Path, string Reason)> SurvivorsElsewhere() =>
-        from profile in LocatedElsewhere()
-        from survivor in UserDataIn(profile.Path)
-            .Prepend((
-                profile.Path,
-                $"Your '{profile.Name}' {App} profile, kept outside {App}'s own folder. Deguffer "
-                + "removes nothing from it."))
-        select survivor;
 
     /// <summary>
     /// Each cache this row recognises, in the local half of every profile the register lists, read
@@ -191,82 +163,77 @@ public abstract class MozillaProfileCacheProvider : CleanupProviderBase
         var profiles = Profiles(ct);
 
         return Task.FromResult(
-            _discovery.Register is MozillaRegisterReading.Unreached or MozillaRegisterReading.Unreadable
-            || _discovery.ProfilesElsewhere.Count > 0
+            _registers.Unread().Count > 0
+            || _registers.ProfilesElsewhere().Count > 0
             || profiles.Any(profile => HasDeclaredContent(profile, ct)));
     }
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var profiles = Profiles(ct);
+        var elsewhere = _registers.ProfilesElsewhere();
+        var unread = _registers.Unread();
+
+        // A register nobody could read is said for its own installation whatever the others found:
+        // one installation's profiles say nothing about another's.
+        var registerNotes = unread.Select(MozillaRegisters.RegisterNote).ToList();
 
         if (profiles.Count == 0)
         {
-            if (_discovery.Register is MozillaRegisterReading.Unreached or MozillaRegisterReading.Unreadable)
+            if (elsewhere.Count > 0)
             {
-                var register = new UnreadFile(
-                    _discovery.ProfilesPath,
-                    Unreached: _discovery.Register is MozillaRegisterReading.Unreached);
+                // Every profile there is sits outside its installation's own folder. Saying "no
+                // profile" here would be the same untruth as saying it about a register nobody could
+                // read.
+                var stored = _registers.StoredElsewhere(elsewhere).ToList();
 
-                return UnreadableRootPlan(register.Path) with
+                return UnexaminedPlan(stored[0]) with
                 {
-                    Notes =
-                    [
-                        new PlanNote(
-                            PlanNoteSeverity.Warning,
-                            register.Opening($"{App}'s list of profiles")
-                            + $", so Deguffer could not work out which {App} profiles exist. Nothing was "
-                            + "planned, and nothing was ruled out either."),
-                    ],
+                    Notes = [.. stored.Select(Information), .. registerNotes],
+                    ProtectedPaths = await ProtectAsync([.. _registers.SurvivorsElsewhere()], ct).ConfigureAwait(false),
+                    HasUnreadableRoot = unread.Count > 0,
                 };
             }
 
-            // Every profile there is sits outside the application's own folder. Saying "no profile"
-            // here would be the same untruth as saying it about a register nobody could read.
-            return _discovery.ProfilesElsewhere.Count > 0
-                ? UnexaminedPlan(StoredElsewhere(_discovery.ProfilesElsewhere)) with
+            if (unread.Count > 0)
+            {
+                return UnreadableRootPlan([.. unread.Select(discovery => discovery.ProfilesPath)]) with
                 {
-                    ProtectedPaths = await ProtectAsync([.. SurvivorsElsewhere()], ct).ConfigureAwait(false),
-                }
-                : EmptyPlan($"{App} has no profile in this user's account.");
+                    Notes = registerNotes,
+                };
+            }
+
+            return EmptyPlan(
+                $"No {Listed.Or([.. _application.Installations.Select(installation => installation.Name)])} "
+                + "profile is in this user's account.");
         }
 
-        var notes = new List<PlanNote>();
+        var notes = new List<PlanNote>(registerNotes);
         var targets = new List<DeletionTarget>();
         var declined = new List<(string Path, string Reason)>();
         var survivors = new List<(string Path, string Reason)>();
-        var unreadable = false;
+        var unreadable = unread.Count > 0;
 
-        survivors.Add((
-            _discovery.RoamingRoot,
-            $"{App}'s own folder, which holds the register of your profiles and the profiles "
-            + "themselves. Nothing is ever removed from it."));
-        survivors.Add((
-            _discovery.ProfilesPath,
-            $"{App}'s register of your profiles. Removing it would lose every profile."));
-        survivors.Add((
-            _discovery.LocalRoot,
-            $"{App}'s cache folder itself must survive — only recognised caches inside a profile "
-            + "under it are removed."));
+        survivors.AddRange(_registers.FolderSurvivors());
 
-        if (_discovery.ProfilesElsewhere.Count > 0)
+        if (elsewhere.Count > 0)
         {
             // Not "we left them alone": nothing about them was established at all, and a plan that
             // implied otherwise would be claiming a folder is clear that was never looked at.
-            notes.Add(new PlanNote(
-                PlanNoteSeverity.Information,
-                StoredElsewhere(_discovery.ProfilesElsewhere)));
-            survivors.AddRange(SurvivorsElsewhere());
+            notes.AddRange(_registers.StoredElsewhere(elsewhere).Select(Information));
+            survivors.AddRange(_registers.SurvivorsElsewhere());
         }
 
         foreach (var profile in profiles)
         {
             ct.ThrowIfCancellationRequested();
 
+            var app = profile.Installation.Name;
+
             survivors.Add((
                 profile.RoamingPath,
-                $"Your '{profile.Name}' {App} profile. Deguffer removes nothing from it."));
-            survivors.AddRange(UserDataIn(profile.RoamingPath));
+                $"Your '{profile.Name}' {app} profile. Deguffer removes nothing from it."));
+            survivors.AddRange(_application.UserDataIn(profile.RoamingPath));
 
             // Before the existence check, not after it. A link partway up the path resolves onto a
             // directory that holds no profile of its own, so the profile itself reads as absent and
@@ -326,7 +293,7 @@ public abstract class MozillaProfileCacheProvider : CleanupProviderBase
 
                 if (classification.Tier.IsOfferable())
                 {
-                    targets.Add(new DeletionTarget(path, classification.Reason, Group: profile.Name));
+                    targets.Add(new DeletionTarget(path, classification.Reason, Group: _registers.Heading(profile)));
                     continue;
                 }
 
@@ -336,7 +303,7 @@ public abstract class MozillaProfileCacheProvider : CleanupProviderBase
                 if (_application.Kept is { } kept
                     && child.Name.Equals(kept.Name, StringComparison.OrdinalIgnoreCase))
                 {
-                    notes.Add(await KeptNoteAsync(kept, path, ct).ConfigureAwait(false));
+                    notes.Add(await KeptNoteAsync(app, kept, path, ct).ConfigureAwait(false));
                 }
             }
 
@@ -346,7 +313,7 @@ public abstract class MozillaProfileCacheProvider : CleanupProviderBase
             {
                 notes.Add(new PlanNote(
                     PlanNoteSeverity.Information,
-                    $"In the '{profile.Name}' profile, "
+                    $"In the '{profile.Name}' {app} profile, "
                     + $"{Counted.Of(spared, "other item is", "other items are")} left alone beside the caches."));
             }
         }
@@ -360,7 +327,8 @@ public abstract class MozillaProfileCacheProvider : CleanupProviderBase
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
-                $"No {App} profile on this machine is keeping a cache on disk."));
+                $"No {Listed.Or([.. profiles.Select(profile => profile.Installation.Name).Distinct()])} "
+                + "profile on this machine is keeping a cache on disk."));
         }
 
         var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
@@ -394,7 +362,7 @@ public abstract class MozillaProfileCacheProvider : CleanupProviderBase
             // declined link does: nothing was removed and something was never looked at, so the shell
             // must not call the row clear.
             WasNotExamined = targets.Count == 0
-                && (declined.Count > 0 || _discovery.ProfilesElsewhere.Count > 0),
+                && (declined.Count > 0 || elsewhere.Count > 0),
         };
     }
 
@@ -402,7 +370,7 @@ public abstract class MozillaProfileCacheProvider : CleanupProviderBase
     /// The size of the kept directory, measured unguarded: nothing is being deleted, so withholding
     /// recent files would describe a deletion that is not happening.
     /// </summary>
-    private async Task<PlanNote> KeptNoteAsync(MozillaKeptData kept, string path, CancellationToken ct)
+    private async Task<PlanNote> KeptNoteAsync(string app, MozillaKeptData kept, string path, CancellationToken ct)
     {
         var size = await Scanner
             .MeasureAsync(path, MinimumAge.Off, progress: null, ct: ct)
@@ -411,23 +379,13 @@ public abstract class MozillaProfileCacheProvider : CleanupProviderBase
         // A folder Windows would not let the walk into measures zero, and "keeps 0 bytes" is a claim
         // about it that nobody checked.
         var held = size.WasReached
-            ? $"{App} keeps {FreeSpace.Format(size.Size)} of {kept.What} in '{path}'"
-            : $"{App} keeps {kept.What} in '{path}', which Windows would not let Deguffer measure";
+            ? $"{app} keeps {FreeSpace.Format(size.Size)} of {kept.What} in '{path}'"
+            : $"{app} keeps {kept.What} in '{path}', which Windows would not let Deguffer measure";
 
         return new PlanNote(PlanNoteSeverity.Information, $"{held}, {kept.Why}");
     }
 
-    /// <summary>
-    /// The sentence for a profile <c>profiles.ini</c> puts outside the application's own folder.
-    /// Said in two places, because such a profile can be one of several or the only one there is,
-    /// and the second case returns before the plan is ever built.
-    /// </summary>
-    private string StoredElsewhere(IReadOnlyList<MozillaProfileElsewhere> profiles) =>
-        $"The '{string.Join("' and '", profiles.Select(profile => profile.Name))}' "
-        + $"{Counted.Form(profiles.Count, "profile is", "profiles are")} "
-        + $"kept outside {App}'s own folder. Deguffer did not examine "
-        + $"{Counted.Form(profiles.Count, "it", "them")}: a profile stored that way keeps its cache among "
-        + $"your {_application.UserDataSummary} rather than separately from them.";
+    private static PlanNote Information(string sentence) => new(PlanNoteSeverity.Information, sentence);
 
     private static PlanNote LinkNote(string path) => new(
         PlanNoteSeverity.Information,
@@ -458,4 +416,7 @@ public abstract class MozillaProfileCacheProvider : CleanupProviderBase
 
         return false;
     }
+
+    /// <summary>§5.3. Each installation holds its own caches open while it runs.</summary>
+    protected sealed override IReadOnlyList<string> ConflictingProcessNames => _registers.ProcessNames;
 }

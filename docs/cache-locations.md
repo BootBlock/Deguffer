@@ -3354,7 +3354,7 @@ for [crash dumps and error reports](#crash-dumps-and-error-reports).
 
 | | |
 | --- | --- |
-| **Location** | `%LOCALAPPDATA%\Mozilla\Firefox\Profiles\<profile>`, for each profile `profiles.ini` names |
+| **Location** | `%LOCALAPPDATA%\Mozilla\Firefox\Profiles\<profile>`, for each profile `profiles.ini` names, and the same under `zen`, `Waterfox`, `librewolf` and `Floorp` |
 | **Method** | Delete five recognised cache directories, per profile |
 | **Typical size** | 350 MB across the five in one profile on the machine this was measured on, of which `cache2` was 322 MB |
 
@@ -3379,10 +3379,30 @@ it is called.
 | `thumbnails` | The page images on the new-tab page |
 | `jumpListCache` | Icons for Firefox's taskbar jump list |
 
+### Browsers built from Firefox
+
+Zen, Waterfox, LibreWolf and Floorp keep exactly the same profile, split the same way, under a folder
+named for themselves instead of `Mozilla\Firefox`. Firefox's engine picks that folder from the
+browser's own `application.ini`: its `Profile` value where it sets one, and `Vendor\Name` where it
+does not. Each fork sets one, read from its released Windows build:
+
+| Browser | Folder under `%APPDATA%` and `%LOCALAPPDATA%` | Process |
+| --- | --- | --- |
+| Firefox | `Mozilla\Firefox` | `firefox.exe` |
+| Zen | `zen` | `zen.exe` |
+| Waterfox | `Waterfox` | `waterfox.exe` |
+| LibreWolf | `librewolf` | `librewolf.exe` |
+| Floorp | `Floorp` | `floorp.exe` |
+
+They are part of this row rather than rows of their own: the caches, the tier and the cost are
+Firefox's. Each is read only through the `profiles.ini` in its own folder, and each profile's caches
+are listed under the browser's name as well as the profile's. A portable build keeps its profile
+beside the program and has no register in either folder, so Deguffer does not find it.
+
 ### What Deguffer does
 
-**It asks Firefox which directories are profiles.** `%APPDATA%\Mozilla\Firefox\profiles.ini` is
-Mozilla's own register of them, and a directory it does not name as a profile is never entered — a
+**It asks Firefox which directories are profiles.** `%APPDATA%\Mozilla\Firefox\profiles.ini`, and
+the same file in each fork's folder, is Mozilla's own register of them, and a directory it does not name as a profile is never entered — a
 directory called `cache2` in a folder nobody registered is left exactly where it is. Each profile's
 caches are their own steps, so you can clear one profile and leave another alone.
 
@@ -3431,7 +3451,7 @@ shortly after that start, and the new-tab thumbnails are drawn again as you revi
 **Bookmarks, history, saved passwords, open tabs and settings are untouched.** They are all in the
 other half of the profile, which Deguffer never removes anything from.
 
-Close Firefox first if you can. A running browser keeps its cache files open, and anything held open
+Close the browser first if you can. A running browser keeps its cache files open, and anything held open
 is left in place rather than removed.
 
 ### Why Tier 1

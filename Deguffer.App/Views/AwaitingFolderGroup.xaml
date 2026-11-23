@@ -39,7 +39,7 @@
                 <TextBlock Text="Waiting for a source folder"
                            Style="{StaticResource BodyStrongTextBlockStyle}" />
                 <TextBlock Text="{x:Bind Group.Summary, Mode=OneWay}"
-                           Style="{StaticResource CardStatement}" />
+                           Style="{StaticResource SecondaryText}" />
             </StackPanel>
         </Expander.Header>
 

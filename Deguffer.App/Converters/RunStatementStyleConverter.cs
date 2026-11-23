@@ -24,7 +24,7 @@ public sealed partial class RunStatementStyleConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, string language) =>
         (Style)Application.Current.Resources[
-            value is true ? "CardStatementCritical" : "CardStatement"];
+            value is true ? "CriticalStatement" : "SecondaryText"];
 
     public object ConvertBack(object value, Type targetType, object parameter, string language) =>
         throw new NotSupportedException("Verdict colour is display-only.");

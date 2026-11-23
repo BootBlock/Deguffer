@@ -22,7 +22,7 @@
                      Title="Not saved"
                      Message="Your choice could not be written to disk, so it has not been applied. Check that %LOCALAPPDATA%\Deguffer is writable." />
 
-            <TextBlock Text="Appearance" Style="{StaticResource SectionHeading}" FontSize="15" Margin="0,10,0,0" />
+            <TextBlock Text="Appearance" Style="{StaticResource GroupHeading}" Margin="0,10,0,0" />
 
             <views:SettingsRow Glyph="&#xE771;"
                                Title="Theme"
@@ -70,7 +70,7 @@
                  to see it. The picture is invented and names no folder on the machine. -->
             <controls:MapPreview x:Name="SpacingPreview" Height="180" />
 
-            <TextBlock Text="Storage list" Style="{StaticResource SectionHeading}" FontSize="15" Margin="0,14,0,0" />
+            <TextBlock Text="Storage list" Style="{StaticResource GroupHeading}" Margin="0,14,0,0" />
 
             <!-- A clear location offers no decision, so it is hidden by default. Presentation only:
                  every location is still scanned. The description names the rows it never hides,
@@ -93,7 +93,7 @@
                 </views:SettingsRow.Control>
             </views:SettingsRow>
 
-            <TextBlock Text="Safety" Style="{StaticResource SectionHeading}" FontSize="15" Margin="0,14,0,0" />
+            <TextBlock Text="Safety" Style="{StaticResource GroupHeading}" Margin="0,14,0,0" />
 
             <views:SettingsRow Glyph="&#xE730;"
                                Title="Confirm before cleaning"
@@ -205,7 +205,7 @@
                  how it looks, the guard above being the first. Stated as scope rather than as a
                  preference, because an empty list is not a disabled feature — it is Deguffer having
                  nowhere it is allowed to look. -->
-            <TextBlock Text="Source folders" Style="{StaticResource SectionHeading}" FontSize="15" Margin="0,14,0,0" />
+            <TextBlock Text="Source folders" Style="{StaticResource GroupHeading}" Margin="0,14,0,0" />
 
             <views:SettingsRow Glyph="&#xE8B7;"
                                Title="Where to look for build output"
@@ -225,8 +225,7 @@
                      Message="{x:Bind configuration:PickedFolder.NotOnDisk}" />
 
             <TextBlock Text="No source folders added, so Deguffer will not look for build output anywhere."
-                       Style="{StaticResource SecondaryText}"
-                       FontSize="12"
+                       Style="{StaticResource Caption}"
                        TextWrapping="Wrap"
                        Margin="4,0,0,0"
                        Visibility="{x:Bind ViewModel.HasNoSourceRoots, Mode=OneWay}" />
@@ -256,8 +255,7 @@
                                      read them, so the row says so, and removing the folder is how the
                                      answer is taken back. -->
                                 <TextBlock Text="Cloud storage. You chose to let Deguffer search this, so reading it downloads the files in it."
-                                           Style="{StaticResource SecondaryText}"
-                                           FontSize="12"
+                                           Style="{StaticResource Caption}"
                                            TextWrapping="Wrap"
                                            Margin="0,2,0,0"
                                            Visibility="{x:Bind RemoteStorageApproved}" />
@@ -277,7 +275,7 @@
                  records that folder nowhere Deguffer may rely on, so the user is the only source.
                  Nothing is taken from a folder here unless the emulator's own settings file, or RetroArch's
                  program, is in it. -->
-            <TextBlock Text="Emulator folders" Style="{StaticResource SectionHeading}" FontSize="15" Margin="0,14,0,0" />
+            <TextBlock Text="Emulator folders" Style="{StaticResource GroupHeading}" Margin="0,14,0,0" />
 
             <views:SettingsRow Glyph="&#xE7FC;"
                                Title="Where your emulators are installed"
@@ -296,8 +294,7 @@
                      Message="{x:Bind configuration:PickedFolder.NotOnDisk}" />
 
             <TextBlock Text="No emulator folders added, so only each emulator's default location is looked in."
-                       Style="{StaticResource SecondaryText}"
-                       FontSize="12"
+                       Style="{StaticResource Caption}"
                        TextWrapping="Wrap"
                        Margin="4,0,0,0"
                        Visibility="{x:Bind ViewModel.HasNoEmulatorFolders, Mode=OneWay}" />
@@ -333,7 +330,7 @@
             <!-- The one setting on this page that only ever narrows what Deguffer deletes. Listed in
                  full, including items no scan finds any more, so it never becomes a protection
                  nobody can see. Items are added where they are seen, on the Storage page. -->
-            <TextBlock Text="Keep list" Style="{StaticResource SectionHeading}" FontSize="15" Margin="0,14,0,0" />
+            <TextBlock Text="Keep list" Style="{StaticResource GroupHeading}" Margin="0,14,0,0" />
 
             <InfoBar IsOpen="{x:Bind ViewModel.KeepListUnreadable}"
                      IsClosable="False"
@@ -346,8 +343,7 @@
                                Description="Keep an item from its row's list of items on the Storage page. Deguffer leaves a kept item out of every clean, and every clean checks that it is still there. Only items Deguffer can recognise wherever they are stored can be kept: a browser build, a downloaded tooling release, or an application version the updater replaced." />
 
             <TextBlock Text="Nothing is kept."
-                       Style="{StaticResource SecondaryText}"
-                       FontSize="12"
+                       Style="{StaticResource Caption}"
                        TextWrapping="Wrap"
                        Margin="4,0,0,0"
                        Visibility="{x:Bind ViewModel.HasNoKeptItems, Mode=OneWay}" />
@@ -374,8 +370,7 @@
                                            TextTrimming="CharacterEllipsis"
                                            ToolTipService.ToolTip="{x:Bind Item.Name}" />
                                 <TextBlock Text="{x:Bind ProviderName}"
-                                           Style="{StaticResource SecondaryText}"
-                                           FontSize="12"
+                                           Style="{StaticResource Caption}"
                                            TextTrimming="CharacterEllipsis" />
                             </StackPanel>
 
@@ -393,7 +388,7 @@
             <!-- What Explore keeps of each scan of a whole drive, so the next scan can say what
                  grew. It names the folders on the drive, so the user decides how long it stays:
                  each one can be removed here, or all of them at once. -->
-            <TextBlock Text="Scan history" Style="{StaticResource SectionHeading}" FontSize="15" Margin="0,14,0,0" />
+            <TextBlock Text="Scan history" Style="{StaticResource GroupHeading}" Margin="0,14,0,0" />
 
             <InfoBar IsOpen="{x:Bind History.RemoveFailed, Mode=OneWay}"
                      IsClosable="False"
@@ -413,8 +408,7 @@
             </views:SettingsRow>
 
             <TextBlock Text="No scans are kept."
-                       Style="{StaticResource SecondaryText}"
-                       FontSize="12"
+                       Style="{StaticResource Caption}"
                        TextWrapping="Wrap"
                        Margin="4,0,0,0"
                        Visibility="{x:Bind History.HasNoKept, Mode=OneWay}" />
@@ -435,8 +429,7 @@
                             <StackPanel VerticalAlignment="Center" Spacing="1">
                                 <TextBlock Text="{x:Bind Title}" TextTrimming="CharacterEllipsis" />
                                 <TextBlock Text="{x:Bind Detail}"
-                                           Style="{StaticResource SecondaryText}"
-                                           FontSize="12"
+                                           Style="{StaticResource Caption}"
                                            TextTrimming="CharacterEllipsis" />
                             </StackPanel>
 
@@ -476,7 +469,7 @@
                  folder is still reported, whatever is set. So these come last, after the settings
                  that decide what may be deleted. A value is held per kind of drive because one
                  machine often has several kinds, and emptying a box puts it back to Auto. -->
-            <TextBlock Text="Scanning" Style="{StaticResource SectionHeading}" FontSize="15" Margin="0,14,0,0" />
+            <TextBlock Text="Scanning" Style="{StaticResource GroupHeading}" Margin="0,14,0,0" />
 
             <InfoBar IsOpen="{x:Bind Scanning.SaveFailed, Mode=OneWay}"
                      IsClosable="False"
@@ -640,8 +633,7 @@
                 </ItemsRepeater.ItemTemplate>
             </ItemsRepeater>
 
-            <TextBlock Style="{StaticResource SecondaryText}"
-                       FontSize="12"
+            <TextBlock Style="{StaticResource Caption}"
                        Margin="4,10,0,0"
                        Text="Settings are stored in %LOCALAPPDATA%\Deguffer. Deleting that folder restores the defaults." />
         </StackPanel>

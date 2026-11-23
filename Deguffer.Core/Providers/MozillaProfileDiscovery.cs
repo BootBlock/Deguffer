@@ -4,6 +4,7 @@ using Deguffer.Core.Safety;
 namespace Deguffer.Core.Providers;
 
 /// <summary>One profile of a Mozilla application, as <c>profiles.ini</c> names it.</summary>
+/// <param name="Installation">The product whose register names it, which every sentence about it names.</param>
 /// <param name="Name">
 /// The profile's own name from the file — <c>default-release</c> on an ordinary installation. It is
 /// what the user sees in Firefox's own profile manager, so it is the label a plan should use.
@@ -19,12 +20,17 @@ namespace Deguffer.Core.Providers;
 /// caches at the matching place under the local root. The directory may not exist — a profile that
 /// has never been opened has no local half at all.
 /// </param>
-public sealed record MozillaProfile(string Name, string RoamingPath, string LocalPath);
+public sealed record MozillaProfile(
+    MozillaInstallation Installation,
+    string Name,
+    string RoamingPath,
+    string LocalPath);
 
 /// <summary>
 /// A profile <c>profiles.ini</c> keeps outside the application's own folder, which is reported and
 /// never examined.
 /// </summary>
+/// <param name="Installation">The product whose register names it.</param>
 /// <param name="Name">The profile's own name, as <see cref="MozillaProfile.Name"/> is.</param>
 /// <param name="Path">
 /// The directory the application opens as the profile, with its bookmarks and saved passwords in
@@ -32,7 +38,7 @@ public sealed record MozillaProfile(string Name, string RoamingPath, string Loca
 /// resolves it. Null where the entry names no directory the application would open — an absolute
 /// entry that is not fully qualified, which Mozilla's own reader skips.
 /// </param>
-public sealed record MozillaProfileElsewhere(string Name, string? Path);
+public sealed record MozillaProfileElsewhere(MozillaInstallation Installation, string Name, string? Path);
 
 /// <summary>What a read of a Mozilla application's <c>profiles.ini</c> learned.</summary>
 public enum MozillaRegisterReading
@@ -64,17 +70,17 @@ public enum MozillaRegisterReading
 /// <c>profiles.ini</c>, which is Mozilla's own register of its profiles and the counterpart of
 /// Chromium's <c>Local State</c>.</para>
 ///
-/// <para>The application directory is a constructor argument rather than a constant because
-/// Thunderbird keeps the identical layout under <c>%APPDATA%\Thunderbird</c> — the same
+/// <para>The installation is a constructor argument rather than a constant because Thunderbird and
+/// every Firefox fork keep the identical layout under a folder of their own — the same
 /// <c>profiles.ini</c>, the same two roots, the same <c>cache2</c>. Nothing here knows the name of
 /// any application; <see cref="MozillaApplication"/> is where each one is named.</para>
 /// </summary>
 /// <param name="environment">The two application-data roots, behind the seam that makes this testable.</param>
-/// <param name="applicationDirectory">
-/// The application's own directory relative to each application-data root — <c>Mozilla\Firefox</c>
-/// for Firefox.
+/// <param name="installation">
+/// The product whose register this reads, with its directory relative to each application-data root
+/// — <c>Mozilla\Firefox</c> for Firefox.
 /// </param>
-public sealed partial class MozillaProfileDiscovery(IUserEnvironment environment, string applicationDirectory)
+public sealed partial class MozillaProfileDiscovery(IUserEnvironment environment, MozillaInstallation installation)
 {
     /// <summary>
     /// Mozilla's own register of the profiles it owns. A directory named here is a Firefox profile;
@@ -91,11 +97,14 @@ public sealed partial class MozillaProfileDiscovery(IUserEnvironment environment
     [GeneratedRegex(@"\AProfile[0-9]+\z", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ProfileSection();
 
+    /// <summary>The product whose register this reads.</summary>
+    public MozillaInstallation Installation => installation;
+
     /// <summary>Where <c>profiles.ini</c> and the user-data half of every profile live.</summary>
-    public string RoamingRoot { get; } = Path.Combine(environment.RoamingAppData, applicationDirectory);
+    public string RoamingRoot { get; } = Path.Combine(environment.RoamingAppData, installation.Directory);
 
     /// <summary>Where the caches live, and the only root this provider ever deletes from.</summary>
-    public string LocalRoot { get; } = Path.Combine(environment.LocalAppData, applicationDirectory);
+    public string LocalRoot { get; } = Path.Combine(environment.LocalAppData, installation.Directory);
 
     /// <summary>The register itself, which is also what identifies the installation as Mozilla's.</summary>
     public string ProfilesPath => Path.Combine(RoamingRoot, ProfilesFile);
@@ -179,7 +188,7 @@ public sealed partial class MozillaProfileDiscovery(IUserEnvironment environment
             // to the application root and land on a directory nobody named.
             if (!entry.TryGetValue("IsRelative", out var relative) || relative != "1")
             {
-                elsewhere.Add(new MozillaProfileElsewhere(name, LongPath.Configured(segments)));
+                elsewhere.Add(new MozillaProfileElsewhere(installation, name, LongPath.Configured(segments)));
                 continue;
             }
 
@@ -191,11 +200,11 @@ public sealed partial class MozillaProfileDiscovery(IUserEnvironment environment
                 // handling of a claim that would move the whole operation elsewhere is to refuse it.
                 // Mozilla opens it all the same, so where it lands is still a profile to protect.
                 elsewhere.Add(new MozillaProfileElsewhere(
-                    name, LongPath.Configured(Path.Combine(RoamingRoot, segments))));
+                    installation, name, LongPath.Configured(Path.Combine(RoamingRoot, segments))));
                 continue;
             }
 
-            found.Add(new MozillaProfile(name, roaming, local));
+            found.Add(new MozillaProfile(installation, name, roaming, local));
         }
 
         ProfilesElsewhere = elsewhere;

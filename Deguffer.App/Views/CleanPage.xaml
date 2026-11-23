@@ -63,8 +63,8 @@
                      reachable from the row by whatever the reader is using. -->
                 <TextBlock Grid.Column="1"
                            Text="{x:Bind Name}"
-                           Style="{StaticResource SectionHeading}"
-                           FontSize="14"
+                           Style="{StaticResource BodyStrongTextBlockStyle}"
+                           TextWrapping="NoWrap"
                            VerticalAlignment="Center"
                            ToolTipService.ToolTip="{x:Bind WhatHappensOnNextUse}" />
 
@@ -86,8 +86,7 @@
                 <TextBlock Grid.Column="3"
                            Text="{x:Bind StatusLabel, Mode=OneWay}"
                            Visibility="{x:Bind CannotBeSelected, Mode=OneWay}"
-                           Style="{StaticResource SecondaryText}"
-                           FontSize="12"
+                           Style="{StaticResource Caption}"
                            TextWrapping="NoWrap"
                            TextTrimming="CharacterEllipsis"
                            TextAlignment="Right"
@@ -128,8 +127,7 @@
                     <TextBlock Text="{x:Bind SizeLabel, Mode=OneWay}"
                                Visibility="{x:Bind HasSizeToShow, Mode=OneWay}"
                                ToolTipService.ToolTip="{x:Bind ChangeTip, Mode=OneWay}"
-                               Style="{StaticResource Figure}"
-                               FontSize="15"
+                               Style="{StaticResource RowFigure}"
                                HorizontalAlignment="Right"
                                TextAlignment="Right"
                                VerticalAlignment="Center" />
@@ -169,8 +167,8 @@
                              what the tier means stays on its tooltip and help text. -->
                         <Grid ColumnSpacing="10" ColumnDefinitions="Auto,Auto,*,Auto">
                             <TextBlock Text="{x:Bind Name}"
-                                       Style="{StaticResource SectionHeading}"
-                                       FontSize="15"
+                                       Style="{StaticResource BodyStrongTextBlockStyle}"
+                                       TextWrapping="NoWrap"
                                        VerticalAlignment="Center" />
 
                             <!-- Beside the name, because for a row whose items are chosen one by one,
@@ -238,8 +236,7 @@
                         </Grid>
 
                         <TextBlock Text="{x:Bind WhatHappensOnNextUse}"
-                                   Style="{StaticResource SecondaryText}"
-                                   FontSize="13" />
+                                   Style="{StaticResource SecondaryText}" />
                     </StackPanel>
 
                     <StackPanel Grid.Column="2" Spacing="3" MinWidth="104" VerticalAlignment="Top">
@@ -247,8 +244,7 @@
                                    Style="{StaticResource Figure}"
                                    HorizontalAlignment="Right" />
                         <TextBlock Text="{x:Bind StatusLabel, Mode=OneWay}"
-                                   Style="{StaticResource SecondaryText}"
-                                   FontSize="11"
+                                   Style="{StaticResource Caption}"
                                    TextAlignment="Right"
                                    HorizontalAlignment="Right" />
 
@@ -256,8 +252,7 @@
                              a date and nothing more (§7.1): it ticks nothing and orders nothing. -->
                         <TextBlock Text="{x:Bind ChangeLabel, Mode=OneWay}"
                                    Visibility="{x:Bind HasChange, Mode=OneWay}"
-                                   Style="{StaticResource SecondaryText}"
-                                   FontSize="11"
+                                   Style="{StaticResource Caption}"
                                    TextAlignment="Right"
                                    HorizontalAlignment="Right" />
                         <controls:FillBar Style="{StaticResource ShareBar}"
@@ -298,15 +293,13 @@
                          disclosure reads as belonging to its row and not to the list. -->
                     <StackPanel Spacing="2" Margin="72,0,16,0">
                         <TextBlock Text="{x:Bind WhatHappensOnNextUse}"
-                                   Style="{StaticResource SecondaryText}"
-                                   FontSize="13" />
+                                   Style="{StaticResource SecondaryText}" />
 
                         <!-- The change since the scan before, folded away here for the reason the
                              sentence above is, and on the figure's tooltip for a pointer. -->
                         <TextBlock Text="{x:Bind ChangeLabel, Mode=OneWay}"
                                    Visibility="{x:Bind HasChange, Mode=OneWay}"
-                                   Style="{StaticResource SecondaryText}"
-                                   FontSize="13" />
+                                   Style="{StaticResource SecondaryText}" />
 
                         <!-- Inside the disclosure rather than on the row line, which is the same
                              place §7 puts the sentence above it and for the same reason: compact
@@ -395,8 +388,7 @@
                                         VerticalAlignment="Bottom"
                                         Visibility="{x:Bind ViewModel.IsCleaning, Mode=OneWay}">
                                 <TextBlock Text="{x:Bind ViewModel.CleanProgress.RemovedSoFarLabel, Mode=OneWay}"
-                                           Style="{StaticResource Figure}"
-                                           FontSize="16" />
+                                           Style="{StaticResource Figure}" />
                                 <TextBlock Text="removed so far"
                                            Style="{StaticResource SecondaryText}"
                                            VerticalAlignment="Bottom"
@@ -532,7 +524,7 @@
                                 Visibility="{x:Bind ViewModel.Retrim.IsShown, Mode=OneWay}">
 
                         <TextBlock Text="{x:Bind ViewModel.Retrim.OfferText, Mode=OneWay}"
-                                   Style="{StaticResource CardStatement}"
+                                   Style="{StaticResource SecondaryText}"
                                    Visibility="{x:Bind ViewModel.Retrim.IsOffered, Mode=OneWay}" />
 
                         <Button x:Name="RetrimButton"
@@ -558,7 +550,7 @@
                                       AutomationProperties.LiveSetting="Polite">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="x:String">
-                                    <TextBlock Text="{x:Bind}" Style="{StaticResource CardStatement}" />
+                                    <TextBlock Text="{x:Bind}" Style="{StaticResource SecondaryText}" />
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
@@ -696,8 +688,7 @@
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="Selected" Style="{StaticResource FieldLabel}" />
                     <TextBlock Text="{x:Bind ViewModel.Selection.TotalLabel, Mode=OneWay}"
-                               Style="{StaticResource Figure}"
-                               FontSize="16" />
+                               Style="{StaticResource Figure}" />
                 </StackPanel>
             </StackPanel>
 
