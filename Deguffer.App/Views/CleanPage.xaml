@@ -321,19 +321,16 @@
 
     <!-- Layout roots stay transparent so the §6.5 material shows through; every surface below
          sits on a Fluent layer brush and reads correctly on a flat solid background too. -->
-    <Grid RowSpacing="16" RowDefinitions="Auto,Auto,*,Auto" Padding="28,8,28,0">
+    <Grid RowSpacing="{StaticResource RegionGap}" RowDefinitions="Auto,Auto,Auto,*,Auto" Padding="{StaticResource PagePadding}">
 
-        <StackPanel Grid.Row="0" Spacing="16">
-            <Grid ColumnDefinitions="*,Auto">
-                <TextBlock Text="Storage" Style="{StaticResource PageTitle}" VerticalAlignment="Center" />
-
+        <controls:PageHeader Destination="Storage">
+            <controls:PageHeader.Actions>
                 <!-- How much of each row to draw. It sits with the list it reshapes rather than in
                      Settings, because it is a way of reading this screen and gets changed while
                      reading it. Presentation only: every row is offered in both views, ticks the
                      same checkbox and removes the same thing. What differs is how much of the row
                      is on screen and how much is one click inside it. -->
-                <StackPanel Grid.Column="1"
-                            Orientation="Horizontal"
+                <StackPanel Orientation="Horizontal"
                             Spacing="16"
                             VerticalAlignment="Center">
                     <!-- A provider whose toolchain is absent has nothing to reclaim and nothing to
@@ -363,204 +360,204 @@
                         </ComboBox>
                     </StackPanel>
                 </StackPanel>
-            </Grid>
+            </controls:PageHeader.Actions>
+        </controls:PageHeader>
 
-            <!-- §7: free space, prominently. It is the only number the user came for. -->
-            <Border Style="{StaticResource CardStyle}">
-                <Grid ColumnSpacing="28" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
+        <!-- §7: free space, prominently. It is the only number the user came for. -->
+        <Border Grid.Row="1" Style="{StaticResource CardStyle}">
+            <Grid ColumnSpacing="28" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
 
-                    <StackPanel Grid.Row="0" Grid.Column="0" Spacing="{StaticResource ControlGap}">
-                        <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
-                            <TextBlock Text="{x:Bind ViewModel.FreeSpaceNowLabel, Mode=OneWay}"
-                                       Style="{StaticResource HeroFigure}" />
-                            <TextBlock Text="{x:Bind ViewModel.CapacityLabel}"
-                                       Style="{StaticResource SecondaryText}"
-                                       VerticalAlignment="Bottom"
-                                       Margin="{StaticResource HeroFigureBaselineOffset}" />
-
-                            <!-- The space the clean under way has given back, counted up as each
-                                 row's run finishes, beside the free space it is going into. Only
-                                 while a clean runs: once it ends, the card states the same figure
-                                 as what Deguffer removed. -->
-                            <StackPanel Orientation="Horizontal"
-                                        Spacing="{StaticResource ControlGap}"
-                                        Padding="16,0,0,0"
-                                        Margin="{StaticResource HeroFigureBaselineOffset}"
-                                        VerticalAlignment="Bottom"
-                                        Visibility="{x:Bind ViewModel.IsCleaning, Mode=OneWay}">
-                                <TextBlock Text="{x:Bind ViewModel.CleanProgress.RemovedSoFarLabel, Mode=OneWay}"
-                                           Style="{StaticResource Figure}" />
-                                <TextBlock Text="removed so far"
-                                           Style="{StaticResource SecondaryText}"
-                                           VerticalAlignment="Bottom"
-                                           Margin="{StaticResource FigureBaselineOffset}" />
-                            </StackPanel>
-                        </StackPanel>
-
-                        <!-- How full the disk is, at a glance: 40 GB free means nothing until you
-                             know whether the volume is 256 GB or 4 TB. The figures beside it say
-                             the same thing in words, so nothing is lost if the bar cannot be seen.
-                             During a clean it drains as the disk gives the space back. -->
-                        <controls:FillBar Value="{x:Bind ViewModel.UsedPercent, Mode=OneWay}"
-                                          Height="6" />
-
-                        <!-- §7.6: a drive that is filling wants a clean, and one that is failing
-                             wants a backup first, so a drive of concern is named beside its free
-                             space. Only from what Health last read: nothing here asks a drive
-                             anything, so the bar stays closed until Health has been opened. The
-                             title states the verdict in words, so the severity colour is not
-                             needed to read it (§6.5). -->
-                        <InfoBar IsOpen="{x:Bind ViewModel.DriveHealth.HasConcern, Mode=OneWay}"
-                                 IsClosable="False"
-                                 Severity="{x:Bind ViewModel.DriveHealth.Severity, Mode=OneWay}"
-                                 Title="{x:Bind ViewModel.DriveHealth.Title, Mode=OneWay}"
-                                 Message="{x:Bind ViewModel.DriveHealth.Text, Mode=OneWay}"
-                                 AutomationProperties.Name="Drive health" />
-                    </StackPanel>
-
-                    <!-- §5.4: the two numbers are reported separately and labelled distinctly. They
-                         disagree whenever anything else on the machine writes during the run, and
-                         merging them into one figure is how a user stops trusting the tool. -->
-                    <StackPanel x:Name="RunFiguresPanel"
-                                Grid.Row="0"
-                                Grid.Column="1"
-                                Orientation="Horizontal"
-                                Spacing="28"
-                                VerticalAlignment="Center"
-                                Visibility="{x:Bind ViewModel.HasRunResult, Mode=OneWay}">
-                        <Border Width="1"
-                                Background="{ThemeResource DividerStrokeColorDefaultBrush}"
-                                VerticalAlignment="Stretch" />
-
-                        <StackPanel Spacing="{StaticResource LabelGap}" VerticalAlignment="Center">
-                            <TextBlock Text="Removed by Deguffer" Style="{StaticResource FieldLabel}" />
-                            <TextBlock Text="{x:Bind ViewModel.RemovedLabel, Mode=OneWay}"
-                                       Style="{StaticResource Figure}" />
-                        </StackPanel>
-
-                        <StackPanel Spacing="{StaticResource LabelGap}" VerticalAlignment="Center">
-                            <TextBlock Text="Free space change" Style="{StaticResource FieldLabel}" />
-                            <TextBlock Text="{x:Bind ViewModel.FreeSpaceChangeLabel, Mode=OneWay}"
-                                       Style="{StaticResource Figure}" />
-                        </StackPanel>
-
-                        <!-- A request rather than a result: the sync app releases these after the run,
-                             so the free space change beside it may not include them yet. -->
-                        <StackPanel Spacing="{StaticResource LabelGap}"
-                                    VerticalAlignment="Center"
-                                    Visibility="{x:Bind ViewModel.HasRequested, Mode=OneWay}"
-                                    ToolTipService.ToolTip="Local copies of cloud files your sync app was asked to release. It does that in the background, so free space can keep growing after the clean.">
-                            <TextBlock Text="Asked to release" Style="{StaticResource FieldLabel}" />
-                            <TextBlock Text="{x:Bind ViewModel.RequestedLabel, Mode=OneWay}"
-                                       Style="{StaticResource Figure}" />
-                        </StackPanel>
-
-                        <!-- Nothing has gone yet: the program removes these the next time it starts,
-                             so the free space change beside it does not include them. -->
-                        <StackPanel Spacing="{StaticResource LabelGap}"
-                                    VerticalAlignment="Center"
-                                    Visibility="{x:Bind ViewModel.HasScheduled, Mode=OneWay}"
-                                    ToolTipService.ToolTip="Marked for removal by the program that owns them. It removes them the next time it starts, so free space grows then rather than now.">
-                            <TextBlock Text="Removed at next start" Style="{StaticResource FieldLabel}" />
-                            <TextBlock Text="{x:Bind ViewModel.ScheduledLabel, Mode=OneWay}"
-                                       Style="{StaticResource Figure}" />
-                        </StackPanel>
-                    </StackPanel>
-
-                    <!-- §5.6's verdict on the run those two figures describe, and it stays as long
-                         as they do. The info bar below cannot hold it: a clean re-plans the list
-                         immediately afterwards, and every provider that scan checks reports a line
-                         of its own into that bar. A verdict there is gone before it is read.
-
-                         The gap above it is this element's margin rather than the grid's
-                         RowSpacing, because row spacing is a property of the rows: it stands
-                         whether or not anything is in them, and before the first clean of a session
-                         that is empty space under the capacity bar. -->
-                    <StackPanel x:Name="RunVerdictPanel"
-                                Grid.Row="1"
-                                Grid.Column="0"
-                                Grid.ColumnSpan="2"
-                                Margin="{StaticResource RegionGapAbove}"
-                                Spacing="{StaticResource ControlGap}"
-                                Visibility="{x:Bind ViewModel.HasRunResult, Mode=OneWay}">
-
-                        <TextBlock Text="{x:Bind ViewModel.RunStatement, Mode=OneWay}"
-                                   Style="{x:Bind ViewModel.RunVerificationFailed, Mode=OneWay, Converter={StaticResource RunStatementStyle}}" />
-
-                        <!-- What the sentence above is about, named. When it asks the user to report
-                             a protected path that did not survive, this is the only thing on the
-                             screen that says which path, why it was protected, and what was found
-                             in its place — and a request to report a fault with no way to state it
-                             is a dead end. -->
-                        <views:VerificationCheckList Checks="{x:Bind ViewModel.RunVerificationNotes}"
-                                                    Visibility="{x:Bind ViewModel.HasRunVerificationNotes, Mode=OneWay}" />
-
-                        <!-- The run written out for a GitHub issue. The sentence above can ask the
-                             user to report a fault, and copying the paths above by hand loses which
-                             row each belonged to, what each step did and the build it came from. -->
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <HyperlinkButton x:Name="CopyRunDiagnosticsLink"
-                                             Content="Copy diagnostic information"
-                                             Padding="0"
-                                             AutomationProperties.HelpText="Copies a report of this clean to the clipboard, with your user folder hidden, to paste into a GitHub issue."
-                                             Click="OnCopyRunDiagnostics" />
-                            <TextBlock x:Name="CopyRunDiagnosticsResult"
-                                       VerticalAlignment="Center"
-                                       Style="{StaticResource SecondaryText}"
-                                       AutomationProperties.LiveSetting="Polite" />
-                        </StackPanel>
-                    </StackPanel>
-
-                    <!-- Windows' own retrim, offered where a clean freed a lot on a thin, virtual or
-                         solid-state drive, whose storage learns the space is free only when Windows
-                         trims it. Its own row rather than part of the verdict above, because a restart
-                         as administrator opens on this row with no clean behind it. Offered, never
-                         run unasked, and each result is Windows' own answer. -->
-                    <StackPanel x:Name="RetrimPanel"
-                                Grid.Row="2"
-                                Grid.Column="0"
-                                Grid.ColumnSpan="2"
-                                Margin="{StaticResource RegionGapAbove}"
-                                Spacing="{StaticResource ControlGap}"
-                                Visibility="{x:Bind ViewModel.Retrim.IsShown, Mode=OneWay}">
-
-                        <TextBlock Text="{x:Bind ViewModel.Retrim.OfferText, Mode=OneWay}"
+                <StackPanel Grid.Row="0" Grid.Column="0" Spacing="{StaticResource ControlGap}">
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
+                        <TextBlock Text="{x:Bind ViewModel.FreeSpaceNowLabel, Mode=OneWay}"
+                                   Style="{StaticResource HeroFigure}" />
+                        <TextBlock Text="{x:Bind ViewModel.CapacityLabel}"
                                    Style="{StaticResource SecondaryText}"
-                                   Visibility="{x:Bind ViewModel.Retrim.IsOffered, Mode=OneWay}" />
+                                   VerticalAlignment="Bottom"
+                                   Margin="{StaticResource HeroFigureBaselineOffset}" />
 
-                        <Button x:Name="RetrimButton"
-                                Content="{x:Bind ViewModel.Retrim.ActionLabel, Mode=OneWay}"
-                                Command="{x:Bind ViewModel.Retrim.RetrimCommand}"
-                                Visibility="{x:Bind ViewModel.Retrim.IsOffered, Mode=OneWay}" />
-
+                        <!-- The space the clean under way has given back, counted up as each
+                             row's run finishes, beside the free space it is going into. Only
+                             while a clean runs: once it ends, the card states the same figure
+                             as what Deguffer removed. -->
                         <StackPanel Orientation="Horizontal"
                                     Spacing="{StaticResource ControlGap}"
-                                    Visibility="{x:Bind ViewModel.Retrim.IsRetrimming, Mode=OneWay}">
-                            <ProgressRing IsActive="{x:Bind ViewModel.Retrim.IsRetrimming, Mode=OneWay}"
-                                          Width="16"
-                                          Height="16"
-                                          AutomationProperties.AccessibilityView="Raw" />
-                            <TextBlock Text="{x:Bind ViewModel.Retrim.Underway, Mode=OneWay}"
+                                    Padding="16,0,0,0"
+                                    Margin="{StaticResource HeroFigureBaselineOffset}"
+                                    VerticalAlignment="Bottom"
+                                    Visibility="{x:Bind ViewModel.IsCleaning, Mode=OneWay}">
+                            <TextBlock Text="{x:Bind ViewModel.CleanProgress.RemovedSoFarLabel, Mode=OneWay}"
+                                       Style="{StaticResource Figure}" />
+                            <TextBlock Text="removed so far"
                                        Style="{StaticResource SecondaryText}"
-                                       VerticalAlignment="Center"
-                                       AutomationProperties.LiveSetting="Polite" />
+                                       VerticalAlignment="Bottom"
+                                       Margin="{StaticResource FigureBaselineOffset}" />
                         </StackPanel>
-
-                        <ItemsControl x:Name="RetrimResults"
-                                      ItemsSource="{x:Bind ViewModel.Retrim.Results}"
-                                      AutomationProperties.LiveSetting="Polite">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="x:String">
-                                    <TextBlock Text="{x:Bind}" Style="{StaticResource SecondaryText}" />
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
                     </StackPanel>
-                </Grid>
-            </Border>
-        </StackPanel>
 
-        <Grid Grid.Row="1" ColumnSpacing="16" ColumnDefinitions="*,Auto">
+                    <!-- How full the disk is, at a glance: 40 GB free means nothing until you
+                         know whether the volume is 256 GB or 4 TB. The figures beside it say
+                         the same thing in words, so nothing is lost if the bar cannot be seen.
+                         During a clean it drains as the disk gives the space back. -->
+                    <controls:FillBar Value="{x:Bind ViewModel.UsedPercent, Mode=OneWay}"
+                                      Height="6" />
+
+                    <!-- §7.6: a drive that is filling wants a clean, and one that is failing
+                         wants a backup first, so a drive of concern is named beside its free
+                         space. Only from what Health last read: nothing here asks a drive
+                         anything, so the bar stays closed until Health has been opened. The
+                         title states the verdict in words, so the severity colour is not
+                         needed to read it (§6.5). -->
+                    <InfoBar IsOpen="{x:Bind ViewModel.DriveHealth.HasConcern, Mode=OneWay}"
+                             IsClosable="False"
+                             Severity="{x:Bind ViewModel.DriveHealth.Severity, Mode=OneWay}"
+                             Title="{x:Bind ViewModel.DriveHealth.Title, Mode=OneWay}"
+                             Message="{x:Bind ViewModel.DriveHealth.Text, Mode=OneWay}"
+                             AutomationProperties.Name="Drive health" />
+                </StackPanel>
+
+                <!-- §5.4: the two numbers are reported separately and labelled distinctly. They
+                     disagree whenever anything else on the machine writes during the run, and
+                     merging them into one figure is how a user stops trusting the tool. -->
+                <StackPanel x:Name="RunFiguresPanel"
+                            Grid.Row="0"
+                            Grid.Column="1"
+                            Orientation="Horizontal"
+                            Spacing="28"
+                            VerticalAlignment="Center"
+                            Visibility="{x:Bind ViewModel.HasRunResult, Mode=OneWay}">
+                    <Border Width="1"
+                            Background="{ThemeResource DividerStrokeColorDefaultBrush}"
+                            VerticalAlignment="Stretch" />
+
+                    <StackPanel Spacing="{StaticResource LabelGap}" VerticalAlignment="Center">
+                        <TextBlock Text="Removed by Deguffer" Style="{StaticResource FieldLabel}" />
+                        <TextBlock Text="{x:Bind ViewModel.RemovedLabel, Mode=OneWay}"
+                                   Style="{StaticResource Figure}" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="{StaticResource LabelGap}" VerticalAlignment="Center">
+                        <TextBlock Text="Free space change" Style="{StaticResource FieldLabel}" />
+                        <TextBlock Text="{x:Bind ViewModel.FreeSpaceChangeLabel, Mode=OneWay}"
+                                   Style="{StaticResource Figure}" />
+                    </StackPanel>
+
+                    <!-- A request rather than a result: the sync app releases these after the run,
+                         so the free space change beside it may not include them yet. -->
+                    <StackPanel Spacing="{StaticResource LabelGap}"
+                                VerticalAlignment="Center"
+                                Visibility="{x:Bind ViewModel.HasRequested, Mode=OneWay}"
+                                ToolTipService.ToolTip="Local copies of cloud files your sync app was asked to release. It does that in the background, so free space can keep growing after the clean.">
+                        <TextBlock Text="Asked to release" Style="{StaticResource FieldLabel}" />
+                        <TextBlock Text="{x:Bind ViewModel.RequestedLabel, Mode=OneWay}"
+                                   Style="{StaticResource Figure}" />
+                    </StackPanel>
+
+                    <!-- Nothing has gone yet: the program removes these the next time it starts,
+                         so the free space change beside it does not include them. -->
+                    <StackPanel Spacing="{StaticResource LabelGap}"
+                                VerticalAlignment="Center"
+                                Visibility="{x:Bind ViewModel.HasScheduled, Mode=OneWay}"
+                                ToolTipService.ToolTip="Marked for removal by the program that owns them. It removes them the next time it starts, so free space grows then rather than now.">
+                        <TextBlock Text="Removed at next start" Style="{StaticResource FieldLabel}" />
+                        <TextBlock Text="{x:Bind ViewModel.ScheduledLabel, Mode=OneWay}"
+                                   Style="{StaticResource Figure}" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- §5.6's verdict on the run those two figures describe, and it stays as long
+                     as they do. The info bar below cannot hold it: a clean re-plans the list
+                     immediately afterwards, and every provider that scan checks reports a line
+                     of its own into that bar. A verdict there is gone before it is read.
+
+                     The gap above it is this element's margin rather than the grid's
+                     RowSpacing, because row spacing is a property of the rows: it stands
+                     whether or not anything is in them, and before the first clean of a session
+                     that is empty space under the capacity bar. -->
+                <StackPanel x:Name="RunVerdictPanel"
+                            Grid.Row="1"
+                            Grid.Column="0"
+                            Grid.ColumnSpan="2"
+                            Margin="{StaticResource RegionGapAbove}"
+                            Spacing="{StaticResource ControlGap}"
+                            Visibility="{x:Bind ViewModel.HasRunResult, Mode=OneWay}">
+
+                    <TextBlock Text="{x:Bind ViewModel.RunStatement, Mode=OneWay}"
+                               Style="{x:Bind ViewModel.RunVerificationFailed, Mode=OneWay, Converter={StaticResource RunStatementStyle}}" />
+
+                    <!-- What the sentence above is about, named. When it asks the user to report
+                         a protected path that did not survive, this is the only thing on the
+                         screen that says which path, why it was protected, and what was found
+                         in its place — and a request to report a fault with no way to state it
+                         is a dead end. -->
+                    <views:VerificationCheckList Checks="{x:Bind ViewModel.RunVerificationNotes}"
+                                                Visibility="{x:Bind ViewModel.HasRunVerificationNotes, Mode=OneWay}" />
+
+                    <!-- The run written out for a GitHub issue. The sentence above can ask the
+                         user to report a fault, and copying the paths above by hand loses which
+                         row each belonged to, what each step did and the build it came from. -->
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <HyperlinkButton x:Name="CopyRunDiagnosticsLink"
+                                         Content="Copy diagnostic information"
+                                         Padding="0"
+                                         AutomationProperties.HelpText="Copies a report of this clean to the clipboard, with your user folder hidden, to paste into a GitHub issue."
+                                         Click="OnCopyRunDiagnostics" />
+                        <TextBlock x:Name="CopyRunDiagnosticsResult"
+                                   VerticalAlignment="Center"
+                                   Style="{StaticResource SecondaryText}"
+                                   AutomationProperties.LiveSetting="Polite" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Windows' own retrim, offered where a clean freed a lot on a thin, virtual or
+                     solid-state drive, whose storage learns the space is free only when Windows
+                     trims it. Its own row rather than part of the verdict above, because a restart
+                     as administrator opens on this row with no clean behind it. Offered, never
+                     run unasked, and each result is Windows' own answer. -->
+                <StackPanel x:Name="RetrimPanel"
+                            Grid.Row="2"
+                            Grid.Column="0"
+                            Grid.ColumnSpan="2"
+                            Margin="{StaticResource RegionGapAbove}"
+                            Spacing="{StaticResource ControlGap}"
+                            Visibility="{x:Bind ViewModel.Retrim.IsShown, Mode=OneWay}">
+
+                    <TextBlock Text="{x:Bind ViewModel.Retrim.OfferText, Mode=OneWay}"
+                               Style="{StaticResource SecondaryText}"
+                               Visibility="{x:Bind ViewModel.Retrim.IsOffered, Mode=OneWay}" />
+
+                    <Button x:Name="RetrimButton"
+                            Content="{x:Bind ViewModel.Retrim.ActionLabel, Mode=OneWay}"
+                            Command="{x:Bind ViewModel.Retrim.RetrimCommand}"
+                            Visibility="{x:Bind ViewModel.Retrim.IsOffered, Mode=OneWay}" />
+
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="{StaticResource ControlGap}"
+                                Visibility="{x:Bind ViewModel.Retrim.IsRetrimming, Mode=OneWay}">
+                        <ProgressRing IsActive="{x:Bind ViewModel.Retrim.IsRetrimming, Mode=OneWay}"
+                                      Width="16"
+                                      Height="16"
+                                      AutomationProperties.AccessibilityView="Raw" />
+                        <TextBlock Text="{x:Bind ViewModel.Retrim.Underway, Mode=OneWay}"
+                                   Style="{StaticResource SecondaryText}"
+                                   VerticalAlignment="Center"
+                                   AutomationProperties.LiveSetting="Polite" />
+                    </StackPanel>
+
+                    <ItemsControl x:Name="RetrimResults"
+                                  ItemsSource="{x:Bind ViewModel.Retrim.Results}"
+                                  AutomationProperties.LiveSetting="Polite">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="x:String">
+                                <TextBlock Text="{x:Bind}" Style="{StaticResource SecondaryText}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="2" ColumnSpacing="16" ColumnDefinitions="*,Auto">
             <!-- This line carries a failed §5.6 verification — the most safety-critical string in the
                  app. An InfoBar rather than plain text so it is distinguishable from routine progress by
                  icon and severity, not only by reading to the end of it, and so it is announced as a
@@ -629,7 +626,7 @@
         <!-- One row per named cause (§7), in the order chosen above, sharing a single surface.
              Carding every row individually produced a column of identical boxes with no sense of
              a list; hairline separators inside one card read as one thing to scan down. -->
-        <Border Grid.Row="2" Style="{StaticResource CardStyle}" Padding="0">
+        <Border Grid.Row="3" Style="{StaticResource CardStyle}" Padding="0">
             <Grid>
                 <!-- Collapsed rather than removed while a row's items are listed, so the rows come
                      back scrolled to where the reader left them. -->
@@ -681,7 +678,7 @@
 
         <!-- §7: the primary button scans and removes nothing. Deleting is a separate, deliberate
              second step, so Scan carries the accent and Clean does not. -->
-        <Grid Grid.Row="3" ColumnSpacing="12" Padding="0,4,0,20" ColumnDefinitions="Auto,*,Auto">
+        <Grid Grid.Row="4" ColumnSpacing="12" Padding="0,4,0,0" ColumnDefinitions="Auto,*,Auto">
 
             <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
                 <ProgressRing IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
@@ -694,11 +691,11 @@
             </StackPanel>
 
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                <!-- §5.5's fallback note diagnoses a slow scan; this is the remedy beside it.
-                     Offered from the start, so an elevated preview is not reachable only through
-                     the unelevated one it replaces, and hidden once a preview has shown that
-                     elevating would not help — so it never offers administrator rights for a
-                     problem they cannot fix. The wording follows the same state. -->
+                <!-- §5.5's remedy for a slow scan, and a way to scan, so it sits with Scan. Offered
+                     from the start, so an elevated preview is not reachable only through the
+                     unelevated one it replaces, and hidden once a preview has shown that elevating
+                     would not help, so it never offers administrator rights for a problem they
+                     cannot fix. The wording follows the same state. -->
                 <Button Content="{x:Bind ViewModel.ElevateLabel, Mode=OneWay}" Style="{StaticResource ElevateButtonStyle}"
                         Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
                         Command="{x:Bind ViewModel.ElevateAndRescanCommand}"

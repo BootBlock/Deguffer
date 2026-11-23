@@ -12,12 +12,15 @@ namespace Deguffer.Core.Tests;
 ///
 /// <para>A one-word label cannot say what its page is for, so every item states its question as
 /// help text, for a screen reader, and as a tooltip that leads with the label, because the tooltip
-/// is the only name a collapsed item shows. The test holds the tooltip to the label and the help
-/// text, so the two cannot drift apart.</para>
+/// is the only name a collapsed item shows. The markup writes only the help text: the window builds
+/// the tooltip from the destination's name and that help text (<c>DestinationNames.RailTooltip</c>),
+/// so the two cannot drift apart.</para>
 ///
 /// <para>Each rail item is routed to its page by the item itself, so every item is named for the
 /// window's table and none carries a <c>Tag</c>: a string there is a second name that can drift from
-/// the first, and a page lookup on it needs a fallback that opens the wrong page in silence.</para>
+/// the first, and a page lookup on it needs a fallback that opens the wrong page in silence. For the
+/// same reason no item writes its own words: the window gives it its destination's name, the one the
+/// page's header and the window title read.</para>
 /// </summary>
 public sealed class DesignRailTests
 {
@@ -31,7 +34,7 @@ public sealed class DesignRailTests
         "Storage", "Explore", "Duplicates", "Health",
         Separator,
         HeaderMark + "Programs",
-        "Installed apps", "Startup", "Memory",
+        "InstalledApps", "Startup", "Memory",
     ];
 
     private static readonly string[] FooterOrder = ["Settings", "About"];
@@ -53,22 +56,22 @@ public sealed class DesignRailTests
         {
             Assert.NotNull(item.Attributes().SingleOrDefault(attribute => attribute.Name.LocalName == "Name"));
             Assert.Null(item.Attribute("Tag"));
+            Assert.Null(item.Attribute("Content"));
         });
     }
 
     [Fact]
-    public void EveryRailItemStatesItsQuestionAsHelpTextAndATooltipLedByItsLabel()
+    public void EveryRailItemStatesItsQuestionAsHelpTextAndLeavesItsTooltipToTheWindow()
     {
         Assert.All(Items(), item =>
         {
-            var label = item.Attribute("Content")?.Value ?? "";
+            var destination = item.Attributes().Single(attribute => attribute.Name.LocalName == "Name").Value[..^"Item".Length];
             var help = ShellMarkup.Literal(item, "AutomationProperties.HelpText");
-            var tooltip = ShellMarkup.Literal(item, "ToolTipService.ToolTip");
 
             Assert.NotNull(help);
-            Assert.False(string.IsNullOrWhiteSpace(help), $"{label} has blank help text.");
-            Assert.NotEqual(label, help, StringComparer.OrdinalIgnoreCase);
-            Assert.Equal($"{label}: {char.ToLowerInvariant(help[0])}{help[1..]}", tooltip);
+            Assert.False(string.IsNullOrWhiteSpace(help), $"{destination} has blank help text.");
+            Assert.NotEqual(destination, help.Replace(" ", "", StringComparison.Ordinal), StringComparer.OrdinalIgnoreCase);
+            Assert.Null(item.Attribute("ToolTipService.ToolTip"));
         });
     }
 
@@ -81,7 +84,8 @@ public sealed class DesignRailTests
             .Elements()
             .Select(entry => entry.Name.LocalName switch
             {
-                "NavigationViewItem" => entry.Attribute("Content")?.Value ?? "(unnamed)",
+                "NavigationViewItem" => entry.Attributes().SingleOrDefault(attribute => attribute.Name.LocalName == "Name")?.Value is { } name
+                    && name.EndsWith("Item", StringComparison.Ordinal) ? name[..^"Item".Length] : "(unnamed)",
                 "NavigationViewItemSeparator" => Separator,
                 "NavigationViewItemHeader" => HeaderMark + (entry.Attribute("Content")?.Value ?? "(unnamed)"),
                 var other => other,

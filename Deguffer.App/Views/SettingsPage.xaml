@@ -9,625 +9,627 @@
     xmlns:configuration="using:Deguffer.Core.Configuration"
     Background="Transparent">
 
-    <ScrollViewer Padding="28,8,28,28">
-        <!-- Capped because these rows are a title and a sentence: run full-bleed on a wide window
-             and the control drifts so far from the label that they stop reading as one row. -->
-        <StackPanel Spacing="{StaticResource ControlGap}" MaxWidth="720" HorizontalAlignment="Left">
+    <Grid Padding="{StaticResource PagePadding}" RowSpacing="{StaticResource RegionGap}" RowDefinitions="Auto,*">
+        <controls:PageHeader Destination="Settings" />
 
-            <TextBlock Text="Settings" Style="{StaticResource PageTitle}" />
+        <ScrollViewer Grid.Row="1">
+            <!-- Capped because these rows are a title and a sentence: run full-bleed on a wide window
+                 and the control drifts so far from the label that they stop reading as one row. -->
+            <StackPanel Spacing="{StaticResource ControlGap}" MaxWidth="720" HorizontalAlignment="Left">
 
-            <InfoBar IsOpen="{x:Bind ViewModel.SaveFailed, Mode=OneWay}"
-                     IsClosable="False"
-                     Severity="Warning"
-                     Title="Not saved"
-                     Message="Your choice could not be written to disk, so it has not been applied. Check that %LOCALAPPDATA%\Deguffer is writable." />
+                <InfoBar IsOpen="{x:Bind ViewModel.SaveFailed, Mode=OneWay}"
+                         IsClosable="False"
+                         Severity="Warning"
+                         Title="Not saved"
+                         Message="Your choice could not be written to disk, so it has not been applied. Check that %LOCALAPPDATA%\Deguffer is writable." />
 
-            <TextBlock Text="Appearance" Style="{StaticResource GroupHeading}" Margin="{StaticResource RegionGapAbove}" />
+                <TextBlock Text="Appearance" Style="{StaticResource GroupHeading}" />
 
-            <views:SettingsRow Glyph="&#xE771;"
-                               Title="Theme"
-                               Description="Light, dark, or whatever Windows is set to.">
-                <views:SettingsRow.Control>
-                    <ComboBox SelectedIndex="{x:Bind ViewModel.ThemeIndex, Mode=TwoWay}"
-                              MinWidth="150"
-                              AutomationProperties.Name="Theme">
-                        <ComboBoxItem Content="Use system setting" />
-                        <ComboBoxItem Content="Light" />
-                        <ComboBoxItem Content="Dark" />
-                    </ComboBox>
-                </views:SettingsRow.Control>
-            </views:SettingsRow>
+                <views:SettingsRow Glyph="&#xE771;"
+                                   Title="Theme"
+                                   Description="Light, dark, or whatever Windows is set to.">
+                    <views:SettingsRow.Control>
+                        <ComboBox SelectedIndex="{x:Bind ViewModel.ThemeIndex, Mode=TwoWay}"
+                                  MinWidth="150"
+                                  AutomationProperties.Name="Theme">
+                            <ComboBoxItem Content="Use system setting" />
+                            <ComboBoxItem Content="Light" />
+                            <ComboBoxItem Content="Dark" />
+                        </ComboBox>
+                    </views:SettingsRow.Control>
+                </views:SettingsRow>
 
-            <!-- §6.5: the backdrop is decoration, so switching it off is a legitimate preference
-                 and costs the user nothing. High contrast disables it regardless, which the
-                 description says rather than leaving the toggle looking broken. -->
-            <views:SettingsRow Glyph="&#xE790;"
-                               Title="Translucent background"
-                               Description="Blurs the desktop behind the window. Always off in high contrast, and Windows drops it on battery saver or over Remote Desktop.">
-                <views:SettingsRow.Control>
-                    <ToggleSwitch IsOn="{x:Bind ViewModel.BackdropEnabled, Mode=TwoWay}"
-                                  AutomationProperties.Name="Translucent background" />
-                </views:SettingsRow.Control>
-            </views:SettingsRow>
+                <!-- §6.5: the backdrop is decoration, so switching it off is a legitimate preference
+                     and costs the user nothing. High contrast disables it regardless, which the
+                     description says rather than leaving the toggle looking broken. -->
+                <views:SettingsRow Glyph="&#xE790;"
+                                   Title="Translucent background"
+                                   Description="Blurs the desktop behind the window. Always off in high contrast, and Windows drops it on battery saver or over Remote Desktop.">
+                    <views:SettingsRow.Control>
+                        <ToggleSwitch IsOn="{x:Bind ViewModel.BackdropEnabled, Mode=TwoWay}"
+                                      AutomationProperties.Name="Translucent background" />
+                    </views:SettingsRow.Control>
+                </views:SettingsRow>
 
-            <!-- Indexed against ExploreSpacing. Both pages that draw a treemap read it as they come
-                 back on screen, so it takes effect on the picture already drawn, with no rescan. -->
-            <views:SettingsRow Glyph="&#xE80A;"
-                               Title="Treemap spacing"
-                               Description="How much room a treemap leaves round each folder, with the folder's name across its top. More room makes folders easier to tell apart and leaves less for what is in them.">
-                <views:SettingsRow.Control>
-                    <ComboBox SelectedIndex="{x:Bind ViewModel.TreemapSpacingIndex, Mode=TwoWay}"
-                              MinWidth="150"
-                              AutomationProperties.Name="Treemap spacing">
-                        <ComboBoxItem Content="Dense" />
-                        <ComboBoxItem Content="Comfortable" />
-                        <ComboBoxItem Content="Spacious" />
-                    </ComboBox>
-                </views:SettingsRow.Control>
-            </views:SettingsRow>
+                <!-- Indexed against ExploreSpacing. Both pages that draw a treemap read it as they come
+                     back on screen, so it takes effect on the picture already drawn, with no rescan. -->
+                <views:SettingsRow Glyph="&#xE80A;"
+                                   Title="Treemap spacing"
+                                   Description="How much room a treemap leaves round each folder, with the folder's name across its top. More room makes folders easier to tell apart and leaves less for what is in them.">
+                    <views:SettingsRow.Control>
+                        <ComboBox SelectedIndex="{x:Bind ViewModel.TreemapSpacingIndex, Mode=TwoWay}"
+                                  MinWidth="150"
+                                  AutomationProperties.Name="Treemap spacing">
+                            <ComboBoxItem Content="Dense" />
+                            <ComboBoxItem Content="Comfortable" />
+                            <ComboBoxItem Content="Spacious" />
+                        </ComboBox>
+                    </views:SettingsRow.Control>
+                </views:SettingsRow>
 
-            <!-- What the spacing above does, drawn as it is chosen, so the reader need not go to Explore
-                 to see it. The picture is invented and names no folder on the machine. -->
-            <controls:MapPreview x:Name="SpacingPreview" Height="180" />
+                <!-- What the spacing above does, drawn as it is chosen, so the reader need not go to Explore
+                     to see it. The picture is invented and names no folder on the machine. -->
+                <controls:MapPreview x:Name="SpacingPreview" Height="180" />
 
-            <TextBlock Text="Storage list" Style="{StaticResource GroupHeading}" Margin="{StaticResource RegionGapAbove}" />
+                <TextBlock Text="Storage list" Style="{StaticResource GroupHeading}" Margin="{StaticResource RegionGapAbove}" />
 
-            <!-- A clear location offers no decision, so it is hidden by default. Presentation only:
-                 every location is still scanned. The description names the rows it never hides,
-                 because six others measure zero without being clear at all. -->
-            <views:SettingsRow Glyph="&#xE71C;"
-                               Title="Show items that are already clear"
-                               Description="A location Deguffer has nothing left to reclaim from is hidden by default, as it offers nothing to decide. Switch this on to list them as well. Rows that could not be read, ones Deguffer did not look at, ones whose files are all too recent to touch, ones whose contents Windows would not let Deguffer remove, ones holding only items on your keep list, and ones holding only Outlook data files are always listed.">
-                <views:SettingsRow.Control>
-                    <ToggleSwitch IsOn="{x:Bind ViewModel.ShowAlreadyClear, Mode=TwoWay}"
-                                  AutomationProperties.Name="Show items that are already clear" />
-                </views:SettingsRow.Control>
-            </views:SettingsRow>
+                <!-- A clear location offers no decision, so it is hidden by default. Presentation only:
+                     every location is still scanned. The description names the rows it never hides,
+                     because six others measure zero without being clear at all. -->
+                <views:SettingsRow Glyph="&#xE71C;"
+                                   Title="Show items that are already clear"
+                                   Description="A location Deguffer has nothing left to reclaim from is hidden by default, as it offers nothing to decide. Switch this on to list them as well. Rows that could not be read, ones Deguffer did not look at, ones whose files are all too recent to touch, ones whose contents Windows would not let Deguffer remove, ones holding only items on your keep list, and ones holding only Outlook data files are always listed.">
+                    <views:SettingsRow.Control>
+                        <ToggleSwitch IsOn="{x:Bind ViewModel.ShowAlreadyClear, Mode=TwoWay}"
+                                      AutomationProperties.Name="Show items that are already clear" />
+                    </views:SettingsRow.Control>
+                </views:SettingsRow>
 
-            <views:SettingsRow Glyph="&#xE7E6;"
-                               Title="Follow the clean down the list"
-                               Description="While a clean runs, scroll to the location being cleaned and light it up.">
-                <views:SettingsRow.Control>
-                    <ToggleSwitch IsOn="{x:Bind ViewModel.SpotlightCleanedRow, Mode=TwoWay}"
-                                  AutomationProperties.Name="Follow the clean down the list" />
-                </views:SettingsRow.Control>
-            </views:SettingsRow>
+                <views:SettingsRow Glyph="&#xE7E6;"
+                                   Title="Follow the clean down the list"
+                                   Description="While a clean runs, scroll to the location being cleaned and light it up.">
+                    <views:SettingsRow.Control>
+                        <ToggleSwitch IsOn="{x:Bind ViewModel.SpotlightCleanedRow, Mode=TwoWay}"
+                                      AutomationProperties.Name="Follow the clean down the list" />
+                    </views:SettingsRow.Control>
+                </views:SettingsRow>
 
-            <TextBlock Text="Safety" Style="{StaticResource GroupHeading}" Margin="{StaticResource RegionGapAbove}" />
+                <TextBlock Text="Safety" Style="{StaticResource GroupHeading}" Margin="{StaticResource RegionGapAbove}" />
 
-            <views:SettingsRow Glyph="&#xE730;"
-                               Title="Confirm before cleaning"
-                               Description="Lists what is about to be removed and asks once more. Deleting cannot be undone — what Deguffer removes is gone outright.">
-                <views:SettingsRow.Control>
-                    <ToggleSwitch IsOn="{x:Bind ViewModel.ConfirmBeforeCleaning, Mode=TwoWay}"
-                                  AutomationProperties.Name="Confirm before cleaning" />
-                </views:SettingsRow.Control>
-            </views:SettingsRow>
+                <views:SettingsRow Glyph="&#xE730;"
+                                   Title="Confirm before cleaning"
+                                   Description="Lists what is about to be removed and asks once more. Deleting cannot be undone — what Deguffer removes is gone outright.">
+                    <views:SettingsRow.Control>
+                        <ToggleSwitch IsOn="{x:Bind ViewModel.ConfirmBeforeCleaning, Mode=TwoWay}"
+                                      AutomationProperties.Name="Confirm before cleaning" />
+                    </views:SettingsRow.Control>
+                </views:SettingsRow>
 
-            <!-- §7 makes the typed phrase Tier 3's own gate. Off by default: typing a name for
-                 every emptied Recycle Bin is transcription rather than deliberation, and a gate
-                 the user resents is one they learn to get past without reading. Switching it off
-                 does not make the row silent — the description says which confirmation it falls
-                 back to, because a safety setting whose real effect is unstated is worse than no
-                 setting. -->
-            <views:SettingsRow Glyph="&#xE765;"
-                               Title="Type a name to delete user data"
-                               Description="Logs, histories and Recycle Bins are user data, and removing them is permanent. Ask for the item's name to be typed out before deleting it. When this is off, they are covered by Confirm before cleaning instead.">
-                <views:SettingsRow.Control>
-                    <ToggleSwitch IsOn="{x:Bind ViewModel.RequireTypedConfirmation, Mode=TwoWay}"
-                                  AutomationProperties.Name="Type a name to delete user data" />
-                </views:SettingsRow.Control>
-            </views:SettingsRow>
+                <!-- §7 makes the typed phrase Tier 3's own gate. Off by default: typing a name for
+                     every emptied Recycle Bin is transcription rather than deliberation, and a gate
+                     the user resents is one they learn to get past without reading. Switching it off
+                     does not make the row silent — the description says which confirmation it falls
+                     back to, because a safety setting whose real effect is unstated is worse than no
+                     setting. -->
+                <views:SettingsRow Glyph="&#xE765;"
+                                   Title="Type a name to delete user data"
+                                   Description="Logs, histories and Recycle Bins are user data, and removing them is permanent. Ask for the item's name to be typed out before deleting it. When this is off, they are covered by Confirm before cleaning instead.">
+                    <views:SettingsRow.Control>
+                        <ToggleSwitch IsOn="{x:Bind ViewModel.RequireTypedConfirmation, Mode=TwoWay}"
+                                      AutomationProperties.Name="Type a name to delete user data" />
+                    </views:SettingsRow.Control>
+                </views:SettingsRow>
 
-            <!-- One of the two settings that change what gets deleted rather than how the window looks,
-                 and the only one that can make a plan smaller than the disk. §5.3 already refuses
-                 anything Windows is holding open; this covers the process that wrote a file,
-                 closed it, and will want it back within the hour. The description names the one
-                 case it cannot cover, because §5.1 leaves a tool's own clean deciding for itself
-                 what it removes — a guard whose gap is unstated is worse than no guard. -->
-            <views:SettingsRow Glyph="&#xE81C;"
-                               Title="Leave recently changed files alone"
-                               Description="A file written in the last few hours may still be in use, and nothing else about it says so. Set how many hours to leave such files alone, or 0 for none. A tool that clears its own cache is not covered: it decides for itself what it removes.">
-                <views:SettingsRow.Control>
-                    <NumberBox Value="{x:Bind ViewModel.KeepFilesChangedWithinHours, Mode=TwoWay}"
-                               Minimum="0"
-                               Maximum="{x:Bind ViewModel.MaximumKeepHours}"
-                               SmallChange="1"
-                               LargeChange="8"
-                               SpinButtonPlacementMode="Compact"
-                               ValidationMode="InvalidInputOverwritten"
-                               MinWidth="150"
-                               Header="Hours"
-                               AutomationProperties.Name="Hours to leave recently changed files alone" />
-                </views:SettingsRow.Control>
-            </views:SettingsRow>
+                <!-- One of the two settings that change what gets deleted rather than how the window looks,
+                     and the only one that can make a plan smaller than the disk. §5.3 already refuses
+                     anything Windows is holding open; this covers the process that wrote a file,
+                     closed it, and will want it back within the hour. The description names the one
+                     case it cannot cover, because §5.1 leaves a tool's own clean deciding for itself
+                     what it removes — a guard whose gap is unstated is worse than no guard. -->
+                <views:SettingsRow Glyph="&#xE81C;"
+                                   Title="Leave recently changed files alone"
+                                   Description="A file written in the last few hours may still be in use, and nothing else about it says so. Set how many hours to leave such files alone, or 0 for none. A tool that clears its own cache is not covered: it decides for itself what it removes.">
+                    <views:SettingsRow.Control>
+                        <NumberBox Value="{x:Bind ViewModel.KeepFilesChangedWithinHours, Mode=TwoWay}"
+                                   Minimum="0"
+                                   Maximum="{x:Bind ViewModel.MaximumKeepHours}"
+                                   SmallChange="1"
+                                   LargeChange="8"
+                                   SpinButtonPlacementMode="Compact"
+                                   ValidationMode="InvalidInputOverwritten"
+                                   MinWidth="150"
+                                   Header="Hours"
+                                   AutomationProperties.Name="Hours to leave recently changed files alone" />
+                    </views:SettingsRow.Control>
+                </views:SettingsRow>
 
-            <!-- The only box here whose lowest value removes a safety rule (§5.3): only age tells a
-                 live working file from an abandoned one, so zero comes with its consequence and the
-                 two protections that survive it written out. Seven days is what Disk Cleanup and
-                 Storage Sense apply. See AppPreferences.MinimumTemporaryFileAgeDays. -->
-            <views:SettingsRow Glyph="&#xE7B8;"
-                               Title="Only offer temporary files older than"
-                               Description="Windows and every program on it leave scratch files in the temporary folders and are meant to clear up afterwards. Set how long something must sit untouched before Deguffer offers it. Set 0 for no age limit, which offers everything however recently it was written — a file a program wrote seconds ago and still expects to find is then included, and age is the only thing that would have told them apart. Anything a running program is working in, or holds open, is left alone whatever this is set to.">
-                <views:SettingsRow.Control>
-                    <NumberBox Value="{x:Bind ViewModel.MinimumTemporaryFileAge, Mode=TwoWay}"
-                               Minimum="{x:Bind ViewModel.MinimumTemporaryFileAgeDays}"
-                               Maximum="{x:Bind ViewModel.MaximumTemporaryFileAgeDays}"
-                               SmallChange="1"
-                               LargeChange="7"
-                               SpinButtonPlacementMode="Compact"
-                               ValidationMode="InvalidInputOverwritten"
-                               MinWidth="150"
-                               Header="Days"
-                               AutomationProperties.Name="Days before a temporary file is offered" />
-                </views:SettingsRow.Control>
-            </views:SettingsRow>
+                <!-- The only box here whose lowest value removes a safety rule (§5.3): only age tells a
+                     live working file from an abandoned one, so zero comes with its consequence and the
+                     two protections that survive it written out. Seven days is what Disk Cleanup and
+                     Storage Sense apply. See AppPreferences.MinimumTemporaryFileAgeDays. -->
+                <views:SettingsRow Glyph="&#xE7B8;"
+                                   Title="Only offer temporary files older than"
+                                   Description="Windows and every program on it leave scratch files in the temporary folders and are meant to clear up afterwards. Set how long something must sit untouched before Deguffer offers it. Set 0 for no age limit, which offers everything however recently it was written — a file a program wrote seconds ago and still expects to find is then included, and age is the only thing that would have told them apart. Anything a running program is working in, or holds open, is left alone whatever this is set to.">
+                    <views:SettingsRow.Control>
+                        <NumberBox Value="{x:Bind ViewModel.MinimumTemporaryFileAge, Mode=TwoWay}"
+                                   Minimum="{x:Bind ViewModel.MinimumTemporaryFileAgeDays}"
+                                   Maximum="{x:Bind ViewModel.MaximumTemporaryFileAgeDays}"
+                                   SmallChange="1"
+                                   LargeChange="7"
+                                   SpinButtonPlacementMode="Compact"
+                                   ValidationMode="InvalidInputOverwritten"
+                                   MinWidth="150"
+                                   Header="Days"
+                                   AutomationProperties.Name="Days before a temporary file is offered" />
+                    </views:SettingsRow.Control>
+                </views:SettingsRow>
 
-            <!-- How, never what: both routes empty this account's own bin and no other, so §5.2 and
-                 §5.6 hold the same under either. The description states the trade (speed against an
-                 open Recycle Bin window that lags) and that the guard above overrides it. See
-                 AppPreferences.EmptyRecycleBinsDirectly. -->
-            <views:SettingsRow Glyph="&#xE74D;"
-                               Title="Empty Recycle Bins without Windows"
-                               Description="Deguffer normally asks Windows to empty a Recycle Bin, so an open Recycle Bin window and the desktop icon update straight away. That call is slow on a full bin, and slower the more it holds. Switch this on to remove the files directly instead, which is much faster but leaves Windows to notice in its own time. The same folder is emptied either way, and other accounts' bins are untouched by both. Leaving recently changed files alone always uses the direct route, as Windows cannot empty a bin partially.">
-                <views:SettingsRow.Control>
-                    <ToggleSwitch IsOn="{x:Bind ViewModel.EmptyRecycleBinsDirectly, Mode=TwoWay}"
-                                  AutomationProperties.Name="Empty Recycle Bins without Windows" />
-                </views:SettingsRow.Control>
-            </views:SettingsRow>
+                <!-- How, never what: both routes empty this account's own bin and no other, so §5.2 and
+                     §5.6 hold the same under either. The description states the trade (speed against an
+                     open Recycle Bin window that lags) and that the guard above overrides it. See
+                     AppPreferences.EmptyRecycleBinsDirectly. -->
+                <views:SettingsRow Glyph="&#xE74D;"
+                                   Title="Empty Recycle Bins without Windows"
+                                   Description="Deguffer normally asks Windows to empty a Recycle Bin, so an open Recycle Bin window and the desktop icon update straight away. That call is slow on a full bin, and slower the more it holds. Switch this on to remove the files directly instead, which is much faster but leaves Windows to notice in its own time. The same folder is emptied either way, and other accounts' bins are untouched by both. Leaving recently changed files alone always uses the direct route, as Windows cannot empty a bin partially.">
+                    <views:SettingsRow.Control>
+                        <ToggleSwitch IsOn="{x:Bind ViewModel.EmptyRecycleBinsDirectly, Mode=TwoWay}"
+                                      AutomationProperties.Name="Empty Recycle Bins without Windows" />
+                    </views:SettingsRow.Control>
+                </views:SettingsRow>
 
-            <!-- The age Deguffer asks Windows for when it trims File History, and a setting rather
-                 than a constant because it decides how much is destroyed permanently: a saved
-                 version is a snapshot of a file as it was, and nothing recreates one. 365 days is
-                 FH_RETENTION_AGE's own documented default, so an untouched install asks for what
-                 Windows would have done had a retention policy been enabled. The minimum is 1 and
-                 not 0 for a safety reason the description states: -cleanup 0 keeps only the newest
-                 version of files still in the protection scope, discarding every version of
-                 anything the user has since moved or deleted. -->
-            <views:SettingsRow Glyph="&#xE777;"
-                               Title="Keep File History versions for"
-                               Description="File History saves a copy of every protected file each time it changes, and is set never to delete an old one. Set how old a saved version has to be before Windows may drop it. Windows always keeps the newest copy of a file it is still protecting; everything older than this that it has superseded is gone for good.">
-                <views:SettingsRow.Control>
-                    <NumberBox Value="{x:Bind ViewModel.FileHistoryRetentionDays, Mode=TwoWay}"
-                               Minimum="{x:Bind ViewModel.MinimumFileHistoryRetentionDays}"
-                               Maximum="{x:Bind ViewModel.MaximumFileHistoryRetentionDays}"
-                               SmallChange="1"
-                               LargeChange="30"
-                               SpinButtonPlacementMode="Compact"
-                               ValidationMode="InvalidInputOverwritten"
-                               MinWidth="150"
-                               Header="Days"
-                               AutomationProperties.Name="Days to keep File History versions for" />
-                </views:SettingsRow.Control>
-            </views:SettingsRow>
+                <!-- The age Deguffer asks Windows for when it trims File History, and a setting rather
+                     than a constant because it decides how much is destroyed permanently: a saved
+                     version is a snapshot of a file as it was, and nothing recreates one. 365 days is
+                     FH_RETENTION_AGE's own documented default, so an untouched install asks for what
+                     Windows would have done had a retention policy been enabled. The minimum is 1 and
+                     not 0 for a safety reason the description states: -cleanup 0 keeps only the newest
+                     version of files still in the protection scope, discarding every version of
+                     anything the user has since moved or deleted. -->
+                <views:SettingsRow Glyph="&#xE777;"
+                                   Title="Keep File History versions for"
+                                   Description="File History saves a copy of every protected file each time it changes, and is set never to delete an old one. Set how old a saved version has to be before Windows may drop it. Windows always keeps the newest copy of a file it is still protecting; everything older than this that it has superseded is gone for good.">
+                    <views:SettingsRow.Control>
+                        <NumberBox Value="{x:Bind ViewModel.FileHistoryRetentionDays, Mode=TwoWay}"
+                                   Minimum="{x:Bind ViewModel.MinimumFileHistoryRetentionDays}"
+                                   Maximum="{x:Bind ViewModel.MaximumFileHistoryRetentionDays}"
+                                   SmallChange="1"
+                                   LargeChange="30"
+                                   SpinButtonPlacementMode="Compact"
+                                   ValidationMode="InvalidInputOverwritten"
+                                   MinWidth="150"
+                                   Header="Days"
+                                   AutomationProperties.Name="Days to keep File History versions for" />
+                    </views:SettingsRow.Control>
+                </views:SettingsRow>
 
-            <!-- The other setting on this page that changes what Deguffer will delete rather than
-                 how it looks, the guard above being the first. Stated as scope rather than as a
-                 preference, because an empty list is not a disabled feature — it is Deguffer having
-                 nowhere it is allowed to look. -->
-            <TextBlock Text="Source folders" Style="{StaticResource GroupHeading}" Margin="{StaticResource RegionGapAbove}" />
+                <!-- The other setting on this page that changes what Deguffer will delete rather than
+                     how it looks, the guard above being the first. Stated as scope rather than as a
+                     preference, because an empty list is not a disabled feature — it is Deguffer having
+                     nowhere it is allowed to look. -->
+                <TextBlock Text="Source folders" Style="{StaticResource GroupHeading}" Margin="{StaticResource RegionGapAbove}" />
 
-            <views:SettingsRow Glyph="&#xE8B7;"
-                               Title="Where to look for build output"
-                               Description="Deguffer looks inside these folders and nowhere else for build output it can recognise: .NET obj, the caches in a Visual Studio solution's .vs folder, Unity Library, an Unreal project's Intermediate and DerivedDataCache, Rust target, node_modules and Python virtual environments. It also offers the old file versions Git LFS keeps in the Git repositories there, through Git LFS's own prune. Nothing outside them is ever offered, even when it is plainly build output, and a project something is using is left alone. A folder does not have to hold your own code: a machine-learning or image-generation application installs outside your code folders, and the Python virtual environment it builds there is usually the largest one on the machine, so add that application's folder too if you want it considered.">
-                <views:SettingsRow.Control>
-                    <Button Content="Add folder…"
-                            Click="OnAddSourceRoot"
-                            AutomationProperties.Name="Add source folder" />
-                </views:SettingsRow.Control>
-            </views:SettingsRow>
+                <views:SettingsRow Glyph="&#xE8B7;"
+                                   Title="Where to look for build output"
+                                   Description="Deguffer looks inside these folders and nowhere else for build output it can recognise: .NET obj, the caches in a Visual Studio solution's .vs folder, Unity Library, an Unreal project's Intermediate and DerivedDataCache, Rust target, node_modules and Python virtual environments. It also offers the old file versions Git LFS keeps in the Git repositories there, through Git LFS's own prune. Nothing outside them is ever offered, even when it is plainly build output, and a project something is using is left alone. A folder does not have to hold your own code: a machine-learning or image-generation application installs outside your code folders, and the Python virtual environment it builds there is usually the largest one on the machine, so add that application's folder too if you want it considered.">
+                    <views:SettingsRow.Control>
+                        <Button Content="Add folder…"
+                                Click="OnAddSourceRoot"
+                                AutomationProperties.Name="Add source folder" />
+                    </views:SettingsRow.Control>
+                </views:SettingsRow>
 
-            <!-- A choice the picker allowed but Deguffer cannot use, such as a library. Said on this row
-                 because the list below it is where the reader looks for the folder they chose. -->
-            <InfoBar IsOpen="{x:Bind ViewModel.SourceRootNotOnDisk, Mode=OneWay}"
-                     IsClosable="False"
-                     Severity="Informational"
-                     Message="{x:Bind configuration:PickedFolder.NotOnDisk}" />
+                <!-- A choice the picker allowed but Deguffer cannot use, such as a library. Said on this row
+                     because the list below it is where the reader looks for the folder they chose. -->
+                <InfoBar IsOpen="{x:Bind ViewModel.SourceRootNotOnDisk, Mode=OneWay}"
+                         IsClosable="False"
+                         Severity="Informational"
+                         Message="{x:Bind configuration:PickedFolder.NotOnDisk}" />
 
-            <TextBlock Text="No source folders added, so Deguffer will not look for build output anywhere."
-                       Style="{StaticResource Caption}"
-                       TextWrapping="Wrap"
-                       Margin="4,0,0,0"
-                       Visibility="{x:Bind ViewModel.HasNoSourceRoots, Mode=OneWay}" />
-
-            <!-- Every list on this page is a repeater, so that ListAnimation can play its rows in and
-                 out: an ItemsControl's rows would appear and vanish at once. -->
-            <ItemsRepeater x:Name="SourceRootsList" ItemsSource="{x:Bind ViewModel.SourceRoots, Mode=OneWay}" Margin="0,4,0,0">
-                <ItemsRepeater.ItemTemplate>
-                    <DataTemplate x:DataType="configuration:SourceRoot">
-                        <Border Style="{StaticResource ListCardStyle}" Margin="0,0,0,4">
-                            <Grid ColumnSpacing="{StaticResource ControlGap}">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="{x:Bind Path}"
-                                               TextTrimming="CharacterEllipsis"
-                                               ToolTipService.ToolTip="{x:Bind Path}" />
-
-                                    <!-- A standing consent nobody can see is one nobody can withdraw. The
-                                         folder was approved for a drive whose contents are downloaded to
-                                         read them, so the row says so, and removing the folder is how the
-                                         answer is taken back. -->
-                                    <TextBlock Text="Cloud storage. You chose to let Deguffer search this, so reading it downloads the files in it."
-                                               Style="{StaticResource Caption}"
-                                               TextWrapping="Wrap"
-                                               Margin="0,4,0,0"
-                                               Visibility="{x:Bind RemoteStorageApproved}" />
-                                </StackPanel>
-
-                                <Button Grid.Column="1"
-                                        Content="Remove"
-                                        Tag="{x:Bind Path}"
-                                        Click="OnRemoveSourceRoot"
-                                        AutomationProperties.Name="Remove source folder" />
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ItemsRepeater.ItemTemplate>
-            </ItemsRepeater>
-
-            <!-- The second list that widens where Deguffer looks. An emulator run from its own folder
-                 records that folder nowhere Deguffer may rely on, so the user is the only source.
-                 Nothing is taken from a folder here unless the emulator's own settings file, or RetroArch's
-                 program, is in it. -->
-            <TextBlock Text="Emulator folders" Style="{StaticResource GroupHeading}" Margin="{StaticResource RegionGapAbove}" />
-
-            <views:SettingsRow Glyph="&#xE7FC;"
-                               Title="Where your emulators are installed"
-                               Description="Deguffer finds Cemu, Dolphin, PCSX2, DuckStation, PPSSPP, Ryujinx, Eden, Citron, yuzu, Azahar, Lime3DS and Citra where each keeps its data by default, and RetroArch where Steam installed it. Add the folder of a portable install here, and the folder of every RPCS3 and Vita3K install and any other RetroArch, which keep everything beside the program. Deguffer looks in each folder only for the emulator's own settings file or program, or the file that names PPSSPP's memory stick, and removes only the caches the emulator compiled and RetroArch's downloads, never saves, memory cards, firmware or games.">
-                <views:SettingsRow.Control>
-                    <Button Content="Add folder…"
-                            Click="OnAddEmulatorFolder"
-                            AutomationProperties.Name="Add emulator folder" />
-                </views:SettingsRow.Control>
-            </views:SettingsRow>
-
-            <!-- On this row for the reason the source folders give theirs. -->
-            <InfoBar IsOpen="{x:Bind ViewModel.EmulatorFolderNotOnDisk, Mode=OneWay}"
-                     IsClosable="False"
-                     Severity="Informational"
-                     Message="{x:Bind configuration:PickedFolder.NotOnDisk}" />
-
-            <TextBlock Text="No emulator folders added, so only each emulator's default location is looked in."
-                       Style="{StaticResource Caption}"
-                       TextWrapping="Wrap"
-                       Margin="4,0,0,0"
-                       Visibility="{x:Bind ViewModel.HasNoEmulatorFolders, Mode=OneWay}" />
-
-            <ItemsRepeater x:Name="EmulatorFoldersList" ItemsSource="{x:Bind ViewModel.EmulatorFolders, Mode=OneWay}" Margin="0,4,0,0">
-                <ItemsRepeater.ItemTemplate>
-                    <DataTemplate x:DataType="x:String">
-                        <Border Style="{StaticResource ListCardStyle}" Margin="0,0,0,4">
-                            <Grid ColumnSpacing="{StaticResource ControlGap}">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-
-                                <TextBlock Text="{x:Bind}"
-                                           VerticalAlignment="Center"
-                                           TextTrimming="CharacterEllipsis"
-                                           ToolTipService.ToolTip="{x:Bind}" />
-
-                                <Button Grid.Column="1"
-                                        Content="Remove"
-                                        Tag="{x:Bind}"
-                                        Click="OnRemoveEmulatorFolder"
-                                        AutomationProperties.Name="Remove emulator folder" />
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ItemsRepeater.ItemTemplate>
-            </ItemsRepeater>
-
-            <!-- The one setting on this page that only ever narrows what Deguffer deletes. Listed in
-                 full, including items no scan finds any more, so it never becomes a protection
-                 nobody can see. Items are added where they are seen, on the Storage page. -->
-            <TextBlock Text="Keep list" Style="{StaticResource GroupHeading}" Margin="{StaticResource RegionGapAbove}" />
-
-            <InfoBar IsOpen="{x:Bind ViewModel.KeepListUnreadable}"
-                     IsClosable="False"
-                     Severity="Warning"
-                     Title="Keep list not read"
-                     Message="Deguffer could not read keep.json in %LOCALAPPDATA%\Deguffer when it started, so nothing saved in it is kept this session, and no change made here is saved over it. Repair or remove that file, then restart Deguffer." />
-
-            <views:SettingsRow Glyph="&#xE718;"
-                               Title="Items Deguffer never offers"
-                               Description="Keep an item from its row's list of items on the Storage page. Deguffer leaves a kept item out of every clean, and every clean checks that it is still there. Only items Deguffer can recognise wherever they are stored can be kept: a browser build, a downloaded tooling release, or an application version the updater replaced." />
-
-            <TextBlock Text="Nothing is kept."
-                       Style="{StaticResource Caption}"
-                       TextWrapping="Wrap"
-                       Margin="4,0,0,0"
-                       Visibility="{x:Bind ViewModel.HasNoKeptItems, Mode=OneWay}" />
-
-            <!-- A repeater rather than an ItemsControl, because a keep list grows one entry per item
-                 kept and the items can number in the hundreds. It realises only the entries inside
-                 the page's scrolling viewport, and draws none of a list's selection chrome over a
-                 list that has nothing to select. -->
-            <ItemsRepeater x:Name="KeptItemsList" ItemsSource="{x:Bind ViewModel.KeptItems, Mode=OneWay}" Margin="0,4,0,0">
-                <ItemsRepeater.ItemTemplate>
-                    <DataTemplate x:DataType="configuration:KeptItem">
-                        <Border Style="{StaticResource ListCardStyle}" Margin="0,0,0,4">
-                            <Grid ColumnSpacing="{StaticResource ControlGap}">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-
-                                <StackPanel VerticalAlignment="Center" Spacing="1">
-                                    <TextBlock Text="{x:Bind Item.Name}"
-                                               TextTrimming="CharacterEllipsis"
-                                               ToolTipService.ToolTip="{x:Bind Item.Name}" />
-                                    <TextBlock Text="{x:Bind ProviderName}"
-                                               Style="{StaticResource Caption}"
-                                               TextTrimming="CharacterEllipsis" />
-                                </StackPanel>
-
-                                <Button Grid.Column="1"
-                                        Content="Stop keeping"
-                                        Tag="{x:Bind}"
-                                        Click="OnReleaseKeptItem"
-                                        AutomationProperties.Name="Stop keeping"
-                                        AutomationProperties.HelpText="{x:Bind Item.Name}" />
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ItemsRepeater.ItemTemplate>
-            </ItemsRepeater>
-
-            <!-- What Explore keeps of each scan of a whole drive, so the next scan can say what
-                 grew. It names the folders on the drive, so the user decides how long it stays:
-                 each one can be removed here, or all of them at once. -->
-            <TextBlock Text="Scan history" Style="{StaticResource GroupHeading}" Margin="{StaticResource RegionGapAbove}" />
-
-            <InfoBar IsOpen="{x:Bind History.RemoveFailed, Mode=OneWay}"
-                     IsClosable="False"
-                     Severity="Warning"
-                     Title="Not all removed"
-                     Message="Deguffer could not remove every summary. Something may be holding one of the files open. Try again in a moment." />
-
-            <views:SettingsRow Glyph="&#xE823;"
-                               Title="Summaries of earlier scans"
-                               Description="After each scan of a whole drive, Explore keeps the sizes of its largest folders and how full the drive was, on this computer only, so the next scan can show what grew. The latest 20 of each drive are kept.">
-                <views:SettingsRow.Control>
-                    <Button Content="Remove all"
-                            Click="OnRemoveAllScanSummaries"
-                            IsEnabled="{x:Bind History.HasKept, Mode=OneWay}"
-                            AutomationProperties.Name="Remove every kept scan summary" />
-                </views:SettingsRow.Control>
-            </views:SettingsRow>
-
-            <TextBlock Text="No scans are kept."
-                       Style="{StaticResource Caption}"
-                       TextWrapping="Wrap"
-                       Margin="4,0,0,0"
-                       Visibility="{x:Bind History.HasNoKept, Mode=OneWay}" />
-
-            <ItemsRepeater x:Name="KeptScansList" ItemsSource="{x:Bind History.Kept, Mode=OneWay}" Margin="0,4,0,0">
-                <ItemsRepeater.ItemTemplate>
-                    <DataTemplate x:DataType="viewModels:KeptScanRow">
-                        <Border Style="{StaticResource ListCardStyle}" Margin="0,0,0,4">
-                            <Grid ColumnSpacing="{StaticResource ControlGap}">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-
-                                <StackPanel VerticalAlignment="Center" Spacing="1">
-                                    <TextBlock Text="{x:Bind Title}" TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Text="{x:Bind Detail}"
-                                               Style="{StaticResource Caption}"
-                                               TextTrimming="CharacterEllipsis" />
-                                </StackPanel>
-
-                                <Button Grid.Column="1"
-                                        Content="Remove"
-                                        Tag="{x:Bind}"
-                                        Click="OnRemoveScanSummary"
-                                        AutomationProperties.Name="Remove"
-                                        AutomationProperties.HelpText="{x:Bind Title}" />
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ItemsRepeater.ItemTemplate>
-            </ItemsRepeater>
-
-            <!-- What the Storage page keeps of each scan, so a row can say how far its cause grew
-                 (#358). A provider's id, a size and a time, and no path: it is still a record of the
-                 machine, so it is removed here beside the scan summaries. -->
-            <InfoBar IsOpen="{x:Bind Sizes.RemoveFailed, Mode=OneWay}"
-                     IsClosable="False"
-                     Severity="Warning"
-                     Title="Not removed"
-                     Message="Deguffer could not remove the size history. Something may be holding the file open. Try again in a moment." />
-
-            <views:SettingsRow Glyph="&#xE9D2;"
-                               Title="Size of each Storage location"
-                               Description="{x:Bind viewModels:SizeHistorySettingsViewModel.Description}">
-                <views:SettingsRow.Control>
-                    <Button Content="Remove"
-                            Click="OnRemoveSizeHistory"
-                            IsEnabled="{x:Bind Sizes.HasAny, Mode=OneWay}"
-                            AutomationProperties.Name="Remove the size history of every Storage location" />
-                </views:SettingsRow.Control>
-            </views:SettingsRow>
-
-            <!-- Every value here changes how fast a scan reads the disk, never what it finds: the
-                 table is still read whole, the walk still never follows a link, and a refused
-                 folder is still reported, whatever is set. So these come last, after the settings
-                 that decide what may be deleted. A value is held per kind of drive because one
-                 machine often has several kinds, and emptying a box puts it back to Auto. -->
-            <TextBlock Text="Scanning" Style="{StaticResource GroupHeading}" Margin="{StaticResource RegionGapAbove}" />
-
-            <InfoBar IsOpen="{x:Bind Scanning.SaveFailed, Mode=OneWay}"
-                     IsClosable="False"
-                     Severity="Warning"
-                     Title="Not saved"
-                     Message="Your choice could not be written to disk, so it has not been applied. Check that %LOCALAPPDATA%\Deguffer is writable." />
-
-            <!-- Indexed against ScanRoute. -->
-            <views:SettingsRow Glyph="&#xE721;"
-                               Title="How to scan"
-                               Description="Reading a volume's file table needs Deguffer to run as administrator on an NTFS volume. Auto walks folders while it reads the table and uses whichever answers first, and walks everywhere the table cannot be read. Walk folders only is slower on a large folder, and is the choice if you doubt what the file table says. File table first waits for the table instead, which may suit a spinning disk. None of them changes what is found.">
-                <views:SettingsRow.Control>
-                    <ComboBox SelectedIndex="{x:Bind Scanning.RouteIndex, Mode=TwoWay}"
-                              MinWidth="150"
-                              ToolTipService.ToolTip="Auto reads the file table and walks folders at the same time, and uses whichever answers first."
-                              AutomationProperties.Name="How to scan">
-                        <ComboBoxItem Content="Auto" />
-                        <ComboBoxItem Content="Walk folders only" />
-                        <ComboBoxItem Content="File table first" />
-                    </ComboBox>
-                </views:SettingsRow.Control>
-            </views:SettingsRow>
-
-            <views:SettingsRow Glyph="&#xE950;"
-                               Title="File table parse threads"
-                               Description="How many threads turn a volume's file table into folders and sizes, on every kind of drive. Used only when Deguffer runs as administrator. Empty the box to go back to Auto.">
-                <views:SettingsRow.Control>
-                    <NumberBox Value="{x:Bind Scanning.TableParseThreads, Mode=TwoWay}"
-                               PlaceholderText="{x:Bind Scanning.AutoTableParseThreads, Mode=OneWay}"
-                               Minimum="{x:Bind Scanning.MinimumTableParseThreads}"
-                               Maximum="{x:Bind Scanning.MaximumTableParseThreads}"
-                               SmallChange="1"
-                               LargeChange="4"
-                               SpinButtonPlacementMode="Compact"
-                               ValidationMode="InvalidInputOverwritten"
-                               MinWidth="150"
-                               Header="Threads"
-                               ToolTipService.ToolTip="Auto uses one thread per processor, up to four, which was as fast as more where it was measured."
-                               AutomationProperties.Name="File table parse threads" />
-                </views:SettingsRow.Control>
-            </views:SettingsRow>
-
-            <views:SettingsRow Glyph="&#xEDA2;"
-                               Title="Kind of drive"
-                               Description="Each kind of drive has its own values, because a value that suits one kind can slow another. Choose a kind to see or change its values below.">
-                <views:SettingsRow.Control>
-                    <ComboBox ItemsSource="{x:Bind Scanning.KindNames}"
-                              SelectedIndex="{x:Bind Scanning.KindIndex, Mode=TwoWay}"
-                              MinWidth="150"
-                              AutomationProperties.Name="Kind of drive" />
-                </views:SettingsRow.Control>
-            </views:SettingsRow>
-
-            <views:SettingsRow Glyph="&#xE8B7;"
-                               Title="Folders read at once"
-                               Description="How many folders a walk reads at the same time on this kind of drive. Empty the box to go back to Auto.">
-                <views:SettingsRow.Control>
-                    <NumberBox Value="{x:Bind Scanning.WalkThreads, Mode=TwoWay}"
-                               PlaceholderText="{x:Bind Scanning.AutoWalkThreads, Mode=OneWay}"
-                               Minimum="{x:Bind Scanning.MinimumWalkThreads}"
-                               Maximum="{x:Bind Scanning.MaximumWalkThreads}"
-                               SmallChange="1"
-                               LargeChange="4"
-                               SpinButtonPlacementMode="Compact"
-                               ValidationMode="InvalidInputOverwritten"
-                               MinWidth="150"
-                               Header="Threads"
-                               ToolTipService.ToolTip="Auto uses the number measured as fastest for this kind of drive, or the number scans have always used where this kind has not been measured."
-                               AutomationProperties.Name="Folders read at once" />
-                </views:SettingsRow.Control>
-            </views:SettingsRow>
-
-            <views:SettingsRow Glyph="&#xE8FD;"
-                               Title="Listing buffer"
-                               Description="How much of a folder's list of contents Windows hands over in each call, on this kind of drive. A larger buffer means fewer calls, and each call costs the whole buffer however few entries the folder holds. Empty the box to go back to Auto.">
-                <views:SettingsRow.Control>
-                    <NumberBox Value="{x:Bind Scanning.ListingBufferKiB, Mode=TwoWay}"
-                               PlaceholderText="{x:Bind Scanning.AutoListingBufferKiB, Mode=OneWay}"
-                               Minimum="{x:Bind Scanning.MinimumListingBufferKiB}"
-                               Maximum="{x:Bind Scanning.MaximumListingBufferKiB}"
-                               SmallChange="4"
-                               LargeChange="64"
-                               SpinButtonPlacementMode="Compact"
-                               ValidationMode="InvalidInputOverwritten"
-                               MinWidth="150"
-                               Header="KiB"
-                               ToolTipService.ToolTip="Auto uses the size measured as fastest for this kind of drive, or the size scans have always used where this kind has not been measured."
-                               AutomationProperties.Name="Listing buffer in KiB" />
-                </views:SettingsRow.Control>
-            </views:SettingsRow>
-
-            <views:SettingsRow Glyph="&#xE9F5;"
-                               Title="File table read size"
-                               Description="How much of a volume's file table each read asks for, on this kind of drive. Used only when Deguffer runs as administrator. Empty the box to go back to Auto.">
-                <views:SettingsRow.Control>
-                    <NumberBox Value="{x:Bind Scanning.TableReadKiB, Mode=TwoWay}"
-                               PlaceholderText="{x:Bind Scanning.AutoTableReadKiB, Mode=OneWay}"
-                               Minimum="{x:Bind Scanning.MinimumTableReadKiB}"
-                               Maximum="{x:Bind Scanning.MaximumTableReadKiB}"
-                               SmallChange="64"
-                               LargeChange="1024"
-                               SpinButtonPlacementMode="Compact"
-                               ValidationMode="InvalidInputOverwritten"
-                               MinWidth="150"
-                               Header="KiB"
-                               ToolTipService.ToolTip="Auto uses the size measured as fastest for this kind of drive, or the size scans have always used where this kind has not been measured."
-                               AutomationProperties.Name="File table read size in KiB" />
-                </views:SettingsRow.Control>
-            </views:SettingsRow>
-
-            <views:SettingsRow Glyph="&#xE9D5;"
-                               Title="File table reads at once"
-                               Description="How many reads of a volume's file table wait on this kind of drive at the same time. Each read and each parse thread holds a buffer of the read size until the scan ends. Used only when Deguffer runs as administrator. Empty the box to go back to Auto.">
-                <views:SettingsRow.Control>
-                    <NumberBox Value="{x:Bind Scanning.TableReadsInFlight, Mode=TwoWay}"
-                               PlaceholderText="{x:Bind Scanning.AutoTableReadsInFlight, Mode=OneWay}"
-                               Minimum="{x:Bind Scanning.MinimumTableReadsInFlight}"
-                               Maximum="{x:Bind Scanning.MaximumTableReadsInFlight}"
-                               SmallChange="1"
-                               LargeChange="4"
-                               SpinButtonPlacementMode="Compact"
-                               ValidationMode="InvalidInputOverwritten"
-                               MinWidth="150"
-                               Header="Reads"
-                               ToolTipService.ToolTip="Auto uses the number past which more reads gained little on this kind of drive, or one read at a time where no measurement favoured more."
-                               AutomationProperties.Name="File table reads at once" />
-                </views:SettingsRow.Control>
-            </views:SettingsRow>
-
-            <views:SettingsRow Glyph="&#xE8FD;"
-                               Title="Attribute list reads at once"
-                               Description="How many lists kept outside the file table are read at once on this kind of drive. Used only when Deguffer runs as administrator.">
-                <views:SettingsRow.Control>
-                    <NumberBox Value="{x:Bind Scanning.TableListReadsInFlight, Mode=TwoWay}"
-                               PlaceholderText="{x:Bind Scanning.AutoTableListReadsInFlight, Mode=OneWay}"
-                               Minimum="{x:Bind Scanning.MinimumTableListReadsInFlight}"
-                               Maximum="{x:Bind Scanning.MaximumTableListReadsInFlight}"
-                               SmallChange="1"
-                               LargeChange="8"
-                               SpinButtonPlacementMode="Compact"
-                               ValidationMode="InvalidInputOverwritten"
-                               MinWidth="150"
-                               Header="Reads"
-                               ToolTipService.ToolTip="These lists describe files in many pieces. On an NVMe SSD they are read while the table is, and on other drives after it, where each one waiting adds to the scan. Auto reads 32 at once, which was fastest where it was measured. One at a time took several times as long on the drive measured with thousands of lists. Empty the box to go back to Auto."
-                               AutomationProperties.Name="Attribute list reads at once" />
-                </views:SettingsRow.Control>
-            </views:SettingsRow>
-
-            <TextBlock Style="{StaticResource SecondaryText}"
-                       Margin="4,8,0,0"
-                       Text="What each drive is scanned with:" />
-
-            <ItemsRepeater x:Name="DrivesList"
-                           ItemsSource="{x:Bind Scanning.Drives, Mode=OneWay}"
+                <TextBlock Text="No source folders added, so Deguffer will not look for build output anywhere."
+                           Style="{StaticResource Caption}"
+                           TextWrapping="Wrap"
                            Margin="4,0,0,0"
-                           AutomationProperties.Name="What each drive is scanned with">
-                <ItemsRepeater.ItemTemplate>
-                    <DataTemplate x:DataType="viewModels:DriveLine">
-                        <TextBlock Text="{x:Bind Text}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
-                    </DataTemplate>
-                </ItemsRepeater.ItemTemplate>
-            </ItemsRepeater>
+                           Visibility="{x:Bind ViewModel.HasNoSourceRoots, Mode=OneWay}" />
 
-            <TextBlock Style="{StaticResource Caption}"
-                       Margin="4,12,0,0"
-                       Text="Settings are stored in %LOCALAPPDATA%\Deguffer. Deleting that folder restores the defaults." />
-        </StackPanel>
-    </ScrollViewer>
+                <!-- Every list on this page is a repeater, so that ListAnimation can play its rows in and
+                     out: an ItemsControl's rows would appear and vanish at once. -->
+                <ItemsRepeater x:Name="SourceRootsList" ItemsSource="{x:Bind ViewModel.SourceRoots, Mode=OneWay}" Margin="0,4,0,0">
+                    <ItemsRepeater.ItemTemplate>
+                        <DataTemplate x:DataType="configuration:SourceRoot">
+                            <Border Style="{StaticResource ListCardStyle}" Margin="0,0,0,4">
+                                <Grid ColumnSpacing="{StaticResource ControlGap}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="{x:Bind Path}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   ToolTipService.ToolTip="{x:Bind Path}" />
+
+                                        <!-- A standing consent nobody can see is one nobody can withdraw. The
+                                             folder was approved for a drive whose contents are downloaded to
+                                             read them, so the row says so, and removing the folder is how the
+                                             answer is taken back. -->
+                                        <TextBlock Text="Cloud storage. You chose to let Deguffer search this, so reading it downloads the files in it."
+                                                   Style="{StaticResource Caption}"
+                                                   TextWrapping="Wrap"
+                                                   Margin="0,4,0,0"
+                                                   Visibility="{x:Bind RemoteStorageApproved}" />
+                                    </StackPanel>
+
+                                    <Button Grid.Column="1"
+                                            Content="Remove"
+                                            Tag="{x:Bind Path}"
+                                            Click="OnRemoveSourceRoot"
+                                            AutomationProperties.Name="Remove source folder" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsRepeater.ItemTemplate>
+                </ItemsRepeater>
+
+                <!-- The second list that widens where Deguffer looks. An emulator run from its own folder
+                     records that folder nowhere Deguffer may rely on, so the user is the only source.
+                     Nothing is taken from a folder here unless the emulator's own settings file, or RetroArch's
+                     program, is in it. -->
+                <TextBlock Text="Emulator folders" Style="{StaticResource GroupHeading}" Margin="{StaticResource RegionGapAbove}" />
+
+                <views:SettingsRow Glyph="&#xE7FC;"
+                                   Title="Where your emulators are installed"
+                                   Description="Deguffer finds Cemu, Dolphin, PCSX2, DuckStation, PPSSPP, Ryujinx, Eden, Citron, yuzu, Azahar, Lime3DS and Citra where each keeps its data by default, and RetroArch where Steam installed it. Add the folder of a portable install here, and the folder of every RPCS3 and Vita3K install and any other RetroArch, which keep everything beside the program. Deguffer looks in each folder only for the emulator's own settings file or program, or the file that names PPSSPP's memory stick, and removes only the caches the emulator compiled and RetroArch's downloads, never saves, memory cards, firmware or games.">
+                    <views:SettingsRow.Control>
+                        <Button Content="Add folder…"
+                                Click="OnAddEmulatorFolder"
+                                AutomationProperties.Name="Add emulator folder" />
+                    </views:SettingsRow.Control>
+                </views:SettingsRow>
+
+                <!-- On this row for the reason the source folders give theirs. -->
+                <InfoBar IsOpen="{x:Bind ViewModel.EmulatorFolderNotOnDisk, Mode=OneWay}"
+                         IsClosable="False"
+                         Severity="Informational"
+                         Message="{x:Bind configuration:PickedFolder.NotOnDisk}" />
+
+                <TextBlock Text="No emulator folders added, so only each emulator's default location is looked in."
+                           Style="{StaticResource Caption}"
+                           TextWrapping="Wrap"
+                           Margin="4,0,0,0"
+                           Visibility="{x:Bind ViewModel.HasNoEmulatorFolders, Mode=OneWay}" />
+
+                <ItemsRepeater x:Name="EmulatorFoldersList" ItemsSource="{x:Bind ViewModel.EmulatorFolders, Mode=OneWay}" Margin="0,4,0,0">
+                    <ItemsRepeater.ItemTemplate>
+                        <DataTemplate x:DataType="x:String">
+                            <Border Style="{StaticResource ListCardStyle}" Margin="0,0,0,4">
+                                <Grid ColumnSpacing="{StaticResource ControlGap}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Text="{x:Bind}"
+                                               VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis"
+                                               ToolTipService.ToolTip="{x:Bind}" />
+
+                                    <Button Grid.Column="1"
+                                            Content="Remove"
+                                            Tag="{x:Bind}"
+                                            Click="OnRemoveEmulatorFolder"
+                                            AutomationProperties.Name="Remove emulator folder" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsRepeater.ItemTemplate>
+                </ItemsRepeater>
+
+                <!-- The one setting on this page that only ever narrows what Deguffer deletes. Listed in
+                     full, including items no scan finds any more, so it never becomes a protection
+                     nobody can see. Items are added where they are seen, on the Storage page. -->
+                <TextBlock Text="Keep list" Style="{StaticResource GroupHeading}" Margin="{StaticResource RegionGapAbove}" />
+
+                <InfoBar IsOpen="{x:Bind ViewModel.KeepListUnreadable}"
+                         IsClosable="False"
+                         Severity="Warning"
+                         Title="Keep list not read"
+                         Message="Deguffer could not read keep.json in %LOCALAPPDATA%\Deguffer when it started, so nothing saved in it is kept this session, and no change made here is saved over it. Repair or remove that file, then restart Deguffer." />
+
+                <views:SettingsRow Glyph="&#xE718;"
+                                   Title="Items Deguffer never offers"
+                                   Description="Keep an item from its row's list of items on the Storage page. Deguffer leaves a kept item out of every clean, and every clean checks that it is still there. Only items Deguffer can recognise wherever they are stored can be kept: a browser build, a downloaded tooling release, or an application version the updater replaced." />
+
+                <TextBlock Text="Nothing is kept."
+                           Style="{StaticResource Caption}"
+                           TextWrapping="Wrap"
+                           Margin="4,0,0,0"
+                           Visibility="{x:Bind ViewModel.HasNoKeptItems, Mode=OneWay}" />
+
+                <!-- A repeater rather than an ItemsControl, because a keep list grows one entry per item
+                     kept and the items can number in the hundreds. It realises only the entries inside
+                     the page's scrolling viewport, and draws none of a list's selection chrome over a
+                     list that has nothing to select. -->
+                <ItemsRepeater x:Name="KeptItemsList" ItemsSource="{x:Bind ViewModel.KeptItems, Mode=OneWay}" Margin="0,4,0,0">
+                    <ItemsRepeater.ItemTemplate>
+                        <DataTemplate x:DataType="configuration:KeptItem">
+                            <Border Style="{StaticResource ListCardStyle}" Margin="0,0,0,4">
+                                <Grid ColumnSpacing="{StaticResource ControlGap}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel VerticalAlignment="Center" Spacing="1">
+                                        <TextBlock Text="{x:Bind Item.Name}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   ToolTipService.ToolTip="{x:Bind Item.Name}" />
+                                        <TextBlock Text="{x:Bind ProviderName}"
+                                                   Style="{StaticResource Caption}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+
+                                    <Button Grid.Column="1"
+                                            Content="Stop keeping"
+                                            Tag="{x:Bind}"
+                                            Click="OnReleaseKeptItem"
+                                            AutomationProperties.Name="Stop keeping"
+                                            AutomationProperties.HelpText="{x:Bind Item.Name}" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsRepeater.ItemTemplate>
+                </ItemsRepeater>
+
+                <!-- What Explore keeps of each scan of a whole drive, so the next scan can say what
+                     grew. It names the folders on the drive, so the user decides how long it stays:
+                     each one can be removed here, or all of them at once. -->
+                <TextBlock Text="Scan history" Style="{StaticResource GroupHeading}" Margin="{StaticResource RegionGapAbove}" />
+
+                <InfoBar IsOpen="{x:Bind History.RemoveFailed, Mode=OneWay}"
+                         IsClosable="False"
+                         Severity="Warning"
+                         Title="Not all removed"
+                         Message="Deguffer could not remove every summary. Something may be holding one of the files open. Try again in a moment." />
+
+                <views:SettingsRow Glyph="&#xE823;"
+                                   Title="Summaries of earlier scans"
+                                   Description="After each scan of a whole drive, Explore keeps the sizes of its largest folders and how full the drive was, on this computer only, so the next scan can show what grew. The latest 20 of each drive are kept.">
+                    <views:SettingsRow.Control>
+                        <Button Content="Remove all"
+                                Click="OnRemoveAllScanSummaries"
+                                IsEnabled="{x:Bind History.HasKept, Mode=OneWay}"
+                                AutomationProperties.Name="Remove every kept scan summary" />
+                    </views:SettingsRow.Control>
+                </views:SettingsRow>
+
+                <TextBlock Text="No scans are kept."
+                           Style="{StaticResource Caption}"
+                           TextWrapping="Wrap"
+                           Margin="4,0,0,0"
+                           Visibility="{x:Bind History.HasNoKept, Mode=OneWay}" />
+
+                <ItemsRepeater x:Name="KeptScansList" ItemsSource="{x:Bind History.Kept, Mode=OneWay}" Margin="0,4,0,0">
+                    <ItemsRepeater.ItemTemplate>
+                        <DataTemplate x:DataType="viewModels:KeptScanRow">
+                            <Border Style="{StaticResource ListCardStyle}" Margin="0,0,0,4">
+                                <Grid ColumnSpacing="{StaticResource ControlGap}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel VerticalAlignment="Center" Spacing="1">
+                                        <TextBlock Text="{x:Bind Title}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{x:Bind Detail}"
+                                                   Style="{StaticResource Caption}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+
+                                    <Button Grid.Column="1"
+                                            Content="Remove"
+                                            Tag="{x:Bind}"
+                                            Click="OnRemoveScanSummary"
+                                            AutomationProperties.Name="Remove"
+                                            AutomationProperties.HelpText="{x:Bind Title}" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsRepeater.ItemTemplate>
+                </ItemsRepeater>
+
+                <!-- What the Storage page keeps of each scan, so a row can say how far its cause grew
+                     (#358). A provider's id, a size and a time, and no path: it is still a record of the
+                     machine, so it is removed here beside the scan summaries. -->
+                <InfoBar IsOpen="{x:Bind Sizes.RemoveFailed, Mode=OneWay}"
+                         IsClosable="False"
+                         Severity="Warning"
+                         Title="Not removed"
+                         Message="Deguffer could not remove the size history. Something may be holding the file open. Try again in a moment." />
+
+                <views:SettingsRow Glyph="&#xE9D2;"
+                                   Title="Size of each Storage location"
+                                   Description="{x:Bind viewModels:SizeHistorySettingsViewModel.Description}">
+                    <views:SettingsRow.Control>
+                        <Button Content="Remove"
+                                Click="OnRemoveSizeHistory"
+                                IsEnabled="{x:Bind Sizes.HasAny, Mode=OneWay}"
+                                AutomationProperties.Name="Remove the size history of every Storage location" />
+                    </views:SettingsRow.Control>
+                </views:SettingsRow>
+
+                <!-- Every value here changes how fast a scan reads the disk, never what it finds: the
+                     table is still read whole, the walk still never follows a link, and a refused
+                     folder is still reported, whatever is set. So these come last, after the settings
+                     that decide what may be deleted. A value is held per kind of drive because one
+                     machine often has several kinds, and emptying a box puts it back to Auto. -->
+                <TextBlock Text="Scanning" Style="{StaticResource GroupHeading}" Margin="{StaticResource RegionGapAbove}" />
+
+                <InfoBar IsOpen="{x:Bind Scanning.SaveFailed, Mode=OneWay}"
+                         IsClosable="False"
+                         Severity="Warning"
+                         Title="Not saved"
+                         Message="Your choice could not be written to disk, so it has not been applied. Check that %LOCALAPPDATA%\Deguffer is writable." />
+
+                <!-- Indexed against ScanRoute. -->
+                <views:SettingsRow Glyph="&#xE721;"
+                                   Title="How to scan"
+                                   Description="Reading a volume's file table needs Deguffer to run as administrator on an NTFS volume. Auto walks folders while it reads the table and uses whichever answers first, and walks everywhere the table cannot be read. Walk folders only is slower on a large folder, and is the choice if you doubt what the file table says. File table first waits for the table instead, which may suit a spinning disk. None of them changes what is found.">
+                    <views:SettingsRow.Control>
+                        <ComboBox SelectedIndex="{x:Bind Scanning.RouteIndex, Mode=TwoWay}"
+                                  MinWidth="150"
+                                  ToolTipService.ToolTip="Auto reads the file table and walks folders at the same time, and uses whichever answers first."
+                                  AutomationProperties.Name="How to scan">
+                            <ComboBoxItem Content="Auto" />
+                            <ComboBoxItem Content="Walk folders only" />
+                            <ComboBoxItem Content="File table first" />
+                        </ComboBox>
+                    </views:SettingsRow.Control>
+                </views:SettingsRow>
+
+                <views:SettingsRow Glyph="&#xE950;"
+                                   Title="File table parse threads"
+                                   Description="How many threads turn a volume's file table into folders and sizes, on every kind of drive. Used only when Deguffer runs as administrator. Empty the box to go back to Auto.">
+                    <views:SettingsRow.Control>
+                        <NumberBox Value="{x:Bind Scanning.TableParseThreads, Mode=TwoWay}"
+                                   PlaceholderText="{x:Bind Scanning.AutoTableParseThreads, Mode=OneWay}"
+                                   Minimum="{x:Bind Scanning.MinimumTableParseThreads}"
+                                   Maximum="{x:Bind Scanning.MaximumTableParseThreads}"
+                                   SmallChange="1"
+                                   LargeChange="4"
+                                   SpinButtonPlacementMode="Compact"
+                                   ValidationMode="InvalidInputOverwritten"
+                                   MinWidth="150"
+                                   Header="Threads"
+                                   ToolTipService.ToolTip="Auto uses one thread per processor, up to four, which was as fast as more where it was measured."
+                                   AutomationProperties.Name="File table parse threads" />
+                    </views:SettingsRow.Control>
+                </views:SettingsRow>
+
+                <views:SettingsRow Glyph="&#xEDA2;"
+                                   Title="Kind of drive"
+                                   Description="Each kind of drive has its own values, because a value that suits one kind can slow another. Choose a kind to see or change its values below.">
+                    <views:SettingsRow.Control>
+                        <ComboBox ItemsSource="{x:Bind Scanning.KindNames}"
+                                  SelectedIndex="{x:Bind Scanning.KindIndex, Mode=TwoWay}"
+                                  MinWidth="150"
+                                  AutomationProperties.Name="Kind of drive" />
+                    </views:SettingsRow.Control>
+                </views:SettingsRow>
+
+                <views:SettingsRow Glyph="&#xE8B7;"
+                                   Title="Folders read at once"
+                                   Description="How many folders a walk reads at the same time on this kind of drive. Empty the box to go back to Auto.">
+                    <views:SettingsRow.Control>
+                        <NumberBox Value="{x:Bind Scanning.WalkThreads, Mode=TwoWay}"
+                                   PlaceholderText="{x:Bind Scanning.AutoWalkThreads, Mode=OneWay}"
+                                   Minimum="{x:Bind Scanning.MinimumWalkThreads}"
+                                   Maximum="{x:Bind Scanning.MaximumWalkThreads}"
+                                   SmallChange="1"
+                                   LargeChange="4"
+                                   SpinButtonPlacementMode="Compact"
+                                   ValidationMode="InvalidInputOverwritten"
+                                   MinWidth="150"
+                                   Header="Threads"
+                                   ToolTipService.ToolTip="Auto uses the number measured as fastest for this kind of drive, or the number scans have always used where this kind has not been measured."
+                                   AutomationProperties.Name="Folders read at once" />
+                    </views:SettingsRow.Control>
+                </views:SettingsRow>
+
+                <views:SettingsRow Glyph="&#xE8FD;"
+                                   Title="Listing buffer"
+                                   Description="How much of a folder's list of contents Windows hands over in each call, on this kind of drive. A larger buffer means fewer calls, and each call costs the whole buffer however few entries the folder holds. Empty the box to go back to Auto.">
+                    <views:SettingsRow.Control>
+                        <NumberBox Value="{x:Bind Scanning.ListingBufferKiB, Mode=TwoWay}"
+                                   PlaceholderText="{x:Bind Scanning.AutoListingBufferKiB, Mode=OneWay}"
+                                   Minimum="{x:Bind Scanning.MinimumListingBufferKiB}"
+                                   Maximum="{x:Bind Scanning.MaximumListingBufferKiB}"
+                                   SmallChange="4"
+                                   LargeChange="64"
+                                   SpinButtonPlacementMode="Compact"
+                                   ValidationMode="InvalidInputOverwritten"
+                                   MinWidth="150"
+                                   Header="KiB"
+                                   ToolTipService.ToolTip="Auto uses the size measured as fastest for this kind of drive, or the size scans have always used where this kind has not been measured."
+                                   AutomationProperties.Name="Listing buffer in KiB" />
+                    </views:SettingsRow.Control>
+                </views:SettingsRow>
+
+                <views:SettingsRow Glyph="&#xE9F5;"
+                                   Title="File table read size"
+                                   Description="How much of a volume's file table each read asks for, on this kind of drive. Used only when Deguffer runs as administrator. Empty the box to go back to Auto.">
+                    <views:SettingsRow.Control>
+                        <NumberBox Value="{x:Bind Scanning.TableReadKiB, Mode=TwoWay}"
+                                   PlaceholderText="{x:Bind Scanning.AutoTableReadKiB, Mode=OneWay}"
+                                   Minimum="{x:Bind Scanning.MinimumTableReadKiB}"
+                                   Maximum="{x:Bind Scanning.MaximumTableReadKiB}"
+                                   SmallChange="64"
+                                   LargeChange="1024"
+                                   SpinButtonPlacementMode="Compact"
+                                   ValidationMode="InvalidInputOverwritten"
+                                   MinWidth="150"
+                                   Header="KiB"
+                                   ToolTipService.ToolTip="Auto uses the size measured as fastest for this kind of drive, or the size scans have always used where this kind has not been measured."
+                                   AutomationProperties.Name="File table read size in KiB" />
+                    </views:SettingsRow.Control>
+                </views:SettingsRow>
+
+                <views:SettingsRow Glyph="&#xE9D5;"
+                                   Title="File table reads at once"
+                                   Description="How many reads of a volume's file table wait on this kind of drive at the same time. Each read and each parse thread holds a buffer of the read size until the scan ends. Used only when Deguffer runs as administrator. Empty the box to go back to Auto.">
+                    <views:SettingsRow.Control>
+                        <NumberBox Value="{x:Bind Scanning.TableReadsInFlight, Mode=TwoWay}"
+                                   PlaceholderText="{x:Bind Scanning.AutoTableReadsInFlight, Mode=OneWay}"
+                                   Minimum="{x:Bind Scanning.MinimumTableReadsInFlight}"
+                                   Maximum="{x:Bind Scanning.MaximumTableReadsInFlight}"
+                                   SmallChange="1"
+                                   LargeChange="4"
+                                   SpinButtonPlacementMode="Compact"
+                                   ValidationMode="InvalidInputOverwritten"
+                                   MinWidth="150"
+                                   Header="Reads"
+                                   ToolTipService.ToolTip="Auto uses the number past which more reads gained little on this kind of drive, or one read at a time where no measurement favoured more."
+                                   AutomationProperties.Name="File table reads at once" />
+                    </views:SettingsRow.Control>
+                </views:SettingsRow>
+
+                <views:SettingsRow Glyph="&#xE8FD;"
+                                   Title="Attribute list reads at once"
+                                   Description="How many lists kept outside the file table are read at once on this kind of drive. Used only when Deguffer runs as administrator.">
+                    <views:SettingsRow.Control>
+                        <NumberBox Value="{x:Bind Scanning.TableListReadsInFlight, Mode=TwoWay}"
+                                   PlaceholderText="{x:Bind Scanning.AutoTableListReadsInFlight, Mode=OneWay}"
+                                   Minimum="{x:Bind Scanning.MinimumTableListReadsInFlight}"
+                                   Maximum="{x:Bind Scanning.MaximumTableListReadsInFlight}"
+                                   SmallChange="1"
+                                   LargeChange="8"
+                                   SpinButtonPlacementMode="Compact"
+                                   ValidationMode="InvalidInputOverwritten"
+                                   MinWidth="150"
+                                   Header="Reads"
+                                   ToolTipService.ToolTip="These lists describe files in many pieces. On an NVMe SSD they are read while the table is, and on other drives after it, where each one waiting adds to the scan. Auto reads 32 at once, which was fastest where it was measured. One at a time took several times as long on the drive measured with thousands of lists. Empty the box to go back to Auto."
+                                   AutomationProperties.Name="Attribute list reads at once" />
+                    </views:SettingsRow.Control>
+                </views:SettingsRow>
+
+                <TextBlock Style="{StaticResource SecondaryText}"
+                           Margin="4,8,0,0"
+                           Text="What each drive is scanned with:" />
+
+                <ItemsRepeater x:Name="DrivesList"
+                               ItemsSource="{x:Bind Scanning.Drives, Mode=OneWay}"
+                               Margin="4,0,0,0"
+                               AutomationProperties.Name="What each drive is scanned with">
+                    <ItemsRepeater.ItemTemplate>
+                        <DataTemplate x:DataType="viewModels:DriveLine">
+                            <TextBlock Text="{x:Bind Text}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                        </DataTemplate>
+                    </ItemsRepeater.ItemTemplate>
+                </ItemsRepeater>
+
+                <TextBlock Style="{StaticResource Caption}"
+                           Margin="4,12,0,0"
+                           Text="Settings are stored in %LOCALAPPDATA%\Deguffer. Deleting that folder restores the defaults." />
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
 </Page>

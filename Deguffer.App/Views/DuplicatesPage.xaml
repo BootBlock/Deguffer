@@ -245,16 +245,16 @@
          figures say what was found before any group is read; and what marks and removes sits in a
          bar under the list, as Clean does on Storage. Layout roots stay transparent so the §6.5
          material shows through. -->
-    <Grid Padding="28,8,28,0" RowSpacing="12" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto">
+    <Grid Padding="{StaticResource PagePadding}" RowSpacing="12" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto">
 
-        <Grid Grid.Row="0" ColumnSpacing="12" ColumnDefinitions="*,Auto">
-            <TextBlock Text="Duplicates" Style="{StaticResource PageTitle}" VerticalAlignment="Center" />
-
-            <Button Grid.Column="1" Content="Reopen as administrator" VerticalAlignment="Center" Style="{StaticResource ElevateButtonStyle}"
-                    Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
-                    Command="{x:Bind ViewModel.ElevateCommand}"
-                    ToolTipService.ToolTip="As administrator, a search reads each drive's file table, which is much faster than walking its folders." />
-        </Grid>
+        <controls:PageHeader Destination="Duplicates">
+            <controls:PageHeader.Actions>
+                <Button Content="Reopen as administrator" Style="{StaticResource ElevateButtonStyle}"
+                        Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
+                        Command="{x:Bind ViewModel.ElevateCommand}"
+                        ToolTipService.ToolTip="As administrator, a search reads each drive's file table, which is much faster than walking its folders." />
+            </controls:PageHeader.Actions>
+        </controls:PageHeader>
 
         <!-- The search: one line that says what it will search and how, the button that starts it,
              and the settings under it, folded once a search starts. -->
@@ -589,7 +589,7 @@
         <!-- What is marked, and the two ways to remove it. Neither carries the accent: removing is
              the deliberate second step after the search, as Clean is on Storage, and both list
              every copy that would go before anything does. -->
-        <Grid Grid.Row="5" ColumnSpacing="12" Padding="0,4,0,20" ColumnDefinitions="Auto,*,Auto"
+        <Grid Grid.Row="5" ColumnSpacing="12" Padding="0,4,0,0" ColumnDefinitions="Auto,*,Auto"
               Visibility="{x:Bind ViewModel.HasGroups, Mode=OneWay}">
             <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
                 <ProgressRing IsActive="{x:Bind ViewModel.Marking.IsBusy, Mode=OneWay}"
