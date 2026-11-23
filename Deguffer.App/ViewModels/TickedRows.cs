@@ -39,7 +39,7 @@ internal sealed class TickedRows
 
     /// <summary>Each row's plan with the steps ticked in it, in the rows' order.</summary>
     public IReadOnlyList<ChosenSteps> Choices =>
-        [.. _rows.Select(row => new ChosenSteps(row.Plan, [.. row.Ticked.Select(step => step.Step)]))];
+        (ChosenSteps[])[.. _rows.Select(row => new ChosenSteps(row.Plan, (CleanupStep[])[.. row.Ticked.Select(step => step.Step)]))];
 
     /// <summary>
     /// Whether <paramref name="findings"/> still show these ticks: the same rows ticked, each still

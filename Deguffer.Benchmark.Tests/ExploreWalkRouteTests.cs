@@ -7,7 +7,7 @@ namespace Deguffer.Benchmark.Tests;
 /// The Explore walk the benchmark times counts what the walk recorded, and is complete only where
 /// nothing was refused it.
 ///
-/// <para>No test here claims anything about the snapshots. When they are taken is
+/// <para>No test here claims how many snapshots are taken. When they are taken is
 /// <c>ScanSnapshotsTests</c>' subject, on a clock the test moves.</para>
 /// </summary>
 public sealed class ExploreWalkRouteTests : IDisposable
@@ -26,12 +26,14 @@ public sealed class ExploreWalkRouteTests : IDisposable
         _temp.CreateFile(10, "root", "a", "two.bin");
         _temp.CreateDirectory("root", "b");
 
-        var tally = ExploreWalkRoute.Run(root, WalkTuning.Default, snapshots, CancellationToken.None);
+        var tally = ExploreWalkRoute.Run(
+            root, WalkTuning.Default, snapshots ? new TimedSnapshots(TimeProvider.System) : null, CancellationToken.None);
 
         // a and b at the top, and the two files in a.
         Assert.Equal(4, tally.Items);
         Assert.Equal(0, tally.BytesRead);
         Assert.True(tally.Complete);
+        Assert.Equal(snapshots, tally.Snapshots is not null);
     }
 
     [Fact]
@@ -44,7 +46,7 @@ public sealed class ExploreWalkRouteTests : IDisposable
 
         using var denied = new DeniedDirectory(refused);
 
-        var tally = ExploreWalkRoute.Run(root, WalkTuning.Default, snapshots: true, CancellationToken.None);
+        var tally = ExploreWalkRoute.Run(root, WalkTuning.Default, new TimedSnapshots(TimeProvider.System), CancellationToken.None);
 
         // open, refused and the file in open. Nothing inside the refused folder.
         Assert.Equal(3, tally.Items);

@@ -369,13 +369,36 @@ public sealed class BenchmarkRequestTests
         Assert.Equal(expected, request.Snapshots);
     }
 
-    /// <summary>The benchmark draws as it goes only on the Explore walk, so no other route has snapshots to switch.</summary>
+    /// <summary>
+    /// The Explore routes that read the table take no snapshots unless told to, so a read's figures
+    /// compare with any other run that takes none, and take them when told to, as the App's elevated
+    /// Explore does.
+    /// </summary>
+    [Theory]
+    [InlineData("explore", "C", new string[0], false)]
+    [InlineData("explore", "C", new[] { "--snapshots", "on" }, true)]
+    [InlineData("explore", "C", new[] { "--snapshots", "off" }, false)]
+    [InlineData("explorefolder", @"C:\Users\testuser", new string[0], false)]
+    [InlineData("explorefolder", @"C:\Users\testuser", new[] { "--snapshots", "on" }, true)]
+    public void TheTablesExploreRoutesTakeSnapshotsOnlyWhenToldTo(string route, string target, string[] rest, bool expected)
+    {
+        var request = BenchmarkRequest.Parse([route, target, "--read-size", "512", .. rest], out var error);
+
+        Assert.Null(error);
+        Assert.Equal(512 * 1024, request!.Table.ReadBytes);
+        Assert.Equal(expected, request.Snapshots);
+    }
+
+    /// <summary>The benchmark draws as it goes only on the Explore routes, so no other route has snapshots to switch.</summary>
     [Theory]
     [InlineData("walk", @"C:\", "on")]
-    [InlineData("explore", "C", "off")]
+    [InlineData("index", "C", "on")]
+    [InlineData("table", "C", "off")]
+    [InlineData("explore", "C", "yes")]
+    [InlineData("explorefolder", @"C:\Users", null)]
     [InlineData("explorewalk", @"C:\", "yes")]
     [InlineData("explorewalk", @"C:\", null)]
-    public void SnapshotsAreSwitchedOnTheExploreWalkAloneAndOnlyOnOrOff(string route, string target, string? value)
+    public void SnapshotsAreSwitchedOnTheExploreRoutesAloneAndOnlyOnOrOff(string route, string target, string? value)
     {
         Assert.Null(BenchmarkRequest.Parse([route, target, "--snapshots", .. value is null ? Array.Empty<string>() : [value]], out var error));
         Assert.NotNull(error);

@@ -68,10 +68,12 @@ internal static class Tuning
 
         if (route.ReadsTable())
         {
-            return string.Create(
+            var reads = string.Create(
                 CultureInfo.InvariantCulture,
                 $"{table.ReadBytes / 1024} KiB reads, {table.ReadsInFlight} in flight, parsed on {table.ParseThreads} threads, " +
                 $"{table.ListReadsInFlight} list reads in flight {ListReads(table)}");
+
+            return route.TakesSnapshots() ? reads + Snapshots(snapshots) : reads;
         }
 
         if (route is Route.Folders)
@@ -88,11 +90,14 @@ internal static class Tuning
 
         var listing = Listing(walk);
 
-        // Stated because it is the value the Explore walk is timed both ways with.
-        return route is Route.ExploreWalk
-            ? listing + (snapshots ? ", snapshots on" : ", snapshots off")
-            : listing;
+        return route.TakesSnapshots() ? listing + Snapshots(snapshots) : listing;
     }
+
+    /// <summary>
+    /// Stated because it is the value an Explore route is timed both ways with, and the difference
+    /// between the two is what the snapshots cost.
+    /// </summary>
+    private static string Snapshots(bool snapshots) => snapshots ? ", snapshots on" : ", snapshots off";
 
     /// <summary>
     /// The duplicates route's values: the checksum, which sets how long hashing a whole file takes,

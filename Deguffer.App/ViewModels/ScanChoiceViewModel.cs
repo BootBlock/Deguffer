@@ -140,10 +140,10 @@ public sealed partial class ScanChoiceViewModel : ObservableObject
 
         foreach (var group in listed)
         {
-            _groups[group.Category].Show([.. group.Providers.Select(provider => _rows[provider])]);
+            _groups[group.Category].Show((ScanChoiceRow[])[.. group.Providers.Select(provider => _rows[provider])]);
         }
 
-        LiveList.Show(Shown, [.. listed.Select(group => _groups[group.Category])], group => group.Category);
+        LiveList.Show(Shown, (ScanChoiceGroup[])[.. listed.Select(group => _groups[group.Category])], group => group.Category);
         OnPropertyChanged(nameof(HasNoMatches));
     }
 }

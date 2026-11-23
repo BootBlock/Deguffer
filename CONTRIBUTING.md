@@ -71,6 +71,7 @@ Deguffer.Benchmark plan --runs 6 > %TEMP%\deguffer-plan.txt
 - `explorewalk <folder>` builds the Explore tree for a folder by walking it, as an unelevated
   Explore does. `--snapshots on|off` sets whether it also assembles the pictures of the tree so far
   that Explore draws while it walks. The default is on. Time it both ways to see what they cost.
+  With snapshots on, it reports how many it assembled and the time they took, summed.
 - `sources <folder>` finds the build outputs in a folder as an unelevated scan does when the folder
   is an approved source folder. It stops at each one it finds and never enters a folder
   `SourceTreeBoundary` refuses, such as `.git` or `node_modules`, so it lists fewer folders than
@@ -103,6 +104,10 @@ Deguffer.Benchmark plan --runs 6 > %TEMP%\deguffer-plan.txt
   elevated prompt. `table` reads and parses every record and keeps nothing. `index` builds what the
   clean measures locations from. `explore` builds the Explore tree for the whole volume, and
   `explorefolder <folder>` the tree for one folder on it, which still reads the whole table.
+  `--snapshots on|off` sets whether either also assembles the pictures of the tree so far, as an
+  elevated Explore does while it reads, and reports how many it assembled and the time they took.
+  The default is off, so a read's figures compare with any other run that takes none. Time it both
+  ways to see what they cost the read.
 - `remove <new folder>` creates the folder, builds a tree of empty files in it before each run, and
   removes the tree as a clean removes a cache or a build folder. It reports the walk, the file pass
   and the folder pass apart, the processor time, and the most worker threads the removal held.

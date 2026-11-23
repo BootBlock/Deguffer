@@ -119,7 +119,7 @@ public sealed partial class ExploreShortcutFolders : ObservableObject
         {
             var link = row.Link;
             var report = await _actions.RemoveAsync(
-                [new ExploreItem(link.Path, link.IsDirectory, link.Bytes, LowerBound: false)],
+                (ExploreItem[])[new ExploreItem(link.Path, link.IsDirectory, link.Bytes, LowerBound: false)],
                 ExploreRemovalMode.RecycleBin,
                 lastWord: _ => inspection.WhyNoLongerOffered(link),
                 ct: ct);
@@ -181,7 +181,7 @@ public sealed partial class ExploreShortcutFolders : ObservableObject
             }
 
             _inspection = inspection;
-            LiveList.Show(Rows, [.. report.Links.Select(link => new ShortcutFolderRow(link, RemoveCommand, RevealCommand))], row => row.Key);
+            LiveList.Show(Rows, (ShortcutFolderRow[])[.. report.Links.Select(link => new ShortcutFolderRow(link, RemoveCommand, RevealCommand))], row => row.Key);
             Summary = SummaryOf(report);
         }
         catch (OperationCanceledException)

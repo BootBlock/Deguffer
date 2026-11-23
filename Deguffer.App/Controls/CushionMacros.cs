@@ -23,7 +23,7 @@ internal static class CushionMacros
 
     /// <summary>Every macro, by name and definition.</summary>
     public static IReadOnlyList<(string Name, string Definition)> All { get; } =
-    [
+    ((string Name, string Definition)[])[
         (Constants, ConstantBuffer.Members<CushionConstants>()),
         Number(nameof(CushionShading), nameof(CushionShading.Ambient), CushionShading.Ambient),
         Number(nameof(CushionShading), nameof(CushionShading.Diffuse), CushionShading.Diffuse),

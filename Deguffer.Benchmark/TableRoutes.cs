@@ -51,12 +51,23 @@ internal static class TableRoutes
     /// <param name="target">
     /// The volume's root, or for <see cref="Route.ExploreFolder"/> the folder, fully qualified.
     /// </param>
+    /// <param name="snapshots">
+    /// The snapshots of the tree so far an Explore route assembles and times as it reads, as an
+    /// Explore scan does once the table is the only route answering, or null to take none. Read by no
+    /// other route.
+    /// </param>
     /// <param name="opened">
     /// Called with the volume once it is open and before its table is read, as a scan's build hands
     /// its volume to the priorities it reads at, or null for nothing.
     /// </param>
     public static RunTally Run(
-        Route route, IMftSourceFactory volumes, string target, TableTuning tuning, Action<IMftVolume>? opened, CancellationToken ct)
+        Route route,
+        IMftSourceFactory volumes,
+        string target,
+        TableTuning tuning,
+        TimedSnapshots? snapshots,
+        Action<IMftVolume>? opened,
+        CancellationToken ct)
     {
         if (!VolumePath.TryParse(target, out var place))
         {
@@ -88,8 +99,8 @@ internal static class TableRoutes
         {
             Route.Table => Tally(source, ReadOnly(source, Count(source), tuning, timings, ct), timings),
             Route.Index => Tally(source, MftVolumeIndexBuilder.TryBuild(source, tuning, out _, ct, timings), timings),
-            Route.Explore => Explore(source, $"{place.DriveLetter}:\\", [], tuning, timings, ct),
-            Route.ExploreFolder => Explore(source, place.FullPath, place.Components, tuning, timings, ct),
+            Route.Explore => Explore(source, $"{place.DriveLetter}:\\", [], tuning, snapshots, timings, ct),
+            Route.ExploreFolder => Explore(source, place.FullPath, place.Components, tuning, snapshots, timings, ct),
             _ => throw new ArgumentOutOfRangeException(nameof(route), route, "Not a route that reads the table."),
         };
 
@@ -99,20 +110,34 @@ internal static class TableRoutes
     /// <summary>
     /// The tree for <paramref name="rootPath"/>, complete where the table was read whole and the
     /// folder was found in it, and handed back for what it keeps to be measured.
+    ///
+    /// <para>With snapshots, the read is handed somewhere to report and the scan's own assembly, so it
+    /// copies and assembles each on the scan's cadence (<see cref="ScanSnapshots"/>). Without, it
+    /// reports nothing and takes none, so its figures compare with any other run that takes none.</para>
     /// </summary>
     private static RunTally Explore(
         CountingMftSource source,
         string rootPath,
         IReadOnlyList<string> components,
         TableTuning tuning,
+        TimedSnapshots? snapshots,
         MftStageTimings timings,
         CancellationToken ct)
     {
-        var read = MftExploreReader.Read(source, rootPath, components, tuning, progress: null, ct, timings: timings);
+        var read = MftExploreReader.Read(
+            source,
+            rootPath,
+            components,
+            tuning,
+            snapshots is null ? null : DiscardedProgress.Instance,
+            ct,
+            snapshots?.Assembly,
+            timings: timings);
 
         return Tally(source, read is { Tree: not null, WholeTable: true }, timings) with
         {
             Kept = read.Tree is { } tree ? new KeptResult(tree) : null,
+            Snapshots = snapshots?.Times,
         };
     }
 

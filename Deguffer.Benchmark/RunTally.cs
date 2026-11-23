@@ -59,6 +59,10 @@ namespace Deguffer.Benchmark;
 /// <param name="Race">What each part of a round of the race route took. Null for every other route.</param>
 /// <param name="Search">What each stage of the duplicates route's search took. Null for every other route.</param>
 /// <param name="Planning">When each provider of the plan route's pass ran. Null for every other route.</param>
+/// <param name="Snapshots">
+/// What the snapshots an Explore route assembled cost it. Null for a run that took none, and for every
+/// route that draws nothing.
+/// </param>
 internal readonly record struct RunTally(
     long Items,
     long BytesRead,
@@ -77,4 +81,5 @@ internal readonly record struct RunTally(
     RaceTimes? Race = null,
     MftOpenTimings? Open = null,
     SearchTimes? Search = null,
-    PlanRun? Planning = null);
+    PlanRun? Planning = null,
+    SnapshotTimes? Snapshots = null);
