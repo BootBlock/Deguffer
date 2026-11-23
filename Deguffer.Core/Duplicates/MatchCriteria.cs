@@ -75,8 +75,7 @@ public static class MatchCriteriaRules
         return words.Count switch
         {
             0 => "nothing",
-            1 => "the " + words[0],
-            _ => "the " + string.Join(", ", words[..^1]) + " and " + words[^1],
+            _ => "the " + Listed.And(words),
         };
     }
 }

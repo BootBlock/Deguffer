@@ -51,8 +51,7 @@ public sealed class ThunderbirdCacheProvider : MozillaProfileCacheProvider
     /// that has accounts and keys.
     /// </summary>
     private static readonly MozillaApplication Application = new(
-        "Thunderbird",
-        "Thunderbird",
+        [new MozillaInstallation("Thunderbird", "Thunderbird", "thunderbird")],
         Children,
         [
             new("Mail", "Your local folders, and the mail Thunderbird downloaded from POP accounts."),
@@ -107,7 +106,4 @@ public sealed class ThunderbirdCacheProvider : MozillaProfileCacheProvider
         Recommendation = "Deguffer removes three named cache directories from the local half of each "
             + "profile, and never removes anything at all from the half your mail is in.",
     };
-
-    /// <summary>§5.3. Thunderbird holds its own cache open while it runs.</summary>
-    protected override IReadOnlyList<string> ConflictingProcessNames => ["thunderbird"];
 }
