@@ -731,6 +731,10 @@ public sealed class FirefoxCacheProviderTests : IDisposable
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
+    /// <summary>
+    /// Under the browser's name as well as the profile's, because the row also reads Firefox's forks
+    /// and their profiles carry the same default names. See <c>FirefoxForkProfileTests</c>.
+    /// </summary>
     [Fact]
     public async Task ListsEachCacheUnderItsProfile()
     {
@@ -744,8 +748,8 @@ public sealed class FirefoxCacheProviderTests : IDisposable
             .OfType<DeleteStep>()
             .ToDictionary(step => step.Path, StringComparer.OrdinalIgnoreCase);
 
-        Assert.Equal("work", steps[workCache].Group);
-        Assert.Equal("personal", steps[personalCache].Group);
+        Assert.Equal("Firefox — work", steps[workCache].Group);
+        Assert.Equal("Firefox — personal", steps[personalCache].Group);
     }
 
     /// <summary>

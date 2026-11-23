@@ -3,13 +3,13 @@ using Deguffer.Core.Safety;
 namespace Deguffer.Core.Providers;
 
 /// <summary>
-/// §5.2 as §7.1 needs it read from outside, for one Mozilla application: what Explore must refuse
-/// in the application's folders and in every profile its register names. Separate from
+/// §5.2 as §7.1 needs it read from outside, for one installation of a Mozilla application: what
+/// Explore must refuse in the installation's folders and in every profile its register names. Separate from
 /// <see cref="MozillaProfileCacheProvider"/> because it answers a different question: the provider
 /// decides what a plan removes, and this decides what a user may not remove by hand.
 /// </summary>
-/// <param name="application">The application whose profiles are declared.</param>
-/// <param name="discovery">The application's register, already read for this pass.</param>
+/// <param name="application">The application whose child table and user data are declared.</param>
+/// <param name="discovery">The installation's register, already read for this pass.</param>
 internal sealed class MozillaToolRoots(MozillaApplication application, MozillaProfileDiscovery discovery)
 {
     /// <summary>
@@ -20,7 +20,7 @@ internal sealed class MozillaToolRoots(MozillaApplication application, MozillaPr
     /// </summary>
     private static readonly DisposableChildSet NothingIsDisposable = new([]);
 
-    private string App => application.Name;
+    private string App => discovery.Installation.Name;
 
     /// <summary>
     /// The application's own folder under each application-data root, then both halves of every

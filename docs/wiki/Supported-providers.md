@@ -67,7 +67,7 @@ For where each location is, how Deguffer cleans it and what the next use costs, 
 | --- | --- | --- | --- | --- |
 | Chromium application caches | Chromium-based browsers — Chrome, Edge, Brave, Vivaldi and Opera — and the desktop applications that embed the same engine: chat clients, editors and other Electron apps, the applications that show web content through Microsoft's WebView2, the Steam client and the Battle.net launcher | each application's own vendor; the cache format belongs to the Chromium project | 1 | Observed |
 | Chromium offline site storage | Chromium-based browsers — Chrome, Edge, Brave, Vivaldi and Opera — and the desktop applications that embed the same engine: chat clients, editors and other Electron apps, the applications that show web content through Microsoft's WebView2, the Steam client and the Battle.net launcher | each application's own vendor; the storage format belongs to the Chromium project | 2 | Observed |
-| Firefox caches | Mozilla Firefox | Mozilla | 1 | Observed |
+| Firefox caches | Mozilla Firefox, and the browsers built from it that keep their profiles the same way: Zen, Waterfox, LibreWolf and Floorp | Mozilla, and each browser's own developers | 1 | Observed |
 | Thunderbird caches | Mozilla Thunderbird | Mozilla | 1 | Observed |
 
 ## Games

@@ -126,11 +126,6 @@ public static class ExploreNodeText
             kinds.Add("sparse");
         }
 
-        return kinds.Count switch
-        {
-            0 => null,
-            1 => kinds[0],
-            _ => $"{string.Join(", ", kinds[..^1])} and {kinds[^1]}",
-        };
+        return kinds.Count == 0 ? null : Listed.And(kinds);
     }
 }

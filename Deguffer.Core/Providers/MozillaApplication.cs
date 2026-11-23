@@ -7,10 +7,10 @@ namespace Deguffer.Core.Providers;
 /// <see cref="MozillaProfileCacheProvider"/>. Everything else about a Mozilla profile — the register,
 /// the two roots, the derived local path and the links along it — is the engine's, and identical.
 /// </summary>
-/// <param name="Name">The application's name as the user knows it, which every sentence uses.</param>
-/// <param name="Directory">
-/// The application's own directory relative to each application-data root, which
-/// <see cref="MozillaProfileDiscovery"/> resolves the register and both halves of a profile under.
+/// <param name="Installations">
+/// Every product that keeps this application's profiles under a folder of its own: Firefox, and the
+/// forks built from Firefox's source that differ from it only in that folder's name. They share the
+/// child table, the user data and the tier because the profile inside the folder is Firefox's.
 /// </param>
 /// <param name="Children">
 /// What may be removed from a profile's <em>local</em> half. Anything not named here is Tier 4 by
@@ -31,12 +31,34 @@ namespace Deguffer.Core.Providers;
 /// where the application has one.
 /// </param>
 public sealed record MozillaApplication(
-    string Name,
-    string Directory,
+    IReadOnlyList<MozillaInstallation> Installations,
     DisposableChildSet Children,
     IReadOnlyList<MozillaUserData> UserData,
     string UserDataSummary,
-    MozillaKeptData? Kept);
+    MozillaKeptData? Kept)
+{
+    /// <summary>The named user data in one roaming directory, for §5.6.</summary>
+    public IEnumerable<(string Path, string Reason)> UserDataIn(string directory) =>
+        UserData.Select(data => (Path.Combine(directory, data.Name), data.Reason));
+}
+
+/// <summary>
+/// One product whose profiles <see cref="MozillaProfileDiscovery"/> reads: where Gecko puts its
+/// folder, and the process that holds its caches open.
+///
+/// <para>Gecko names the folder from the product's <c>application.ini</c>: its <c>Profile</c> value
+/// where one is set, and <c>Vendor\Name</c> otherwise. Firefox sets no <c>Profile</c>, so its folder
+/// is <c>Mozilla\Firefox</c>, and a fork that sets one keeps the identical profile under that name
+/// instead. The same function builds the roaming and the local root, so the two-root split holds for
+/// every one of them.</para>
+/// </summary>
+/// <param name="Name">The product's name as the user knows it, which every sentence about it uses.</param>
+/// <param name="Directory">
+/// The product's own directory relative to each application-data root, which
+/// <see cref="MozillaProfileDiscovery"/> resolves the register and both halves of a profile under.
+/// </param>
+/// <param name="ProcessName">The product's process, without <c>.exe</c>, for §5.3.</param>
+public sealed record MozillaInstallation(string Name, string Directory, string ProcessName);
 
 /// <summary>One named piece of user data in the roaming half of a profile.</summary>
 /// <param name="Name">The file or directory's name in the profile.</param>

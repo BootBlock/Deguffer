@@ -192,7 +192,7 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | VS Code extension browsers | The Chromium build that an extension such as Cline downloaded and will download again by itself; never the extension's conversations, checkpoints or settings, or a build that a running browser is using |
 | VS Code unfinished extension installs | The folders an editor built on VS Code left in its extensions folder from installs and removals it never finished, once nothing in one has changed for 7 days; never an installed extension, the editor's list of them, or a folder found through a link |
 | Chromium application caches | Chrome, Edge, Brave, Vivaldi and Opera, the built-in browsers in the Steam client and the Battle.net launcher, and every application that embeds the same engine, including WebView2 and packaged applications. Never their sign-ins, saved passwords or payment cards |
-| Firefox caches | |
+| Firefox caches | Firefox, Zen, Waterfox, LibreWolf and Floorp: the five named caches in each profile's local half; never your bookmarks, history, saved passwords or settings |
 | Thunderbird caches | The cache, startup cache and Safe Browsing lists in each profile's local half; never your mail, address books, calendars, saved passwords or OpenPGP keys |
 | Steam HTTP cache | The client's own cache next to the program; never your games, your cloud saves, or the sign-in kept by its built-in browser |
 | Spotify streaming cache | Never the music and podcasts you downloaded, wherever Spotify's settings put them. Researched |

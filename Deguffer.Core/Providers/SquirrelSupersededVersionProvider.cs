@@ -279,7 +279,7 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
 
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
-                $"Left every version of {SquirrelSupersededPlanNotes.Join(names)} alone: {SquirrelSupersededPlanNotes.WhyUnordered(doubt.Key, names.Count == 1)}"));
+                $"Left every version of {Listed.And(names)} alone: {SquirrelSupersededPlanNotes.WhyUnordered(doubt.Key, names.Count == 1)}"));
         }
 
         // One candidate per installation, not one per version directory. The question that decides
@@ -319,7 +319,7 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Warning,
-                $"Left the older builds of {SquirrelSupersededPlanNotes.Join([.. installations.Where(i => running.Contains(i.Root)).Select(i => i.Name)])} "
+                $"Left the older builds of {Listed.And([.. installations.Where(i => running.Contains(i.Root)).Select(i => i.Name)])} "
                 + "alone: "
                 + Counted.Form(live.Vetoed.Count, "it is", "they are")
                 + " running. Close "
@@ -331,7 +331,7 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Warning,
-                $"Left the older builds of {SquirrelSupersededPlanNotes.Join([.. installations.Where(i => unsure.Contains(i.Root)).Select(i => i.Name)])} "
+                $"Left the older builds of {Listed.And([.. installations.Where(i => unsure.Contains(i.Root)).Select(i => i.Name)])} "
                 + "alone: Deguffer could not check whether "
                 + Counted.Form(unsure.Count, "it is", "they are")
                 + " running. Scan again to include the builds."));

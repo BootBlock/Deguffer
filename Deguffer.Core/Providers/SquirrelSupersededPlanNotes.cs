@@ -57,16 +57,4 @@ internal static class SquirrelSupersededPlanNotes
         _ => throw new ArgumentOutOfRangeException(
             nameof(doubt), doubt, "Ordered installations and unread indexes have sentences of their own."),
     };
-
-    /// <summary>
-    /// Application names for a sentence, in the form a reader expects rather than comma-separated
-    /// throughout. Driving the real window is what catches a sentence that reads correctly only on
-    /// a machine with one of something.
-    /// </summary>
-    public static string Join(IReadOnlyList<string> names) => names.Count switch
-    {
-        0 => string.Empty,
-        1 => names[0],
-        _ => string.Join(", ", names.Take(names.Count - 1)) + " and " + names[^1],
-    };
 }

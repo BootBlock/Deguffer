@@ -10,9 +10,7 @@ public static class RunningActionText
 {
     /// <summary>Every action, as a list read aloud: "a, b and c".</summary>
     public static string List(IReadOnlyList<RunningAction> running) =>
-        running.Count == 1
-            ? Name(running[0])
-            : string.Join(", ", running.Take(running.Count - 1).Select(Name)) + " and " + Name(running[^1]);
+        Listed.And([.. running.Select(Name)]);
 
     /// <summary>"it" for one action and "they" for more, with the verb that agrees with it.</summary>
     public static (string It, string Finishes) Agreement(IReadOnlyList<RunningAction> running) =>
