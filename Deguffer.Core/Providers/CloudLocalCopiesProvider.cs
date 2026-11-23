@@ -138,13 +138,17 @@ public sealed class CloudLocalCopiesProvider : CleanupProviderBase
         var unreadable = false;
         var recentOnly = new List<string>();
 
-        foreach (var root in roots)
-        {
-            ct.ThrowIfCancellationRequested();
+        var judged = Judged(roots, ct);
+        var selections = await PlaceholderWalks.OfAsync(
+                _cloud, [.. judged.Where(root => root.Running).Select(root => root.Root.Path)], keep, _tuning, ct)
+            .ConfigureAwait(false);
+        var walked = 0;
 
+        foreach (var (root, app, running) in judged)
+        {
             var name = NameOf(root);
 
-            if (!RecognisedApps.TryGetValue(root.ProviderName, out var app))
+            if (app is null)
             {
                 declined = true;
                 protect.Add((root.Path, "A folder an unrecognised sync app keeps in step with the cloud, which "
@@ -159,7 +163,7 @@ public sealed class CloudLocalCopiesProvider : CleanupProviderBase
             protect.Add((root.Path, $"The folder {app} keeps in step with the cloud, which must survive with "
                 + "every file in it."));
 
-            if (_cloud.ProviderState(root.Path) is not SyncProviderState.Running)
+            if (!running)
             {
                 declined = true;
                 notes.Add(new PlanNote(
@@ -168,9 +172,7 @@ public sealed class CloudLocalCopiesProvider : CleanupProviderBase
                 continue;
             }
 
-            var selection = await WorkerThreads.Shared.RunAsync(
-                    () => PlaceholderWalk.Of(_cloud, root.Path, keep, _tuning.For(root.Path).Walk.Threads, ct), ct)
-                .ConfigureAwait(false);
+            var selection = selections[walked++];
 
             notes.AddRange(NotesFor(selection, app, name));
             unreadable |= selection.Unreadable > 0;
@@ -221,6 +223,27 @@ public sealed class CloudLocalCopiesProvider : CleanupProviderBase
             WasNotExamined = declined && steps.Count == 0,
             HasUnreadableRoot = unreadable,
         };
+    }
+
+    /// <summary>
+    /// Each root with the recognised app that keeps it, and whether that app is running, so every root to
+    /// be walked is known before any walk starts and the roots on one volume share one
+    /// (<see cref="PlaceholderWalks"/>).
+    /// </summary>
+    private List<JudgedRoot> Judged(IReadOnlyList<SyncRoot> roots, CancellationToken ct)
+    {
+        var judged = new List<JudgedRoot>(roots.Count);
+
+        foreach (var root in roots)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var app = RecognisedApps.GetValueOrDefault(root.ProviderName);
+            judged.Add(new JudgedRoot(
+                root, app, app is not null && _cloud.ProviderState(root.Path) is SyncProviderState.Running));
+        }
+
+        return judged;
     }
 
     /// <summary>
@@ -291,4 +314,8 @@ public sealed class CloudLocalCopiesProvider : CleanupProviderBase
         root.DisplayName is { Length: > 0 } display && !display.StartsWith('@')
             ? display
             : Path.GetFileName(Path.TrimEndingDirectorySeparator(root.Path));
+
+    /// <param name="App">The name the user knows the root's sync app by, or null where Deguffer does not recognise it.</param>
+    /// <param name="Running">Whether a recognised app is running, so it would release what the plan asks.</param>
+    private readonly record struct JudgedRoot(SyncRoot Root, string? App, bool Running);
 }
