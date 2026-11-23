@@ -123,7 +123,7 @@ internal sealed class MozillaRegisters
         from installation in profiles.GroupBy(profile => profile.Installation)
         let app = installation.Key.Name
         let count = installation.Count()
-        select $"The '{string.Join("' and '", installation.Select(profile => profile.Name))}' {app} "
+        select $"The {Listed.And([.. installation.Select(profile => $"'{profile.Name}'")])} {app} "
             + $"{Counted.Form(count, "profile is", "profiles are")} kept outside {app}'s own folder. "
             + $"Deguffer did not examine {Counted.Form(count, "it", "them")}: a profile stored that way "
             + $"keeps its cache among your {_application.UserDataSummary} rather than separately from them.";
