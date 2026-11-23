@@ -27,7 +27,9 @@ internal sealed class VagrantPruneTarget(
     IReadOnlySet<string> installed,
     IReadOnlyList<VagrantBoxVersion> removed) : ICommandTargetCheck
 {
-    public string? WhyNot(RunCommandStep step, CancellationToken ct)
+    public Task<string?> WhyNotAsync(RunCommandStep step, CancellationToken ct) => Task.FromResult(WhyNot(step, ct));
+
+    private string? WhyNot(RunCommandStep step, CancellationToken ct)
     {
         var boxes = VagrantBoxLayout.BoxesIn(home);
 

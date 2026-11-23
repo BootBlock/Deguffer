@@ -190,13 +190,13 @@ public interface ILiveTreeInspector
     /// that cannot be compared with its last write, is named in
     /// <see cref="LiveTreeFindings.Unanswered"/>, and the rest of the answer stands. A process table that could not be read leaves every candidate unanswered.</para>
     /// </summary>
-    LiveTreeFindings FindLive(IReadOnlyList<LiveTreeQuery> candidates, CancellationToken ct = default);
+    Task<LiveTreeFindings> FindLiveAsync(IReadOnlyList<LiveTreeQuery> candidates, CancellationToken ct = default);
 
     /// <summary>
     /// Every directory a running program is in: the folder its executable was started from, and
     /// its working directory. <see cref="LiveTree.Holders"/> names each program in one.
     ///
-    /// <para><b>The same evidence as <see cref="FindLive"/>, asked from the other end, and the
+    /// <para><b>The same evidence as <see cref="FindLiveAsync"/>, asked from the other end, and the
     /// reason is that the other end is a disk walk.</b> Explore refuses a build directory a plan
     /// holds back as in use (§7.1), and that method can only judge a directory somebody has named.
     /// Naming a source tree's build directories is discovery — a walk of every approved source root,
@@ -206,23 +206,23 @@ public interface ILiveTreeInspector
     ///
     /// <para><b>A place, not a verdict.</b> A program in a project's own <c>tools</c> folder is
     /// using neither the project nor its build output, so a caller that wants the plan's answer
-    /// asks <see cref="FindLive"/> about what it finds from here. Declared lock files are no part of
+    /// asks <see cref="FindLiveAsync"/> about what it finds from here. Declared lock files are no part of
     /// this answer, because a file held open is not a place a program is.</para>
     ///
     /// <para><see cref="LiveTreeFindings.Complete"/> is false where working directories could not be
     /// read, and the list then holds executables' folders alone, or where one 32-bit process's could
     /// not be checked, or one executable's or working directory's path could not be put in a form
     /// that compares, and the list then lacks that one. The same limits apply as to
-    /// <see cref="FindLive"/>: every entry is positive evidence, and an elevated program or one
+    /// <see cref="FindLiveAsync"/>: every entry is positive evidence, and an elevated program or one
     /// belonging to another account cannot be inspected at all.</para>
     /// </summary>
-    LiveTreeFindings FindOccupiedDirectories(CancellationToken ct = default);
+    Task<LiveTreeFindings> FindOccupiedDirectoriesAsync(CancellationToken ct = default);
 
     /// <summary>
     /// Which immediate children of <paramref name="directories"/> something is running from,
     /// working in, or was started with, asked without naming the children.
     ///
-    /// <para><b>The same evidence as <see cref="FindLive"/>, asked from the other end, and the
+    /// <para><b>The same evidence as <see cref="FindLiveAsync"/>, asked from the other end, and the
     /// reason is arithmetic.</b> That method tests each candidate against every process, which is
     /// what a set of projects wants: there are tens of them and the caller knows their names. A
     /// scratch folder is the opposite shape — the user's <c>%TEMP%</c> held 18,056 immediate
@@ -242,8 +242,8 @@ public interface ILiveTreeInspector
     /// runs from its own install folder and works wherever the test runner does; the profile is on
     /// its command line instead, as <c>--user-data-dir=</c> for Chromium and <c>-profile</c> for
     /// Firefox, for as long as it runs. A project folder named on an editor's command line is not
-    /// evidence that its build output is in use, which is why <see cref="FindLive"/> and
-    /// <see cref="FindOccupiedDirectories"/> do not read it.</para>
+    /// evidence that its build output is in use, which is why <see cref="FindLiveAsync"/> and
+    /// <see cref="FindOccupiedDirectoriesAsync"/> do not read it.</para>
     ///
     /// <para>Both sides are put in <see cref="LongPath.Canonical"/> form before anything is
     /// compared, so forward slashes, a <c>..</c>, a device prefix and an 8.3 alias all read as the
@@ -256,17 +256,17 @@ public interface ILiveTreeInspector
     /// lines could not be read at all, where one 32-bit process's working directory could not be
     /// checked, or where a path a program holds, or one of <paramref name="directories"/>, could
     /// not be put in canonical form. Only the last of those is about one folder, so only it names the
-    /// folder in <see cref="LiveTreeFindings.Unanswered"/> and leaves the rest of the answer whole. The same limits apply as to <see cref="FindLive"/>: every
+    /// folder in <see cref="LiveTreeFindings.Unanswered"/> and leaves the rest of the answer whole. The same limits apply as to <see cref="FindLiveAsync"/>: every
     /// signal is positive evidence, and an elevated program or one belonging to another account
     /// cannot be inspected at all.</para>
     /// </summary>
-    LiveTreeFindings FindLiveChildren(IReadOnlyList<string> directories, CancellationToken ct = default);
+    Task<LiveTreeFindings> FindLiveChildrenAsync(IReadOnlyList<string> directories, CancellationToken ct = default);
 
     /// <summary>
     /// The folder at <paramref name="path"/>, at every path it is reachable at, as the rule that
     /// matches programs against directories follows it, and kept until <see cref="Invalidate"/>.
     ///
-    /// <para>For a caller that compares a place <see cref="FindOccupiedDirectories"/> reported with
+    /// <para>For a caller that compares a place <see cref="FindOccupiedDirectoriesAsync"/> reported with
     /// folders of its own. Every build provider asks about the same places in one planning pass, and
     /// following a path asks the machine where its volume is mounted, so each is followed once
     /// (G4).</para>
@@ -282,13 +282,8 @@ public interface ILiveTreeInspector
     /// a clean of hundreds of steps would otherwise build it again for every step from an identical
     /// reading. Asked after <see cref="DiscardOlderThan"/>, so what is kept against it is never older
     /// than the bound that call kept.</para>
-    /// </summary>
-    LiveTreeReading Reading(CancellationToken ct = default);
-
-    /// <summary>
-    /// <see cref="Reading"/>, awaited rather than waited for.
     ///
-    /// <para>For a planning pass, which starts it at its top so the reading runs while the rows begin
+    /// <para>For a planning pass too, which starts it at its top so the reading runs while the rows begin
     /// planning, and the first row to ask finds it taken or under way rather than paying for it inside
     /// its own slot. Everyone who asks while it runs waits for the same reading.</para>
     /// </summary>

@@ -91,15 +91,15 @@ public sealed class LiveTreeQuestionPerReadingTests : IDisposable
 
         var before = _liveTrees.OccupiedAskedCount;
 
-        Assert.Empty(Ask(plan, first));
-        Assert.Empty(Ask(plan, second));
+        Assert.Empty(await AskAsync(plan, first));
+        Assert.Empty(await AskAsync(plan, second));
         Assert.Equal(1, _liveTrees.OccupiedAskedCount - before);
 
         ProjectFixture.CreateSolution(
             solution, "Solution", xml: false, openProject, Path.Combine(solution, "Added", "Added.csproj"));
         _liveTrees.PassTheReadingLimit();
 
-        Assert.Contains(Ask(plan, added), held => held.Reason.Contains("devenv", StringComparison.Ordinal));
+        Assert.Contains(await AskAsync(plan, added), held => held.Reason.Contains("devenv", StringComparison.Ordinal));
         Assert.Equal(2, _liveTrees.OccupiedAskedCount - before);
 
         var result = await provider.ExecuteAsync(plan);
@@ -118,36 +118,36 @@ public sealed class LiveTreeQuestionPerReadingTests : IDisposable
     /// reading is past the limit or invalidated.
     /// </summary>
     [Fact]
-    public void TheInspectorNamesOneReadingUntilItIsDropped()
+    public async Task TheInspectorNamesOneReadingUntilItIsDropped()
     {
         var clock = new ManualTimeProvider();
         var calls = new FakeProcessTableCalls().With(FakeProcessTableCalls.Own);
         var inspector = new LiveTreeInspector(calls, new FakeVolumeInventory(), clock);
 
-        var first = inspector.Reading();
+        var first = await inspector.ReadingAsync();
         clock.Advance(IUseCheck.ReadingLimit);
         inspector.DiscardOlderThan(IUseCheck.ReadingLimit);
 
-        Assert.Equal(first, inspector.Reading());
+        Assert.Equal(first, await inspector.ReadingAsync());
         Assert.Equal(1, calls.ListCount);
 
         clock.Advance(TimeSpan.FromTicks(1));
         inspector.DiscardOlderThan(IUseCheck.ReadingLimit);
-        var second = inspector.Reading();
+        var second = await inspector.ReadingAsync();
 
         Assert.NotEqual(first, second);
         Assert.Equal(2, calls.ListCount);
 
         inspector.Invalidate();
 
-        Assert.NotEqual(second, inspector.Reading());
+        Assert.NotEqual(second, await inspector.ReadingAsync());
         Assert.Equal(3, calls.ListCount);
     }
 
-    private static IReadOnlyList<InUseNow> Ask(CleanupPlan plan, string path)
+    private static Task<IReadOnlyList<InUseNow>> AskAsync(CleanupPlan plan, string path)
     {
         var step = Assert.Single(plan.Steps.OfType<DeleteStep>(), s => s.Path.Equals(path, StringComparison.OrdinalIgnoreCase));
-        return step.UseCheck!.Ask(step, CancellationToken.None);
+        return step.UseCheck!.AskAsync(step, CancellationToken.None);
     }
 
     private static void AssertProvedStanding(CleanupResult result, string path)

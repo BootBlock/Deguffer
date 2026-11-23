@@ -21,7 +21,9 @@ internal sealed class RunningProcessCheck(IProcessInspector inspector, ProcessNa
     {
     }
 
-    public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
+    public Task<IReadOnlyList<InUseNow>> AskAsync(DeleteStep step, CancellationToken ct) => Task.FromResult(Ask(step, ct));
+
+    private IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
     {
         // The inspector keeps one snapshot for a planning pass, and the preview's may be past the
         // limit.

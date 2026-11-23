@@ -210,11 +210,11 @@ public sealed class NxWorkspaceCacheProvider : CleanupProviderBase
             declined.Add(overruled.Cache);
         }
 
-        var live = LiveTreeVeto.Apply(
+        var live = await LiveTreeVeto.ApplyAsync(
             _liveTrees,
             [.. recognised.Select(folder => new RecognisedBuildDirectory(folder.Path, folder.Workspace))],
             Questions,
-            ct);
+            ct).ConfigureAwait(false);
 
         var cleared = live.Cleared.ToDictionary(c => c.Path, StringComparer.OrdinalIgnoreCase);
         var examined = recognised.Where(folder => cleared.ContainsKey(folder.Path)).ToList();
@@ -284,9 +284,9 @@ public sealed class NxWorkspaceCacheProvider : CleanupProviderBase
     /// What the veto asks about a <c>.nx</c> folder in one reading of the machine: its workspace, and
     /// the databases of its index, read from the disk as they are now.
     /// </summary>
-    private LiveTreeQuestion Questions(CancellationToken ct) =>
-        LiveTreeQuestion.ForLockFiles(candidate =>
-            NxCacheIndex.Read(new NxWorkspaceFolder(candidate.Path, candidate.Project).IndexIn(Environment)).Files);
+    private Task<LiveTreeQuestion> Questions(CancellationToken ct) =>
+        Task.FromResult(LiveTreeQuestion.ForLockFiles(candidate =>
+            NxCacheIndex.Read(new NxWorkspaceFolder(candidate.Path, candidate.Project).IndexIn(Environment)).Files));
 
     /// <summary>
     /// Everything in the <c>.nx</c> folder beside the cache, which §5.6 asserts survived: the index, the

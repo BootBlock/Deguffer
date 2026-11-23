@@ -23,25 +23,68 @@ namespace Deguffer.Core.Providers;
 /// this one builds leaves the question at least as new as the reading it is kept for, never older.</para>
 /// </summary>
 /// <param name="rule">The provider's rule, applied once for each reading a check asks from.</param>
-internal sealed class LiveTreeQuestionSource(Func<CancellationToken, LiveTreeQuestion> rule)
+internal sealed class LiveTreeQuestionSource(Func<CancellationToken, Task<LiveTreeQuestion>> rule)
 {
     private readonly Lock _gate = new();
-    private (LiveTreeReading Reading, LiveTreeQuestion Question)? _built;
+    private (LiveTreeReading Reading, Task<LiveTreeQuestion> Question)? _built;
 
-    /// <summary>The question for <paramref name="reading"/>, built now where it was not built for it already.</summary>
-    public LiveTreeQuestion For(LiveTreeReading reading, CancellationToken ct)
+    /// <summary>
+    /// The question for <paramref name="reading"/>, built now where it was not built for it already.
+    ///
+    /// <para>Checks asking at once from a new reading await the one build between them. The gate only
+    /// hands the build out: the rule runs, and is awaited, outside it, so no check is held behind a
+    /// build that reads the machine. A build that failed is forgotten, so the next check builds again,
+    /// and one cancelled for the check that started it is built again for a check that still wants
+    /// the answer.</para>
+    /// </summary>
+    public async Task<LiveTreeQuestion> ForAsync(LiveTreeReading reading, CancellationToken ct)
     {
-        // Built under the gate, so checks asking at once from a new reading build it once between them.
-        lock (_gate)
+        while (true)
         {
-            if (_built is { } built && built.Reading == reading)
+            Task<Task<LiveTreeQuestion>>? start = null;
+            Task<LiveTreeQuestion> question;
+
+            lock (_gate)
             {
-                return built.Question;
+                if (_built is { } built && built.Reading == reading)
+                {
+                    question = built.Question;
+                }
+                else
+                {
+                    // Created cold and run below, so the rule's first steps, which may read the disk
+                    // before it first awaits, are taken outside the gate too. Awaited inside its own
+                    // async body, so a rule stopped before its first await ends cancelled, as one
+                    // stopped later does, rather than faulted.
+                    start = new Task<Task<LiveTreeQuestion>>(async () => await rule(ct).ConfigureAwait(false));
+                    question = start.Unwrap();
+                    _built = (reading, question);
+                }
             }
 
-            var question = rule(ct);
-            _built = (reading, question);
-            return question;
+            start?.RunSynchronously(TaskScheduler.Default);
+
+            try
+            {
+                return await question.WaitAsync(ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (question.IsCanceled && !ct.IsCancellationRequested)
+            {
+                // Stopped for the check that started it. This check still wants an answer.
+            }
+            finally
+            {
+                if (question.IsFaulted || question.IsCanceled)
+                {
+                    lock (_gate)
+                    {
+                        if (_built is { } built && ReferenceEquals(built.Question, question))
+                        {
+                            _built = null;
+                        }
+                    }
+                }
+            }
         }
     }
 }

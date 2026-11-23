@@ -37,7 +37,9 @@ internal sealed class ConanCleanTarget(
     ConanLocation.Found planned,
     IReadOnlySet<ConanStoreEntry> heldTo) : ICommandTargetCheck
 {
-    public string? WhyNot(RunCommandStep step, CancellationToken ct)
+    public Task<string?> WhyNotAsync(RunCommandStep step, CancellationToken ct) => Task.FromResult(WhyNot(step, ct));
+
+    private string? WhyNot(RunCommandStep step, CancellationToken ct)
     {
         inspector.DiscardOlderThan(IUseCheck.ReadingLimit);
 

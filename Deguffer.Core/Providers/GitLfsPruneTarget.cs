@@ -19,7 +19,7 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 internal sealed class GitLfsPruneTarget(ILiveTreeInspector inspector, GitLfsCheckout checkout) : ICommandTargetCheck
 {
-    public string? WhyNot(RunCommandStep step, CancellationToken ct)
+    public async Task<string?> WhyNotAsync(RunCommandStep step, CancellationToken ct)
     {
         switch (GitLfsStores.StandingOf(checkout.Store))
         {
@@ -41,7 +41,7 @@ internal sealed class GitLfsPruneTarget(ILiveTreeInspector inspector, GitLfsChec
 
         // The question the preview asked: a program working in the work tree or the git directory.
         var asked = new LiveTreeQuery(checkout.Store.GitDirectory, checkout.WorkTree);
-        var findings = inspector.FindLive([asked], ct);
+        var findings = await inspector.FindLiveAsync([asked], ct).ConfigureAwait(false);
 
         if (findings.Live.FirstOrDefault(tree => tree.Directory.Equals(asked.Directory, StringComparison.OrdinalIgnoreCase)) is { } live)
         {

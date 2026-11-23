@@ -49,7 +49,7 @@ internal sealed class SolutionWorkspaces
     /// named below the place it was read from, so read through <c>S:</c> they named no project the
     /// plan asks about.</para>
     /// </summary>
-    public static SolutionWorkspaces Read(
+    public static async Task<SolutionWorkspaces> ReadAsync(
         ILiveTreeInspector liveTrees,
         IReadOnlyList<SourceRoot> roots,
         CancellationToken ct)
@@ -57,7 +57,7 @@ internal sealed class SolutionWorkspaces
         var places = new Dictionary<string, Solutions>(StringComparer.OrdinalIgnoreCase);
         var folders = roots.Select(root => (root.Path, Folder: liveTrees.Reach(root.Path))).ToList();
 
-        foreach (var place in liveTrees.FindOccupiedDirectories(ct).Live)
+        foreach (var place in (await liveTrees.FindOccupiedDirectoriesAsync(ct).ConfigureAwait(false)).Live)
         {
             ct.ThrowIfCancellationRequested();
 

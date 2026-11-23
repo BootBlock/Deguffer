@@ -271,11 +271,11 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
         // recognise as missing is left behind. So the build is held back by where the browser runs
         // from. Each build is its own project, because a browser running from one is using none of
         // the builds beside it.
-        var live = LiveTreeVeto.Apply(
+        var live = await LiveTreeVeto.ApplyAsync(
             _liveTrees,
             [.. builds.Keys.Select(build => new RecognisedBuildDirectory(build, build))],
             lockFiles: [],
-            ct);
+            ct).ConfigureAwait(false);
 
         if (LiveTreeVeto.NoteFor(live.Vetoed, vetoed => $"the build '{builds[vetoed.Directory]}'") is { } held)
         {

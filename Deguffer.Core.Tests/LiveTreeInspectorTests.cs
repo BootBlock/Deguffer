@@ -39,14 +39,14 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// a service host with a different name entirely.
     /// </summary>
     [Fact]
-    public void ADirectoryIsLiveWhileAnotherProcessIsWorkingInTheProject()
+    public async Task ADirectoryIsLiveWhileAnotherProcessIsWorkingInTheProject()
     {
         var project = _temp.CreateDirectory("crate");
         var target = _temp.CreateDirectory("crate", "target");
 
-        using var busy = StartWaiting(project, new LiveTreeQuery(target, project));
+        using var busy = await StartWaitingAsync(project, new LiveTreeQuery(target, project));
 
-        var findings = new LiveTreeInspector().FindLive([new LiveTreeQuery(target, project)]);
+        var findings = await new LiveTreeInspector().FindLiveAsync([new LiveTreeQuery(target, project)]);
 
         Assert.True(findings.Complete);
         Assert.True(findings.IsLive(target));
@@ -59,14 +59,14 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// found on this machine and passes its check, which leaves the findings complete.
     /// </summary>
     [Fact]
-    public void ADirectoryIsLiveWhileA32BitProcessIsWorkingInTheProject()
+    public async Task ADirectoryIsLiveWhileA32BitProcessIsWorkingInTheProject()
     {
         var project = _temp.CreateDirectory("x86");
         var target = _temp.CreateDirectory("x86", "bin");
 
-        using var busy = StartWaiting(project, new LiveTreeQuery(target, project), Wow64Program("PING.EXE"));
+        using var busy = await StartWaitingAsync(project, new LiveTreeQuery(target, project), Wow64Program("PING.EXE"));
 
-        var findings = new LiveTreeInspector().FindLive([new LiveTreeQuery(target, project)]);
+        var findings = await new LiveTreeInspector().FindLiveAsync([new LiveTreeQuery(target, project)]);
 
         Assert.True(findings.Complete);
         Assert.True(findings.IsLive(target));
@@ -77,7 +77,7 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// The 32-bit block is the only one its <c>cd</c> updates.
     /// </summary>
     [Fact]
-    public void A32BitShellIsSeenInTheDirectoryItChangedTo()
+    public async Task A32BitShellIsSeenInTheDirectoryItChangedTo()
     {
         var started = _temp.CreateDirectory("started");
         var moved = _temp.CreateDirectory("moved");
@@ -96,11 +96,11 @@ public sealed class LiveTreeInspectorTests : IDisposable
             RedirectStandardOutput = true,
         };
 
-        using var shell = VisibleOrStopped(
+        using var shell = await VisibleOrStoppedAsync(
             new WaitingProcess(Process.Start(start)!),
-            () => new LiveTreeInspector().FindLive([query]).IsLive(target));
+            async () => (await new LiveTreeInspector().FindLiveAsync([query])).IsLive(target));
 
-        var findings = new LiveTreeInspector().FindOccupiedDirectories();
+        var findings = await new LiveTreeInspector().FindOccupiedDirectoriesAsync();
 
         Assert.True(findings.Complete);
         Assert.Contains(findings.Live, place => place.Directory.Equals(moved, StringComparison.OrdinalIgnoreCase));
@@ -112,12 +112,12 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// on a rule that answers "live" to everything.
     /// </summary>
     [Fact]
-    public void ADormantProjectIsNotLive()
+    public async Task ADormantProjectIsNotLive()
     {
         var project = _temp.CreateDirectory("dormant");
         var target = _temp.CreateDirectory("dormant", "target");
 
-        var findings = new LiveTreeInspector().FindLive([new LiveTreeQuery(target, project)]);
+        var findings = await new LiveTreeInspector().FindLiveAsync([new LiveTreeQuery(target, project)]);
 
         Assert.True(findings.Complete);
         Assert.False(findings.IsLive(target));
@@ -129,19 +129,19 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// running, which no lock file and no sibling project would reveal.
     /// </summary>
     [Fact]
-    public void ADirectoryIsLiveWhileAProgramInsideItIsRunning()
+    public async Task ADirectoryIsLiveWhileAProgramInsideItIsRunning()
     {
         var project = _temp.CreateDirectory("app");
         var venv = _temp.CreateDirectory("app", ".venv", "Scripts");
         var copied = Path.Combine(venv, "interpreter.exe");
         File.Copy(WaitingProgram, copied);
 
-        using var running = StartWaiting(
+        using var running = await StartWaitingAsync(
             _temp.Path,
             new LiveTreeQuery(Path.Combine(project, ".venv"), project),
             copied);
 
-        var findings = new LiveTreeInspector().FindLive(
+        var findings = await new LiveTreeInspector().FindLiveAsync(
             [new LiveTreeQuery(Path.Combine(project, ".venv"), project)]);
 
         Assert.True(findings.IsLive(Path.Combine(project, ".venv")));
@@ -153,7 +153,7 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// Windows, which no fake establishes.
     /// </summary>
     [Fact]
-    public void AProgramRunningFromAWriterFolderHoldsOnlyWhatWasWrittenSinceItStarted()
+    public async Task AProgramRunningFromAWriterFolderHoldsOnlyWhatWasWrittenSinceItStarted()
     {
         var installation = _temp.CreateDirectory("Chatterbox");
         var updater = Path.Combine(installation, "Update.exe");
@@ -169,9 +169,9 @@ public sealed class LiveTreeInspectorTests : IDisposable
             Writers = new LiveTreeWriters([installation], DateTimeOffset.UtcNow.AddHours(-1)),
         };
 
-        using var running = StartWaiting(installation, fresh, updater);
+        using var running = await StartWaitingAsync(installation, fresh, updater);
 
-        var findings = new LiveTreeInspector().FindLive([fresh, leftover]);
+        var findings = await new LiveTreeInspector().FindLiveAsync([fresh, leftover]);
 
         Assert.True(findings.IsLive(fresh.Directory));
         Assert.False(findings.IsLive(leftover.Directory));
@@ -186,7 +186,7 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// on it and §6.3 makes an unelevated run the ordinary one.
     /// </summary>
     [Fact]
-    public void ADirectoryIsLiveWhileItsDeclaredLockFileIsHeldOpen()
+    public async Task ADirectoryIsLiveWhileItsDeclaredLockFileIsHeldOpen()
     {
         var project = _temp.CreateDirectory("unity");
         var library = _temp.CreateDirectory("unity", "Library");
@@ -195,7 +195,7 @@ public sealed class LiveTreeInspectorTests : IDisposable
 
         using var holder = File.Open(lockFile, FileMode.Open, FileAccess.Read, FileShare.None);
 
-        var findings = new LiveTreeInspector().FindLive(
+        var findings = await new LiveTreeInspector().FindLiveAsync(
             [new LiveTreeQuery(library, project, ["UnityLockfile"])]);
 
         Assert.True(findings.Complete);
@@ -207,13 +207,13 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// weaker test, and taking it would veto every project whose tool once died badly — for ever.
     /// </summary>
     [Fact]
-    public void ALockFileNothingHoldsOpenDoesNotMakeADirectoryLive()
+    public async Task ALockFileNothingHoldsOpenDoesNotMakeADirectoryLive()
     {
         var project = _temp.CreateDirectory("unity");
         var library = _temp.CreateDirectory("unity", "Library");
         File.WriteAllText(Path.Combine(library, "UnityLockfile"), string.Empty);
 
-        var findings = new LiveTreeInspector().FindLive(
+        var findings = await new LiveTreeInspector().FindLiveAsync(
             [new LiveTreeQuery(library, project, ["UnityLockfile"])]);
 
         Assert.False(findings.IsLive(library));
@@ -226,12 +226,12 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// that matters.
     /// </summary>
     [Fact]
-    public void AnAbsentLockFileIsNotAnUnansweredQuestion()
+    public async Task AnAbsentLockFileIsNotAnUnansweredQuestion()
     {
         var project = _temp.CreateDirectory("unity");
         var library = _temp.CreateDirectory("unity", "Library");
 
-        var findings = new LiveTreeInspector().FindLive(
+        var findings = await new LiveTreeInspector().FindLiveAsync(
             [new LiveTreeQuery(library, project, ["UnityLockfile"])]);
 
         Assert.True(findings.Complete);
@@ -244,7 +244,7 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// states as a check that could not run.
     /// </summary>
     [Fact]
-    public void ALockFileWindowsWillNotDescribeIsAnUnansweredQuestion()
+    public async Task ALockFileWindowsWillNotDescribeIsAnUnansweredQuestion()
     {
         var project = _temp.CreateDirectory("unity");
         var library = _temp.CreateDirectory("unity", "Library");
@@ -253,7 +253,7 @@ public sealed class LiveTreeInspectorTests : IDisposable
 
         using var denied = DeniedDirectory.WithUnreadableFile(lockFile);
 
-        var findings = new LiveTreeInspector().FindLive(
+        var findings = await new LiveTreeInspector().FindLiveAsync(
             [new LiveTreeQuery(library, project, ["UnityLockfile"])]);
 
         Assert.False(findings.Complete);
@@ -265,7 +265,7 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// file held open still makes the directory live.
     /// </summary>
     [Fact]
-    public void AListedLockFileHeldOpenMakesADirectoryLive()
+    public async Task AListedLockFileHeldOpenMakesADirectoryLive()
     {
         var project = _temp.CreateDirectory("solution");
         var vs = _temp.CreateDirectory("solution", ".vs");
@@ -274,7 +274,7 @@ public sealed class LiveTreeInspectorTests : IDisposable
 
         using var holder = File.Open(index, FileMode.Open, FileAccess.Read, FileShare.None);
 
-        var findings = new LiveTreeInspector().FindLive(
+        var findings = await new LiveTreeInspector().FindLiveAsync(
             [new LiveTreeQuery(vs, project, [index]) { LockFilesListed = true }]);
 
         Assert.True(findings.Complete);
@@ -287,7 +287,7 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// file named in advance (<see cref="ALockFileWindowsWillNotDescribeIsAnUnansweredQuestion"/>).
     /// </summary>
     [Fact]
-    public void AListedLockFileWindowsWillNotDescribeIsStillAnUnansweredQuestion()
+    public async Task AListedLockFileWindowsWillNotDescribeIsStillAnUnansweredQuestion()
     {
         var project = _temp.CreateDirectory("solution");
         var vs = _temp.CreateDirectory("solution", ".vs");
@@ -296,7 +296,7 @@ public sealed class LiveTreeInspectorTests : IDisposable
 
         using var denied = DeniedDirectory.WithUnreadableFile(index);
 
-        var findings = new LiveTreeInspector().FindLive(
+        var findings = await new LiveTreeInspector().FindLiveAsync(
             [new LiveTreeQuery(vs, project, [index]) { LockFilesListed = true }]);
 
         Assert.False(findings.Complete);
@@ -310,7 +310,7 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// answer errs toward holding the directory back.
     /// </summary>
     [Fact]
-    public void AListedLockFileIsNotProbedAgain()
+    public async Task AListedLockFileIsNotProbedAgain()
     {
         var project = _temp.CreateDirectory("solution");
         var vs = _temp.CreateDirectory("solution", ".vs");
@@ -318,8 +318,8 @@ public sealed class LiveTreeInspectorTests : IDisposable
 
         var inspector = new LiveTreeInspector();
 
-        Assert.True(inspector.FindLive([new LiveTreeQuery(vs, project, [replaced])]).Complete);
-        Assert.False(inspector.FindLive([new LiveTreeQuery(vs, project, [replaced]) { LockFilesListed = true }]).Complete);
+        Assert.True((await inspector.FindLiveAsync([new LiveTreeQuery(vs, project, [replaced])])).Complete);
+        Assert.False((await inspector.FindLiveAsync([new LiveTreeQuery(vs, project, [replaced]) { LockFilesListed = true }])).Complete);
     }
 
     /// <summary>
@@ -329,13 +329,13 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// with nothing behind it, on a plan that is in fact fine.
     /// </summary>
     [Fact]
-    public void ADeclaredLockFileThatIsADirectoryIsNeverAsked()
+    public async Task ADeclaredLockFileThatIsADirectoryIsNeverAsked()
     {
         var project = _temp.CreateDirectory("unity");
         var library = _temp.CreateDirectory("unity", "Library");
         _temp.CreateDirectory("unity", "Library", "UnityLockfile");
 
-        var findings = new LiveTreeInspector().FindLive(
+        var findings = await new LiveTreeInspector().FindLiveAsync(
             [new LiveTreeQuery(library, project, ["UnityLockfile"])]);
 
         Assert.True(findings.Complete);
@@ -347,16 +347,16 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// or the first busy project on a disk would take every other one off the list with it.
     /// </summary>
     [Fact]
-    public void OnlyTheProjectInUseIsVetoed()
+    public async Task OnlyTheProjectInUseIsVetoed()
     {
         var busyProject = _temp.CreateDirectory("busy");
         var busyTarget = _temp.CreateDirectory("busy", "target");
         var idleProject = _temp.CreateDirectory("idle");
         var idleTarget = _temp.CreateDirectory("idle", "target");
 
-        using var busy = StartWaiting(busyProject, new LiveTreeQuery(busyTarget, busyProject));
+        using var busy = await StartWaitingAsync(busyProject, new LiveTreeQuery(busyTarget, busyProject));
 
-        var findings = new LiveTreeInspector().FindLive(
+        var findings = await new LiveTreeInspector().FindLiveAsync(
         [
             new LiveTreeQuery(busyTarget, busyProject),
             new LiveTreeQuery(idleTarget, idleProject),
@@ -372,7 +372,7 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// that fires on the wrong directory is as wrong as one that does not fire at all.
     /// </summary>
     [Fact]
-    public void AProjectWhoseNameIsAPrefixOfAnothersIsNotConfusedWithIt()
+    public async Task AProjectWhoseNameIsAPrefixOfAnothersIsNotConfusedWithIt()
     {
         var project = _temp.CreateDirectory("crate");
         var target = _temp.CreateDirectory("crate", "target");
@@ -380,9 +380,9 @@ public sealed class LiveTreeInspectorTests : IDisposable
 
         // Waited on against the lookalike's own project, so the process is established before the
         // assertion that the real project is untouched by it.
-        using var busy = StartWaiting(lookalike, new LiveTreeQuery(lookalike, lookalike));
+        using var busy = await StartWaitingAsync(lookalike, new LiveTreeQuery(lookalike, lookalike));
 
-        var findings = new LiveTreeInspector().FindLive([new LiveTreeQuery(target, project)]);
+        var findings = await new LiveTreeInspector().FindLiveAsync([new LiveTreeQuery(target, project)]);
 
         Assert.False(findings.IsLive(target));
     }
@@ -394,22 +394,22 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// the workspace, the same program is no evidence, which is a shell at a repository's root.
     /// </summary>
     [Fact]
-    public void AProgramWorkingInAWorkspaceAboveTheProjectMakesItLive()
+    public async Task AProgramWorkingInAWorkspaceAboveTheProjectMakesItLive()
     {
         var solution = _temp.CreateDirectory("Solution");
         var project = _temp.CreateDirectory("Solution", "ProjectA");
         var target = _temp.CreateDirectory("Solution", "ProjectA", "obj");
         var opened = new LiveTreeQuery(target, project) { Workspaces = [solution] };
 
-        using var busy = StartWaiting(solution, opened);
+        using var busy = await StartWaitingAsync(solution, opened);
 
-        var findings = new LiveTreeInspector().FindLive([opened]);
+        var findings = await new LiveTreeInspector().FindLiveAsync([opened]);
 
         Assert.True(findings.Complete);
         Assert.Contains(
             Assert.Single(findings.Live).Holders,
             h => h.EndsWith("is working in Solution", StringComparison.Ordinal));
-        Assert.False(new LiveTreeInspector().FindLive([new LiveTreeQuery(target, project)]).IsLive(target));
+        Assert.False((await new LiveTreeInspector().FindLiveAsync([new LiveTreeQuery(target, project)])).IsLive(target));
     }
 
     /// <summary>
@@ -417,16 +417,16 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// is below the solution's folder too, and it is using the sibling.
     /// </summary>
     [Fact]
-    public void AProgramBelowAWorkspaceButOutsideTheProjectDoesNotMakeItLive()
+    public async Task AProgramBelowAWorkspaceButOutsideTheProjectDoesNotMakeItLive()
     {
         var solution = _temp.CreateDirectory("Solution");
         var project = _temp.CreateDirectory("Solution", "ProjectA");
         var target = _temp.CreateDirectory("Solution", "ProjectA", "obj");
         var sibling = _temp.CreateDirectory("Solution", "ProjectB");
 
-        using var busy = StartWaiting(sibling, new LiveTreeQuery(sibling, sibling));
+        using var busy = await StartWaitingAsync(sibling, new LiveTreeQuery(sibling, sibling));
 
-        var findings = new LiveTreeInspector().FindLive(
+        var findings = await new LiveTreeInspector().FindLiveAsync(
             [new LiveTreeQuery(target, project) { Workspaces = [solution] }]);
 
         Assert.False(findings.IsLive(target));
@@ -445,7 +445,7 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// worked, which is what the test that used to sit here did.
     /// </summary>
     [Fact]
-    public void ALockFilePastMaxPathIsReportedAsUncheckedRatherThanDormant()
+    public async Task ALockFilePastMaxPathIsReportedAsUncheckedRatherThanDormant()
     {
         var deep = Path.Combine(_temp.Path, string.Join('\\', Enumerable.Repeat(new string('d', 60), 5)));
         Directory.CreateDirectory(LongPath.Extended(deep));
@@ -465,7 +465,7 @@ public sealed class LiveTreeInspectorTests : IDisposable
         var shallowLibrary = _temp.CreateDirectory("shallow", "Library");
         File.WriteAllText(Path.Combine(shallowLibrary, "UnityLockfile"), string.Empty);
 
-        var findings = new LiveTreeInspector().FindLive(
+        var findings = await new LiveTreeInspector().FindLiveAsync(
             [
                 new LiveTreeQuery(library, deep, ["UnityLockfile"]),
                 new LiveTreeQuery(shallowLibrary, shallow, ["UnityLockfile"]),
@@ -484,22 +484,22 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// same contract every other collaborator in a planning pass has.
     /// </summary>
     [Fact]
-    public void TheProcessTableIsReadAgainAfterInvalidation()
+    public async Task TheProcessTableIsReadAgainAfterInvalidation()
     {
         var project = _temp.CreateDirectory("late");
         var target = _temp.CreateDirectory("late", "target");
         var inspector = new LiveTreeInspector();
 
-        Assert.False(inspector.FindLive([new LiveTreeQuery(target, project)]).IsLive(target));
+        Assert.False((await inspector.FindLiveAsync([new LiveTreeQuery(target, project)])).IsLive(target));
 
-        using var busy = StartWaiting(project, new LiveTreeQuery(target, project));
+        using var busy = await StartWaitingAsync(project, new LiveTreeQuery(target, project));
 
         // Still the old snapshot, so the process started a moment ago is not in it.
-        Assert.False(inspector.FindLive([new LiveTreeQuery(target, project)]).IsLive(target));
+        Assert.False((await inspector.FindLiveAsync([new LiveTreeQuery(target, project)])).IsLive(target));
 
         inspector.Invalidate();
 
-        Assert.True(inspector.FindLive([new LiveTreeQuery(target, project)]).IsLive(target));
+        Assert.True((await inspector.FindLiveAsync([new LiveTreeQuery(target, project)])).IsLive(target));
     }
 
     /// <summary>
@@ -512,7 +512,7 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// reported both ways would be two places.</para>
     /// </summary>
     [Fact]
-    public void NamesTheFolderAProgramRunsFromAndTheDirectoryItIsWorkingIn()
+    public async Task NamesTheFolderAProgramRunsFromAndTheDirectoryItIsWorkingIn()
     {
         var installed = _temp.CreateDirectory("installed");
         var working = _temp.CreateDirectory("working");
@@ -521,9 +521,9 @@ public sealed class LiveTreeInspectorTests : IDisposable
 
         // Waited on through the working directory alone, which is the half a process has to finish
         // starting before it can report.
-        using var running = StartWaiting(working, new LiveTreeQuery(working, working), copied);
+        using var running = await StartWaitingAsync(working, new LiveTreeQuery(working, working), copied);
 
-        var findings = new LiveTreeInspector().FindOccupiedDirectories();
+        var findings = await new LiveTreeInspector().FindOccupiedDirectoriesAsync();
 
         Assert.True(findings.Complete);
         Assert.Contains(findings.Live, place =>
@@ -543,15 +543,15 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// below the folder off limits, and nothing smaller can be expressed to a removal.</para>
     /// </summary>
     [Fact]
-    public void NamesTheImmediateChildOfAScratchFolderThatSomethingIsWorkingIn()
+    public async Task NamesTheImmediateChildOfAScratchFolderThatSomethingIsWorkingIn()
     {
         var scratch = _temp.CreateDirectory("scratch");
         var session = _temp.CreateDirectory("scratch", "session-1");
         var deep = _temp.CreateDirectory("scratch", "session-1", "build", "objects");
 
-        using var busy = StartWaiting(deep, new LiveTreeQuery(session, session));
+        using var busy = await StartWaitingAsync(deep, new LiveTreeQuery(session, session));
 
-        var findings = new LiveTreeInspector().FindLiveChildren([scratch]);
+        var findings = await new LiveTreeInspector().FindLiveChildrenAsync([scratch]);
 
         Assert.True(findings.Complete);
         Assert.Equal(session, Assert.Single(findings.Live).Directory);
@@ -561,12 +561,12 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// Without this the test above passes on a rule answering "live" to everything it is shown.
     /// </summary>
     [Fact]
-    public void NamesNothingInAScratchFolderNobodyIsWorkingIn()
+    public async Task NamesNothingInAScratchFolderNobodyIsWorkingIn()
     {
         var scratch = _temp.CreateDirectory("quiet");
         _temp.CreateDirectory("quiet", "session-1");
 
-        var findings = new LiveTreeInspector().FindLiveChildren([scratch]);
+        var findings = await new LiveTreeInspector().FindLiveChildrenAsync([scratch]);
 
         Assert.True(findings.Complete);
         Assert.Empty(findings.Live);
@@ -580,13 +580,13 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// turn the whole row into a no-op.
     /// </summary>
     [Fact]
-    public void NamesNothingForAProcessSittingInTheScratchFolderItself()
+    public async Task NamesNothingForAProcessSittingInTheScratchFolderItself()
     {
         var scratch = _temp.CreateDirectory("shell");
 
-        using var busy = StartWaiting(scratch, new LiveTreeQuery(scratch, scratch));
+        using var busy = await StartWaitingAsync(scratch, new LiveTreeQuery(scratch, scratch));
 
-        var findings = new LiveTreeInspector().FindLiveChildren([scratch]);
+        var findings = await new LiveTreeInspector().FindLiveChildrenAsync([scratch]);
 
         Assert.Empty(findings.Live);
     }
@@ -614,15 +614,15 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// that cannot discriminate everywhere should say where.</para>
     /// </summary>
     [Fact]
-    public void NormalisesAWorkingDirectoryHeldInAFormTheFilesystemDoesNotUse()
+    public async Task NormalisesAWorkingDirectoryHeldInAFormTheFilesystemDoesNotUse()
     {
         var scratch = _temp.CreateDirectory("Scratch");
         var session = _temp.CreateDirectory("Scratch", "Session-One");
         var asAddressed = ShortPath.Of(session) ?? session;
 
-        using var busy = StartWaiting(asAddressed, new LiveTreeQuery(session, session));
+        using var busy = await StartWaitingAsync(asAddressed, new LiveTreeQuery(session, session));
 
-        var findings = new LiveTreeInspector().FindLiveChildren([scratch]);
+        var findings = await new LiveTreeInspector().FindLiveChildrenAsync([scratch]);
 
         Assert.Equal(session, Assert.Single(findings.Live).Directory, StringComparer.OrdinalIgnoreCase);
     }
@@ -633,14 +633,14 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// profile nor works in it, so the command line is the only place this can be seen.
     /// </summary>
     [Fact]
-    public void NamesTheChildOfAScratchFolderAProgramWasStartedWith()
+    public async Task NamesTheChildOfAScratchFolderAProgramWasStartedWith()
     {
         var scratch = _temp.CreateDirectory("Temp");
         var profile = _temp.CreateDirectory("Temp", "playwright_chromiumdev_profile-a1B2c3");
 
-        using var browser = StartLaunchedWith(scratch, profile, $"--user-data-dir={profile}");
+        using var browser = await StartLaunchedWithAsync(scratch, profile, $"--user-data-dir={profile}");
 
-        var findings = new LiveTreeInspector().FindLiveChildren([scratch]);
+        var findings = await new LiveTreeInspector().FindLiveChildrenAsync([scratch]);
 
         Assert.True(findings.Complete);
         Assert.Equal(profile, Assert.Single(findings.Live).Directory, StringComparer.OrdinalIgnoreCase);
@@ -653,16 +653,16 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// one named is a different entry, and is not live.
     /// </summary>
     [Fact]
-    public void NamesTheChildHoldingAPathGivenAfterASwitch()
+    public async Task NamesTheChildHoldingAPathGivenAfterASwitch()
     {
         var scratch = _temp.CreateDirectory("Temp");
         var profile = _temp.CreateDirectory("Temp", "playwright_firefoxdev_profile-d4E5f6");
         var inside = _temp.CreateDirectory("Temp", "playwright_firefoxdev_profile-d4E5f6", "storage");
         _temp.CreateDirectory("Temp", "playwright_firefoxdev_profile-d4E5f");
 
-        using var browser = StartLaunchedWith(scratch, profile, "-profile", inside);
+        using var browser = await StartLaunchedWithAsync(scratch, profile, "-profile", inside);
 
-        var findings = new LiveTreeInspector().FindLiveChildren([scratch]);
+        var findings = await new LiveTreeInspector().FindLiveChildrenAsync([scratch]);
 
         Assert.True(findings.Complete);
         Assert.Equal(profile, Assert.Single(findings.Live).Directory, StringComparer.OrdinalIgnoreCase);
@@ -678,15 +678,15 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// creation disabled</b>, where the fixture falls back to the ordinary path.</para>
     /// </summary>
     [Fact]
-    public void NamesTheChildAProgramWasStartedWithInItsShortForm()
+    public async Task NamesTheChildAProgramWasStartedWithInItsShortForm()
     {
         var scratch = _temp.CreateDirectory("Temporary Folder");
         var profile = _temp.CreateDirectory("Temporary Folder", "Profile-Folder-Long");
         var asNamed = ShortPath.Of(profile) ?? profile;
 
-        using var browser = StartLaunchedWith(scratch, profile, $"--user-data-dir={asNamed}");
+        using var browser = await StartLaunchedWithAsync(scratch, profile, $"--user-data-dir={asNamed}");
 
-        var findings = new LiveTreeInspector().FindLiveChildren([scratch]);
+        var findings = await new LiveTreeInspector().FindLiveChildrenAsync([scratch]);
 
         Assert.Equal(profile, Assert.Single(findings.Live).Directory, StringComparer.OrdinalIgnoreCase);
     }
@@ -703,14 +703,14 @@ public sealed class LiveTreeInspectorTests : IDisposable
     [Theory]
     [InlineData(@"\\?\")]
     [InlineData(@"\\.\")]
-    public void NamesTheChildAProgramWasStartedWithInADeviceSpelling(string prefix)
+    public async Task NamesTheChildAProgramWasStartedWithInADeviceSpelling(string prefix)
     {
         var scratch = _temp.CreateDirectory("Temp");
         var profile = _temp.CreateDirectory("Temp", "playwright_chromiumdev_profile-g7H8i9");
 
-        using var browser = StartLaunchedWith(scratch, profile, $"--user-data-dir={prefix}{profile}");
+        using var browser = await StartLaunchedWithAsync(scratch, profile, $"--user-data-dir={prefix}{profile}");
 
-        var findings = new LiveTreeInspector().FindLiveChildren([scratch]);
+        var findings = await new LiveTreeInspector().FindLiveChildrenAsync([scratch]);
 
         Assert.Equal(profile, Assert.Single(findings.Live).Directory, StringComparer.OrdinalIgnoreCase);
     }
@@ -725,17 +725,17 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// scratch folder, because one below it already started with the folder's path.</para>
     /// </summary>
     [Fact]
-    public void NamesTheChildAProgramWasStartedWithInForwardSlashes() =>
-        NamesTheProfileSpelledAs((_, profile) =>
+    public Task NamesTheChildAProgramWasStartedWithInForwardSlashes() =>
+        NamesTheProfileSpelledAsAsync((_, profile) =>
             profile.Replace(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
 
     /// <inheritdoc cref="NamesTheChildAProgramWasStartedWithInForwardSlashes"/>
     [Fact]
-    public void NamesTheChildAProgramWasStartedWithThroughAParent() =>
-        NamesTheProfileSpelledAs((scratch, profile) =>
+    public Task NamesTheChildAProgramWasStartedWithThroughAParent() =>
+        NamesTheProfileSpelledAsAsync((scratch, profile) =>
             Path.Combine(Path.GetDirectoryName(scratch)!, "elsewhere", "..", "Temp", Path.GetFileName(profile)));
 
-    private void NamesTheProfileSpelledAs(Func<string, string, string> spell)
+    private async Task NamesTheProfileSpelledAsAsync(Func<string, string, string> spell)
     {
         var scratch = _temp.CreateDirectory("Temp");
         var profile = _temp.CreateDirectory("Temp", "playwright_chromiumdev_profile-j1K2l3");
@@ -745,9 +745,9 @@ public sealed class LiveTreeInspectorTests : IDisposable
 
         Assert.NotEqual(profile, spelled);
 
-        using var browser = StartLaunchedWith(scratch, profile, $"--user-data-dir={spelled}");
+        using var browser = await StartLaunchedWithAsync(scratch, profile, $"--user-data-dir={spelled}");
 
-        var findings = new LiveTreeInspector().FindLiveChildren([scratch]);
+        var findings = await new LiveTreeInspector().FindLiveChildrenAsync([scratch]);
 
         Assert.True(findings.Complete);
         Assert.Equal(profile, Assert.Single(findings.Live).Directory, StringComparer.OrdinalIgnoreCase);
@@ -764,7 +764,7 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// path.</para>
     /// </summary>
     [Fact]
-    public void NamesTheChildHoldingAShortFormFileNotYetWritten()
+    public async Task NamesTheChildHoldingAShortFormFileNotYetWritten()
     {
         var scratch = _temp.CreateDirectory("Temporary Folder");
         var run = _temp.CreateDirectory("Temporary Folder", "Run-Folder-Long");
@@ -773,9 +773,9 @@ public sealed class LiveTreeInspectorTests : IDisposable
 
         Assert.False(File.Exists(log));
 
-        using var program = StartLaunchedWith(scratch, run, $"--log-file={log}");
+        using var program = await StartLaunchedWithAsync(scratch, run, $"--log-file={log}");
 
-        var findings = new LiveTreeInspector().FindLiveChildren([scratch]);
+        var findings = await new LiveTreeInspector().FindLiveChildrenAsync([scratch]);
 
         Assert.Equal(run, Assert.Single(findings.Live).Directory, StringComparer.OrdinalIgnoreCase);
     }
@@ -787,15 +787,15 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// The same caveat applies about volumes with 8.3 name creation disabled.
     /// </summary>
     [Fact]
-    public void NamesTheChildOfAScratchFolderAskedAboutInItsShortForm()
+    public async Task NamesTheChildOfAScratchFolderAskedAboutInItsShortForm()
     {
         var scratch = _temp.CreateDirectory("Temporary Folder");
         var profile = _temp.CreateDirectory("Temporary Folder", "Profile-Folder-Asked");
         var asAsked = ShortPath.Of(scratch) ?? scratch;
 
-        using var browser = StartLaunchedWith(scratch, profile, $"--user-data-dir={profile}");
+        using var browser = await StartLaunchedWithAsync(scratch, profile, $"--user-data-dir={profile}");
 
-        var findings = new LiveTreeInspector().FindLiveChildren([asAsked]);
+        var findings = await new LiveTreeInspector().FindLiveChildrenAsync([asAsked]);
 
         Assert.Equal(
             Path.Combine(asAsked, "Profile-Folder-Asked"),
@@ -808,9 +808,9 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// which it ignores: PowerShell joins everything after <c>-Command</c> into one command, and
     /// the <c>#</c> turns the arguments into a comment. Waits until the inspector names
     /// <paramref name="child"/> of <paramref name="scratch"/>, for the reason
-    /// <see cref="StartWaiting"/> gives.
+    /// <see cref="StartWaitingAsync"/> gives.
     /// </summary>
-    private static WaitingProcess StartLaunchedWith(string scratch, string child, params string[] arguments)
+    private static Task<WaitingProcess> StartLaunchedWithAsync(string scratch, string child, params string[] arguments)
     {
         var start = new ProcessStartInfo(Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe"))
@@ -825,21 +825,28 @@ public sealed class LiveTreeInspectorTests : IDisposable
             start.ArgumentList.Add(argument);
         }
 
-        return VisibleOrStopped(
+        return VisibleOrStoppedAsync(
             new WaitingProcess(Process.Start(start)!),
-            () => new LiveTreeInspector().FindLiveChildren([scratch]).IsLive(child));
+            async () => (await new LiveTreeInspector().FindLiveChildrenAsync([scratch])).IsLive(child));
     }
 
     /// <summary>
     /// <paramref name="waiting"/> once <paramref name="visible"/> holds, or stopped before the
     /// failure is reported, so a helper that never became visible does not run on for two minutes.
     /// </summary>
-    private static WaitingProcess VisibleOrStopped(WaitingProcess waiting, Func<bool> visible)
+    private static async Task<WaitingProcess> VisibleOrStoppedAsync(WaitingProcess waiting, Func<Task<bool>> visible)
     {
-        if (!SpinWait.SpinUntil(visible, TimeSpan.FromSeconds(20)))
+        var deadline = Stopwatch.StartNew();
+
+        while (!await visible())
         {
-            waiting.Dispose();
-            Assert.Fail("the helper process never became visible to the inspector, so the test below would prove nothing");
+            if (deadline.Elapsed > TimeSpan.FromSeconds(20))
+            {
+                waiting.Dispose();
+                Assert.Fail("the helper process never became visible to the inspector, so the test below would prove nothing");
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(10));
         }
 
         return waiting;
@@ -872,7 +879,7 @@ public sealed class LiveTreeInspectorTests : IDisposable
     /// the inspector can see it would leave every test here racing that initialisation. Waiting on
     /// the inspector itself is the only barrier that tests the thing the tests depend on.
     /// </param>
-    private static WaitingProcess StartWaiting(
+    private static Task<WaitingProcess> StartWaitingAsync(
         string workingDirectory,
         LiveTreeQuery visibleAt,
         string? program = null)
@@ -891,9 +898,9 @@ public sealed class LiveTreeInspectorTests : IDisposable
 
         // Wrapped before anything can throw, so a failure while waiting still stops the child rather
         // than leaving a ping running for two minutes.
-        return VisibleOrStopped(
+        return VisibleOrStoppedAsync(
             new WaitingProcess(Process.Start(start)!),
-            () => new LiveTreeInspector().FindLive([visibleAt]).IsLive(visibleAt.Directory));
+            async () => (await new LiveTreeInspector().FindLiveAsync([visibleAt])).IsLive(visibleAt.Directory));
     }
 
     private sealed class WaitingProcess(Process process) : IDisposable

@@ -25,7 +25,7 @@ internal sealed record PulumiPluginChoice(
     /// <param name="pulumiRunning">Whether <c>pulumi</c> itself is running.</param>
     /// <param name="liveTrees">What reads where each program runs and works.</param>
     /// <param name="ct">Ends the reading of the process table.</param>
-    public static PulumiPluginChoice Make(
+    public static async Task<PulumiPluginChoice> MakeAsync(
         PulumiPluginCache cache,
         bool byCommand,
         bool pulumiRunning,
@@ -45,7 +45,7 @@ internal sealed record PulumiPluginChoice(
                 [new PlanNote(PlanNoteSeverity.Warning, $"Left Pulumi's plugins alone: {PulumiPluginUse.PulumiRunningReason}")]);
         }
 
-        var findings = liveTrees.FindLiveChildren([cache.Folder], ct);
+        var findings = await liveTrees.FindLiveChildrenAsync([cache.Folder], ct).ConfigureAwait(false);
         var answered = findings.IsAnswered(cache.Folder);
         var titles = cache.Installed.ToDictionary(plugin => plugin.Folder, plugin => plugin.Title, StringComparer.OrdinalIgnoreCase);
 

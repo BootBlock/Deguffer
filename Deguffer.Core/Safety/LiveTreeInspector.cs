@@ -37,7 +37,7 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
         _holdersOf = holdersOf ?? RestartManager.Query;
     }
 
-    public LiveTreeFindings FindLive(IReadOnlyList<LiveTreeQuery> candidates, CancellationToken ct = default)
+    public async Task<LiveTreeFindings> FindLiveAsync(IReadOnlyList<LiveTreeQuery> candidates, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(candidates);
 
@@ -46,7 +46,7 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
             return LiveTreeFindings.Nothing;
         }
 
-        var (table, match) = Snapshot(ct);
+        var (table, match, _) = await SnapshotAsync(ct).ConfigureAwait(false);
         var programs = match.Programs(table);
         var holders = new List<string>[candidates.Count];
         var answered = new bool[candidates.Count];
@@ -114,9 +114,9 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
             : new LiveTreeFindings(live, Complete: false);
     }
 
-    public LiveTreeFindings FindOccupiedDirectories(CancellationToken ct = default)
+    public async Task<LiveTreeFindings> FindOccupiedDirectoriesAsync(CancellationToken ct = default)
     {
-        var (table, _) = Snapshot(ct);
+        var (table, _, _) = await SnapshotAsync(ct).ConfigureAwait(false);
 
         // Keyed by the directory, because one program is several processes and a browser leaves
         // four of them in one folder. Four rows naming the same folder would be read as four folders.
@@ -142,11 +142,11 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
     }
 
     /// <summary>
-    /// <see cref="FindOccupiedDirectories"/> narrowed to the immediate children of
+    /// <see cref="FindOccupiedDirectoriesAsync"/> narrowed to the immediate children of
     /// <paramref name="directories"/>, so the two can never disagree about where a program is — and
     /// widened by the paths each program was started with, which only a scratch folder needs.
     /// </summary>
-    public LiveTreeFindings FindLiveChildren(IReadOnlyList<string> directories, CancellationToken ct = default)
+    public async Task<LiveTreeFindings> FindLiveChildrenAsync(IReadOnlyList<string> directories, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(directories);
 
@@ -159,8 +159,8 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
         // cannot be made so is still compared as well as it can be, and the answer says it may have
         // missed something about that folder.
         IReadOnlyList<string> unanswered = [.. directories.Where(asked => LongPath.Canonical(asked) is null)];
-        var occupied = FindOccupiedDirectories(ct);
-        var (table, match) = Snapshot(ct);
+        var occupied = await FindOccupiedDirectoriesAsync(ct).ConfigureAwait(false);
+        var (table, match, _) = await SnapshotAsync(ct).ConfigureAwait(false);
 
         // Keyed by the child, because programs in two folders below one scratch entry are both
         // using that entry, and two rows naming it would be read as two entries.
@@ -223,9 +223,6 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
 
     public ReachedFolder Reach(string path) => Match.Reach(path);
 
-    public LiveTreeReading Reading(CancellationToken ct = default) =>
-        new(SnapshotAsync(ct).GetAwaiter().GetResult().Number);
-
     public async Task<LiveTreeReading> ReadingAsync(CancellationToken ct = default) =>
         new((await SnapshotAsync(ct).ConfigureAwait(false)).Number);
 
@@ -264,16 +261,6 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
                 return _match ??= new LiveTreeMatch(_volumes);
             }
         }
-    }
-
-    /// <summary>
-    /// One reading of the process table, and the rule that matches it, waited for outside the lock.
-    /// See <see cref="SnapshotAsync"/>.
-    /// </summary>
-    private (ProcessTable Table, LiveTreeMatch Match) Snapshot(CancellationToken ct)
-    {
-        var (table, match, _) = SnapshotAsync(ct).GetAwaiter().GetResult();
-        return (table, match);
     }
 
     /// <summary>

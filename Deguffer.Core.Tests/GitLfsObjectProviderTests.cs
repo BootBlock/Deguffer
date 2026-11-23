@@ -611,22 +611,22 @@ public sealed class GitLfsObjectProviderTests : IDisposable
         var step = TheStep(await CreateProvider(Runner(), liveTrees).PlanAsync());
         var check = Assert.IsType<GitLfsPruneTarget>(step.TargetCheck);
 
-        Assert.Null(check.WhyNot(step, CancellationToken.None));
+        Assert.Null(await check.WhyNotAsync(step, CancellationToken.None));
         Assert.Equal([(gitDirectory, game)], liveTrees.Asked.Select(q => (q.Directory, q.Project)));
 
         // A program started in the work tree after the preview, asked about once the reading is past the limit.
         liveTrees.WithProgram("git", workingDirectory: game).PassTheReadingLimit();
 
-        Assert.Contains($"is working in {game}", check.WhyNot(step, CancellationToken.None), StringComparison.Ordinal);
+        Assert.Contains($"is working in {game}", await check.WhyNotAsync(step, CancellationToken.None), StringComparison.Ordinal);
         Assert.Contains(IUseCheck.ReadingLimit, liveTrees.AgeLimits);
 
         Assert.Contains(
             $"is working in {game}",
-            new GitLfsPruneTarget(new FakeLiveTreeInspector(gitDirectory), CheckoutOf(game)).WhyNot(step, CancellationToken.None),
+            await new GitLfsPruneTarget(new FakeLiveTreeInspector(gitDirectory), CheckoutOf(game)).WhyNotAsync(step, CancellationToken.None),
             StringComparison.Ordinal);
         Assert.Contains(
             LiveTreeVeto.CannotTell,
-            new GitLfsPruneTarget(FakeLiveTreeInspector.CannotTell, CheckoutOf(game)).WhyNot(step, CancellationToken.None),
+            await new GitLfsPruneTarget(FakeLiveTreeInspector.CannotTell, CheckoutOf(game)).WhyNotAsync(step, CancellationToken.None),
             StringComparison.Ordinal);
 
         var store = Path.Combine(gitDirectory, "lfs");
@@ -634,7 +634,7 @@ public sealed class GitLfsObjectProviderTests : IDisposable
         Directory.Move(store, moved);
         Junction.ToDirectory(store, moved);
 
-        Assert.Contains("reached through a link", check.WhyNot(step, CancellationToken.None), StringComparison.Ordinal);
+        Assert.Contains("reached through a link", await check.WhyNotAsync(step, CancellationToken.None), StringComparison.Ordinal);
     }
 
     private static GitLfsCheckout CheckoutOf(string workTree) =>

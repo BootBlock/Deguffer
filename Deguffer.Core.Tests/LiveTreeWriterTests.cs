@@ -48,11 +48,11 @@ public sealed class LiveTreeWriterTests
     [Theory]
     [InlineData(Installation + @"\Update.exe")]
     [InlineData(Installation + @"\app-1.0.9254\Chatterbox.exe")]
-    public void AProgramFromAWriterFolderRunningBeforeTheLastWriteMakesTheDirectoryLive(string image)
+    public async Task AProgramFromAWriterFolderRunningBeforeTheLastWriteMakesTheDirectoryLive(string image)
     {
         var query = Query();
 
-        var findings = Inspector(Program(image, Written.AddMinutes(-3))).FindLive([query]);
+        var findings = await Inspector(Program(image, Written.AddMinutes(-3))).FindLiveAsync([query]);
 
         Assert.True(findings.Complete);
         var live = Assert.Single(findings.Live);
@@ -66,11 +66,11 @@ public sealed class LiveTreeWriterTests
     /// the rule must not hold every staging directory while an application is open).
     /// </summary>
     [Fact]
-    public void AProgramStartedAfterTheLastWriteDoesNotMakeTheDirectoryLive()
+    public async Task AProgramStartedAfterTheLastWriteDoesNotMakeTheDirectoryLive()
     {
         var query = Query();
 
-        var findings = Inspector(Program(Installation + @"\Update.exe", Written.AddMinutes(5))).FindLive([query]);
+        var findings = await Inspector(Program(Installation + @"\Update.exe", Written.AddMinutes(5))).FindLiveAsync([query]);
 
         Assert.True(findings.Complete);
         Assert.False(findings.IsLive(query.Directory));
@@ -82,11 +82,11 @@ public sealed class LiveTreeWriterTests
     /// started a moment before the directory it made must not read as started after it.
     /// </summary>
     [Fact]
-    public void AProgramStartedWithinTheTimestampToleranceAfterTheLastWriteMakesTheDirectoryLive()
+    public async Task AProgramStartedWithinTheTimestampToleranceAfterTheLastWriteMakesTheDirectoryLive()
     {
         var query = Query();
 
-        var findings = Inspector(Program(Installation + @"\Update.exe", Written.AddSeconds(1))).FindLive([query]);
+        var findings = await Inspector(Program(Installation + @"\Update.exe", Written.AddSeconds(1))).FindLiveAsync([query]);
 
         Assert.True(findings.IsLive(query.Directory));
     }
@@ -96,11 +96,11 @@ public sealed class LiveTreeWriterTests
     /// after the last write did not make the directory, so a leftover is still offered.
     /// </summary>
     [Fact]
-    public void AProgramStartedJustPastTheTimestampToleranceDoesNotMakeTheDirectoryLive()
+    public async Task AProgramStartedJustPastTheTimestampToleranceDoesNotMakeTheDirectoryLive()
     {
         var query = Query();
 
-        var findings = Inspector(Program(Installation + @"\Update.exe", Written.AddSeconds(3))).FindLive([query]);
+        var findings = await Inspector(Program(Installation + @"\Update.exe", Written.AddSeconds(3))).FindLiveAsync([query]);
 
         Assert.True(findings.Complete);
         Assert.False(findings.IsLive(query.Directory));
@@ -113,11 +113,11 @@ public sealed class LiveTreeWriterTests
     [Theory]
     [InlineData(Installation + @"2\Update.exe")]
     [InlineData(@"C:\Program Files\Other\Update.exe")]
-    public void AProgramOutsideEveryWriterFolderDoesNotMakeTheDirectoryLive(string image)
+    public async Task AProgramOutsideEveryWriterFolderDoesNotMakeTheDirectoryLive(string image)
     {
         var query = Query();
 
-        var findings = Inspector(Program(image, Written.AddDays(-1))).FindLive([query]);
+        var findings = await Inspector(Program(image, Written.AddDays(-1))).FindLiveAsync([query]);
 
         Assert.True(findings.Complete);
         Assert.False(findings.IsLive(query.Directory));
@@ -129,21 +129,21 @@ public sealed class LiveTreeWriterTests
     /// unanswered.
     /// </summary>
     [Fact]
-    public void AWriterWhoseTimesCannotBeComparedLeavesOnlyThatDirectoryUnanswered()
+    public async Task AWriterWhoseTimesCannotBeComparedLeavesOnlyThatDirectoryUnanswered()
     {
         var unknownStart = Query("tempa");
         var unknownWrite = Query("tempb") with { Writers = new LiveTreeWriters([Installation], LastWritten: null) };
 
-        var findings = Inspector(Program(Installation + @"\Update.exe", started: null))
-            .FindLive([unknownStart]);
+        var findings = await Inspector(Program(Installation + @"\Update.exe", started: null))
+            .FindLiveAsync([unknownStart]);
 
         Assert.False(findings.IsAnswered(unknownStart.Directory));
         Assert.False(findings.IsLive(unknownStart.Directory));
 
         var earlier = Query("tempd") with { Writers = new LiveTreeWriters([Installation], Written.AddMinutes(-10)) };
 
-        var both = Inspector(Program(Installation + @"\Update.exe", Written.AddMinutes(-3)))
-            .FindLive([unknownWrite, Query("tempc"), earlier]);
+        var both = await Inspector(Program(Installation + @"\Update.exe", Written.AddMinutes(-3)))
+            .FindLiveAsync([unknownWrite, Query("tempc"), earlier]);
 
         Assert.False(both.IsAnswered(unknownWrite.Directory));
         Assert.True(both.IsLive(Path.Combine(Staging, "tempc")));
@@ -157,11 +157,11 @@ public sealed class LiveTreeWriterTests
     /// to compare it with, and the answer is whole.
     /// </summary>
     [Fact]
-    public void AnUnknownLastWriteWithNoWriterRunningIsAnswered()
+    public async Task AnUnknownLastWriteWithNoWriterRunningIsAnswered()
     {
         var query = Query() with { Writers = new LiveTreeWriters([Installation], LastWritten: null) };
 
-        var findings = Inspector(Program(@"C:\Program Files\Other\other.exe", started: null)).FindLive([query]);
+        var findings = await Inspector(Program(@"C:\Program Files\Other\other.exe", started: null)).FindLiveAsync([query]);
 
         Assert.True(findings.Complete);
         Assert.False(findings.IsLive(query.Directory));

@@ -30,14 +30,14 @@ public sealed class LiveTreePairCostTests
     /// was not met by comparing fewer pairs (§5.6).
     /// </summary>
     [Fact]
-    public void FindingLiveTreesAllocatesPerCandidateAndProgramNotPerPair()
+    public async Task FindingLiveTreesAllocatesPerCandidateAndProgramNotPerPair()
     {
         var queries = Queries();
         var inspector = Inspector(queries[^1].Project);
 
-        var warm = inspector.FindLive(queries);
+        var warm = await inspector.FindLiveAsync(queries);
         var before = GC.GetAllocatedBytesForCurrentThread();
-        var findings = inspector.FindLive(queries);
+        var findings = await inspector.FindLiveAsync(queries);
         var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
         Assert.Equal(warm.Live.Select(tree => tree.Directory), findings.Live.Select(tree => tree.Directory));
@@ -47,7 +47,7 @@ public sealed class LiveTreePairCostTests
         Assert.Equal(["pwsh is working in project199"], live.Holders);
         Assert.True(
             allocated < (Candidates + Processes) * BytesPerCandidateOrProcess,
-            $"FindLive allocated {allocated:N0} bytes for {Candidates} candidates against {Processes} programs.");
+            $"FindLiveAsync allocated {allocated:N0} bytes for {Candidates} candidates against {Processes} programs.");
     }
 
     /// <summary>

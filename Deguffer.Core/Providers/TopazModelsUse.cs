@@ -23,20 +23,20 @@ internal sealed record TopazModelsUse(
     ILiveTreeInspector LiveTrees,
     IReadOnlyList<string> ProgramFolders) : IUseCheck
 {
-    public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
+    public async Task<IReadOnlyList<InUseNow>> AskAsync(DeleteStep step, CancellationToken ct)
     {
         // Both inspectors keep one reading for a planning pass, and the preview's may be past the limit.
         Processes.DiscardOlderThan(IUseCheck.ReadingLimit);
         LiveTrees.DiscardOlderThan(IUseCheck.ReadingLimit);
 
-        return WhyInUse(ct) is { } reason ? [new InUseNow(step.Path, reason)] : [];
+        return await WhyInUseAsync(ct).ConfigureAwait(false) is { } reason ? [new InUseNow(step.Path, reason)] : [];
     }
 
     /// <summary>
     /// What may be loading the models now, as a lower-case clause with no full stop, or null where
     /// nothing is.
     /// </summary>
-    public string? WhyInUse(CancellationToken ct)
+    public async Task<string?> WhyInUseAsync(CancellationToken ct)
     {
         if (Processes.FindRunning(TopazLayout.ProcessNames) is { Count: > 0 } running)
         {
@@ -48,7 +48,7 @@ internal sealed record TopazModelsUse(
             return null;
         }
 
-        var findings = LiveTrees.FindLive([.. ProgramFolders.Select(folder => new LiveTreeQuery(folder, folder))], ct);
+        var findings = await LiveTrees.FindLiveAsync([.. ProgramFolders.Select(folder => new LiveTreeQuery(folder, folder))], ct).ConfigureAwait(false);
 
         if (findings.Live.Count > 0)
         {

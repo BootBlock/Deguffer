@@ -58,7 +58,11 @@ internal sealed class CleanRoute
             volumes: volumes);
     }
 
-    public RouteRun Timed => RouteRun.Blocking(Run, Build, Check);
+    /// <summary>
+    /// Timed on the thread that times it, with the build awaited before each run, because planning the
+    /// steps asks the inspector, which answers by a task.
+    /// </summary>
+    public RouteRun Timed => RouteRun.Blocking(Run, after: Check) with { Before = BuildAsync };
 
     /// <summary>The shape of each build folder holding <paramref name="files"/> files.</summary>
     public static TreeShape Shape(long files) => new(files, TreeDepth, TreeFanout);
@@ -71,7 +75,7 @@ internal sealed class CleanRoute
     /// Build every build folder, and on the first run its project, then plan their removal as a
     /// provider would: one step per build folder, each with the question to ask again at the clean.
     /// </summary>
-    private void Build(CancellationToken ct)
+    private async ValueTask BuildAsync(CancellationToken ct)
     {
         foreach (var project in _projects)
         {
@@ -86,11 +90,11 @@ internal sealed class CleanRoute
             SynthesisedTree.Build(BuildFolder(project), _shape, ct);
         }
 
-        var cleared = LiveTreeVeto.Apply(
+        var cleared = (await LiveTreeVeto.ApplyAsync(
             FakeLiveTreeInspector.NothingLive,
             [.. _projects.Select(project => new RecognisedBuildDirectory(BuildFolder(project), project))],
             lockFiles: [],
-            ct).Cleared;
+            ct).ConfigureAwait(false)).Cleared;
 
         _plan = new CleanupPlan
         {

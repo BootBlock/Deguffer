@@ -265,11 +265,11 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
         // session and leaves a release the tooling neither runs nor fetches again. So a release is held
         // back by what runs from it, and each release is its own project, because a host running from
         // one is using none of the releases beside it.
-        var live = LiveTreeVeto.Apply(
+        var live = await LiveTreeVeto.ApplyAsync(
             _liveTrees,
             [.. releases.Keys.Select(release => new RecognisedBuildDirectory(release, release))],
             lockFiles: [],
-            ct);
+            ct).ConfigureAwait(false);
 
         if (LiveTreeVeto.NoteFor(live.Vetoed, vetoed => $"release {releases[vetoed.Directory]}") is { } held)
         {

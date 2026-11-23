@@ -28,14 +28,14 @@ internal sealed record PulumiPluginUse(IProcessInspector Processes, ILiveTreeIns
     /// <summary>Why one plugin survives while a program runs from it.</summary>
     public const string InUseReason = "A program is running from this plugin, so it is left alone.";
 
-    public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct) =>
-        WhyInUse(ct) is { } reason ? [new InUseNow(step.Path, reason)] : [];
+    public async Task<IReadOnlyList<InUseNow>> AskAsync(DeleteStep step, CancellationToken ct) =>
+        await WhyInUseAsync(ct).ConfigureAwait(false) is { } reason ? [new InUseNow(step.Path, reason)] : [];
 
     /// <summary>
     /// What is using the plugin now, as a lower-case clause with no full stop, or null where nothing is.
     /// A question that could not be asked in full is not a clear answer.
     /// </summary>
-    public string? WhyInUse(CancellationToken ct)
+    public async Task<string?> WhyInUseAsync(CancellationToken ct)
     {
         // Both inspectors keep one reading for a planning pass, and the preview's may be past the limit.
         Processes.DiscardOlderThan(IUseCheck.ReadingLimit);
@@ -47,7 +47,7 @@ internal sealed record PulumiPluginUse(IProcessInspector Processes, ILiveTreeIns
         }
 
         var cache = Path.GetDirectoryName(Plugin.Folder)!;
-        var findings = LiveTrees.FindLiveChildren([cache], ct);
+        var findings = await LiveTrees.FindLiveChildrenAsync([cache], ct).ConfigureAwait(false);
 
         if (findings.Live.FirstOrDefault(live => live.Directory.Equals(Plugin.Folder, StringComparison.OrdinalIgnoreCase)) is { } live)
         {

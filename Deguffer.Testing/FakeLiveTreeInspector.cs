@@ -52,7 +52,7 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
     private int _occupiedAsked;
 
     /// <summary>
-    /// How many times <see cref="FindOccupiedDirectories"/> was asked, which is how many times a
+    /// How many times <see cref="FindOccupiedDirectoriesAsync"/> was asked, which is how many times a
     /// question built from where programs are was built.
     /// </summary>
     public int OccupiedAskedCount => Volatile.Read(ref _occupiedAsked);
@@ -107,8 +107,8 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
     /// <paramref name="workingDirectory"/>, or both.
     ///
     /// <para>Declared as a program rather than as a live directory, and answered on both sides by
-    /// the real inspector's containment rule: <see cref="FindOccupiedDirectories"/> reports where it
-    /// is, and <see cref="FindLive"/> counts it against a candidate whose directory holds the
+    /// the real inspector's containment rule: <see cref="FindOccupiedDirectoriesAsync"/> reports where it
+    /// is, and <see cref="FindLiveAsync"/> counts it against a candidate whose directory holds the
     /// executable, whose project holds the working directory, or one of whose
     /// <see cref="LiveTreeQuery.Workspaces"/> is the working directory. A provider that finds candidates
     /// from the first and confirms them with the second is then tested on the pair, which is the
@@ -116,7 +116,7 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
     /// project.</para>
     ///
     /// <para><paramref name="arguments"/> are the full paths it was started with, which
-    /// <see cref="FindLiveChildren"/> alone answers, as the real inspector does: the child of a
+    /// <see cref="FindLiveChildrenAsync"/> alone answers, as the real inspector does: the child of a
     /// scratch folder an argument names, or names a path inside.</para>
     ///
     /// <para><paramref name="started"/> is when it started, which only a candidate naming
@@ -162,7 +162,7 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
         return this;
     }
 
-    public LiveTreeFindings FindLive(IReadOnlyList<LiveTreeQuery> candidates, CancellationToken ct = default)
+    public Task<LiveTreeFindings> FindLiveAsync(IReadOnlyList<LiveTreeQuery> candidates, CancellationToken ct = default)
     {
         Asked = candidates;
 
@@ -171,19 +171,19 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
         ReachedProgram[] programs =
             [.. table.Programs.Select(p => match.Program(p.Name, p.Executable, p.WorkingDirectory, p.Started))];
 
-        return Answer(
+        return Task.FromResult(Answer(
             table,
             [.. candidates
                 .Select(c => new LiveTree(c.Directory, HoldersOf(c, match, programs, unknown)))
                 .Where(tree => tree.Holders.Count > 0)],
             [.. candidates.Select(c => c.Directory)],
-            unknown);
+            unknown));
     }
 
-    public LiveTreeFindings FindOccupiedDirectories(CancellationToken ct = default)
+    public Task<LiveTreeFindings> FindOccupiedDirectoriesAsync(CancellationToken ct = default)
     {
         Interlocked.Increment(ref _occupiedAsked);
-        return Occupied(Snapshot().Table);
+        return Task.FromResult(Occupied(Snapshot().Table));
     }
 
     private static LiveTreeFindings Occupied(Table table) =>
@@ -249,18 +249,18 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
     /// with, which is how the real inspector builds this answer.
     ///
     /// <para>Immediate, and never the root itself, because that is the contract
-    /// <see cref="ILiveTreeInspector.FindLiveChildren"/> keeps: it names the child a plan can spare,
+    /// <see cref="ILiveTreeInspector.FindLiveChildrenAsync"/> keeps: it names the child a plan can spare,
     /// and it answers nothing for a program sitting in the folder itself. A fake that reported more
     /// than the real one ever can would let a provider pass a test against behaviour it will never
     /// see.</para>
     /// </summary>
-    public LiveTreeFindings FindLiveChildren(
+    public Task<LiveTreeFindings> FindLiveChildrenAsync(
         IReadOnlyList<string> directories,
         CancellationToken ct = default)
     {
         var (table, match) = Snapshot();
 
-        return Answer(
+        return Task.FromResult(Answer(
             table,
             [
                 .. _live
@@ -276,7 +276,7 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
                         .OfType<string>()
                         .Select(child => new LiveTree(child, [$"{program.Name} was started with it"]))),
             ],
-            directories);
+            directories));
     }
 
     /// <summary>
@@ -303,16 +303,14 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
 
     public ReachedFolder Reach(string path) => Match.Reach(path);
 
-    public LiveTreeReading Reading(CancellationToken ct = default)
+    public Task<LiveTreeReading> ReadingAsync(CancellationToken ct = default)
     {
         lock (_gate)
         {
             Snapshot();
-            return new LiveTreeReading(_snapshot!.Number);
+            return Task.FromResult(new LiveTreeReading(_snapshot!.Number));
         }
     }
-
-    public Task<LiveTreeReading> ReadingAsync(CancellationToken ct = default) => Task.FromResult(Reading(ct));
 
     public void Invalidate()
     {

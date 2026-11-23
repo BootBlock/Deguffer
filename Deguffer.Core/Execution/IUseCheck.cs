@@ -61,7 +61,7 @@ public interface IUseCheck
     /// on an answer that was whole, and holds back what a partial one leaves unanswered, so the clean
     /// keeps to the same rule as the preview.</para>
     /// </summary>
-    IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct);
+    Task<IReadOnlyList<InUseNow>> AskAsync(DeleteStep step, CancellationToken ct);
 }
 
 /// <summary>One place a use check found in use, and why it must stay.</summary>

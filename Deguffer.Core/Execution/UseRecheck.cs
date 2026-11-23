@@ -19,9 +19,10 @@ namespace Deguffer.Core.Execution;
 internal sealed record UseRecheck(DeleteStep? Step, string? Withheld, IReadOnlyList<ProtectedPath> Survivors)
 {
     /// <summary>Ask <paramref name="step"/>'s check, or pass it through where it carries none.</summary>
-    public static UseRecheck Of(DeleteStep step, CancellationToken ct)
+    public static async Task<UseRecheck> OfAsync(DeleteStep step, CancellationToken ct)
     {
-        if (step.UseCheck is not { } check || check.Ask(step, ct) is not { Count: > 0 } inUse)
+        if (step.UseCheck is not { } check
+            || await check.AskAsync(step, ct).ConfigureAwait(false) is not { Count: > 0 } inUse)
         {
             return new UseRecheck(step, Withheld: null, Survivors: []);
         }

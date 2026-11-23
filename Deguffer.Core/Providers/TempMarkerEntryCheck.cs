@@ -14,8 +14,9 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 internal sealed class TempMarkerEntryCheck(Func<string, CancellationToken, bool> inUse, string reason) : IUseCheck
 {
-    public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct) =>
-        inUse(Path.GetFileName(Path.TrimEndingDirectorySeparator(step.Path)), ct)
-            ? [new InUseNow(step.Path, reason)]
-            : [];
+    public Task<IReadOnlyList<InUseNow>> AskAsync(DeleteStep step, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<InUseNow>>(
+            inUse(Path.GetFileName(Path.TrimEndingDirectorySeparator(step.Path)), ct)
+                ? [new InUseNow(step.Path, reason)]
+                : []);
 }

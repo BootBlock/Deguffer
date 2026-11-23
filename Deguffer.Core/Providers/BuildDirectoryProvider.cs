@@ -166,8 +166,8 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
     /// either. And a terminal at the root of a repository of unrelated projects is using none of
     /// them.</para>
     /// </summary>
-    private LiveTreeQuestion Questions(CancellationToken ct) =>
-        LiveTreeQuestion.ForLockFiles(candidate => Kind.LockFilesFor(candidate.Project));
+    private Task<LiveTreeQuestion> Questions(CancellationToken ct) =>
+        Task.FromResult(LiveTreeQuestion.ForLockFiles(candidate => Kind.LockFilesFor(candidate.Project)));
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
@@ -207,7 +207,7 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
         var unrecognised = declined.Count;
         var git = await SecondOpinionAsync(recognised, declined, ct).ConfigureAwait(false);
 
-        var live = LiveTreeVeto.Apply(LiveTrees, recognised, Questions, ct);
+        var live = await LiveTreeVeto.ApplyAsync(LiveTrees, recognised, Questions, ct).ConfigureAwait(false);
 
         var parts = Kind.Parts is { } partsOf
             ? await DiskBoundWork.EachAsync([.. live.Cleared.Select(target => target.Path)], Scanner.Tuning, path => partsOf(path, ct), ct).ConfigureAwait(false)

@@ -307,7 +307,7 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
             }
         }
 
-        var live = ChromiumFolderInUse.Find(_liveTrees, [.. applications.Select(a => a.Path)], ct);
+        var live = await ChromiumFolderInUse.FindAsync(_liveTrees, [.. applications.Select(a => a.Path)], ct).ConfigureAwait(false);
         var withheld = 0;
 
         // Every profile is walked, and its survivors asked, before either is awaited: the measurement

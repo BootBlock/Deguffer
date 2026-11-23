@@ -209,12 +209,12 @@ public sealed class VisualStudioSolutionCacheProvider : CleanupProviderBase
         // preview lists nothing in it twice. The check at the clean reads it again (Questions).
         var readings = recognised.ToDictionary(folder => folder.Path, folder => _reader.Read(folder.Path, ct), StringComparer.OrdinalIgnoreCase);
 
-        var live = LiveTreeVeto.Apply(
+        var live = await LiveTreeVeto.ApplyAsync(
             _liveTrees,
             [.. recognised.Select(folder => new RecognisedBuildDirectory(folder.Path, folder.Folder))],
             new LiveTreeQuestion(candidate => VisualStudioCacheFiles.Query(candidate, readings[candidate.Path])),
             Questions,
-            ct);
+            ct).ConfigureAwait(false);
 
         var cleared = live.Cleared.ToDictionary(c => c.Path, StringComparer.OrdinalIgnoreCase);
         var examined = recognised.Where(folder => cleared.ContainsKey(folder.Path)).ToList();
@@ -283,8 +283,8 @@ public sealed class VisualStudioSolutionCacheProvider : CleanupProviderBase
     /// preview, at the clean and for Explore. The preview asks it of the reading its examination
     /// reads, and the clean and Explore of a new one, because what is open can change after the preview.
     /// </summary>
-    private LiveTreeQuestion Questions(CancellationToken ct) =>
-        new(candidate => VisualStudioCacheFiles.Query(candidate, _reader.Read(candidate.Path, ct)));
+    private Task<LiveTreeQuestion> Questions(CancellationToken ct) =>
+        Task.FromResult(new LiveTreeQuestion(candidate => VisualStudioCacheFiles.Query(candidate, _reader.Read(candidate.Path, ct))));
 
     /// <summary>
     /// §5.6. Around every <c>.vs</c> folder a cache was taken from: the solution folder and its

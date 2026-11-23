@@ -43,14 +43,14 @@ internal sealed record HuggingFaceRepositoryUse(ILiveTreeInspector Inspector, st
     /// <param name="inspector">What reads the process table and asks the Restart Manager.</param>
     /// <param name="idsByFolder">Each repository's folder, in display form, and the id it is named to the user by.</param>
     /// <param name="ct">Ends the Restart Manager's question, which covers every file of every repository.</param>
-    public static HuggingFaceUse Partition(
+    public static async Task<HuggingFaceUse> PartitionAsync(
         ILiveTreeInspector inspector,
         IReadOnlyDictionary<string, string> idsByFolder,
         CancellationToken ct)
     {
         var queries = idsByFolder.Keys.Select(folder => (Folder: folder, Query: Query(folder))).ToList();
         var asked = queries.Select(item => item.Query).OfType<LiveTreeQuery>().ToList();
-        var findings = asked.Count > 0 ? inspector.FindLive(asked, ct) : LiveTreeFindings.Nothing;
+        var findings = asked.Count > 0 ? await inspector.FindLiveAsync(asked, ct).ConfigureAwait(false) : LiveTreeFindings.Nothing;
 
         var unused = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var held = new List<(string Path, string Reason)>();
@@ -88,14 +88,14 @@ internal sealed record HuggingFaceRepositoryUse(ILiveTreeInspector Inspector, st
         return new HuggingFaceUse(unused, held, notes);
     }
 
-    public string? WhyNot(RunCommandStep step, CancellationToken ct)
+    public async Task<string?> WhyNotAsync(RunCommandStep step, CancellationToken ct)
     {
         if (Query(Folder) is not { } query)
         {
             return "Windows would not list every file in the repository, so Deguffer cannot tell whether a program has one open";
         }
 
-        var findings = Inspector.FindLive([query], ct);
+        var findings = await Inspector.FindLiveAsync([query], ct).ConfigureAwait(false);
 
         if (findings.Live.FirstOrDefault(live => live.Directory.Equals(Folder, StringComparison.OrdinalIgnoreCase)) is { } used)
         {

@@ -9,7 +9,7 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>What sees it is the command line.</b> A WebView2 host's engine runs from the runtime's
 /// own install folder and names the folder it is using as <c>--user-data-dir=</c>, so
-/// <see cref="ILiveTreeInspector.FindLiveChildren"/>, asked about the folder's parent, is the one
+/// <see cref="ILiveTreeInspector.FindLiveChildrenAsync"/>, asked about the folder's parent, is the one
 /// signal that finds it. Microsoft documents that a WebView2 user-data folder cannot be removed while
 /// its browser process or any of its child processes is running. A program running from or working
 /// in the folder counts as well, by the same method's rules.</para>
@@ -25,7 +25,7 @@ namespace Deguffer.Core.Providers;
 internal sealed class ChromiumFolderInUse(ILiveTreeInspector inspector, string userData) : IUseCheck
 {
     /// <summary>Which of <paramref name="folders"/> a running program is using.</summary>
-    public static LiveTreeFindings Find(
+    public static async Task<LiveTreeFindings> FindAsync(
         ILiveTreeInspector inspector,
         IReadOnlyList<string> folders,
         CancellationToken ct)
@@ -42,7 +42,7 @@ internal sealed class ChromiumFolderInUse(ILiveTreeInspector inspector, string u
             .ToList();
 
         var named = folders.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var children = inspector.FindLiveChildren(parents, ct);
+        var children = await inspector.FindLiveChildrenAsync(parents, ct).ConfigureAwait(false);
         IReadOnlyList<LiveTree> live = [.. children.Live.Where(live => named.Contains(live.Directory))];
 
         // A parent left unanswered leaves every folder below it unanswered, and no other.
@@ -53,13 +53,13 @@ internal sealed class ChromiumFolderInUse(ILiveTreeInspector inspector, string u
 
     private static string? ParentOf(string folder) => Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(folder));
 
-    public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
+    public async Task<IReadOnlyList<InUseNow>> AskAsync(DeleteStep step, CancellationToken ct)
     {
         // The inspector keeps one process table for a planning pass, and the preview's may be past
         // the limit.
         inspector.DiscardOlderThan(IUseCheck.ReadingLimit);
 
-        var findings = Find(inspector, [userData], ct);
+        var findings = await FindAsync(inspector, [userData], ct).ConfigureAwait(false);
 
         IReadOnlyList<InUseNow> inUse =
         [

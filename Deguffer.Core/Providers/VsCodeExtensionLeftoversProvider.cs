@@ -273,11 +273,11 @@ public sealed partial class VsCodeExtensionLeftoversProvider : CleanupProviderBa
 
         // An extension the editor is running runs from its installed folder, never from one of these, so
         // anything using a leftover is something else, such as a terminal or a search left open in it.
-        var live = LiveTreeVeto.Apply(
+        var live = await LiveTreeVeto.ApplyAsync(
             _liveTrees,
             [.. candidates.Keys.Select(path => new RecognisedBuildDirectory(path, path))],
             lockFiles: [],
-            ct);
+            ct).ConfigureAwait(false);
 
         if (LiveTreeVeto.NoteFor(live.Vetoed, vetoed => Path.GetFileName(vetoed.Directory)) is { } held)
         {

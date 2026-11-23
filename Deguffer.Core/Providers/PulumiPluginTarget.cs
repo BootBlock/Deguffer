@@ -20,7 +20,7 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 internal sealed class PulumiPluginTarget(PulumiPluginUse use) : ICommandTargetCheck
 {
-    public string? WhyNot(RunCommandStep step, CancellationToken ct)
+    public async Task<string?> WhyNotAsync(RunCommandStep step, CancellationToken ct)
     {
         var plugin = use.Plugin;
         var cache = Path.GetDirectoryName(plugin.Folder)!;
@@ -45,6 +45,6 @@ internal sealed class PulumiPluginTarget(PulumiPluginUse use) : ICommandTargetCh
             return $"Pulumi now reads {beside} as the same plugin, and its remove would take that folder too";
         }
 
-        return use.WhyInUse(ct);
+        return await use.WhyInUseAsync(ct).ConfigureAwait(false);
     }
 }

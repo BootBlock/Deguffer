@@ -204,11 +204,11 @@ public sealed class GitLfsObjectProvider : CleanupProviderBase
 
         var (checkouts, prunes) = stores.Count == 0 ? ([], []) : await ExamineAsync(git, stores, found, ct).ConfigureAwait(false);
 
-        var live = LiveTreeVeto.Apply(
+        var live = await LiveTreeVeto.ApplyAsync(
             _liveTrees,
             [.. prunes.Select(prune => new RecognisedBuildDirectory(prune.Checkout.Store.GitDirectory, prune.Checkout.WorkTree))],
             InUse,
-            ct);
+            ct).ConfigureAwait(false);
 
         var clear = live.Cleared.Select(cleared => cleared.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var offered = await PreviewAsync(git, [.. prunes.Where(prune => clear.Contains(prune.Checkout.Store.GitDirectory))], found, ct)
@@ -491,6 +491,6 @@ public sealed class GitLfsObjectProvider : CleanupProviderBase
     /// git directory. No lock file is named, because git holds none for longer than one command.
     /// <see cref="GitLfsPruneTarget"/> asks the same at the clean.
     /// </summary>
-    private static LiveTreeQuestion InUse(CancellationToken ct) =>
-        new(candidate => new LiveTreeQuery(candidate.Path, candidate.Project));
+    private static Task<LiveTreeQuestion> InUse(CancellationToken ct) =>
+        Task.FromResult(new LiveTreeQuestion(candidate => new LiveTreeQuery(candidate.Path, candidate.Project)));
 }

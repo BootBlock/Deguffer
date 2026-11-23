@@ -34,15 +34,16 @@ internal sealed class LiveTreeCheck(
     RecognisedBuildDirectory directory,
     LiveTreeQuestionSource questions) : IUseCheck
 {
-    public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
+    public async Task<IReadOnlyList<InUseNow>> AskAsync(DeleteStep step, CancellationToken ct)
     {
         // The inspector keeps one process table for a planning pass. Where that table, the preview's
         // or an earlier check's, is past the limit, it is dropped before the question is built,
         // because building it can read the table.
         inspector.DiscardOlderThan(IUseCheck.ReadingLimit);
 
-        var query = questions.For(inspector.Reading(ct), ct).Ask(directory);
-        var findings = inspector.FindLive([query], ct);
+        var reading = await inspector.ReadingAsync(ct).ConfigureAwait(false);
+        var query = (await questions.ForAsync(reading, ct).ConfigureAwait(false)).Ask(directory);
+        var findings = await inspector.FindLiveAsync([query], ct).ConfigureAwait(false);
 
         IReadOnlyList<InUseNow> live =
         [

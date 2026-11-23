@@ -1633,6 +1633,6 @@ public sealed class PlanExecutorTests : IDisposable
     {
         public int Asked { get; private set; }
 
-        public string? WhyNot(RunCommandStep step, CancellationToken ct) => ++Asked == 1 ? null : why;
+        public Task<string?> WhyNotAsync(RunCommandStep step, CancellationToken ct) => Task.FromResult(++Asked == 1 ? null : why);
     }
 }

@@ -311,10 +311,11 @@ public sealed class PlanExecutorStepOverlapTests : IDisposable
     {
         public bool AskedWhileTheOtherDeleted { get; private set; }
 
-        public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
+        public Task<IReadOnlyList<InUseNow>> AskAsync(DeleteStep step, CancellationToken ct)
         {
             AskedWhileTheOtherDeleted = otherDeleting.Wait(Patience, ct);
-            return AskedWhileTheOtherDeleted ? [new InUseNow(step.Path, "a build is writing to it")] : [];
+            return Task.FromResult<IReadOnlyList<InUseNow>>(
+                AskedWhileTheOtherDeleted ? [new InUseNow(step.Path, "a build is writing to it")] : []);
         }
     }
 }

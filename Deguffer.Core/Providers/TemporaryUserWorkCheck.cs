@@ -16,9 +16,9 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 internal sealed class TemporaryUserWorkCheck(IUseCheck inner) : IUseCheck
 {
-    public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
+    public async Task<IReadOnlyList<InUseNow>> AskAsync(DeleteStep step, CancellationToken ct)
     {
-        var asked = inner.Ask(step, ct);
+        var asked = await inner.AskAsync(step, ct).ConfigureAwait(false);
 
         if (step is not ClearDirectoryStep clear)
         {

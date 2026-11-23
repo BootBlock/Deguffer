@@ -17,11 +17,11 @@ public sealed class LiveTreeSharedSessionTests
 
     /// <summary>Forty candidates whose lock files nobody holds are answered by one session.</summary>
     [Fact]
-    public void FortyCandidatesWhoseLockFilesNobodyHoldsCostOneSession()
+    public async Task FortyCandidatesWhoseLockFilesNobodyHoldsCostOneSession()
     {
         var queries = Queries();
 
-        var findings = Inspector().FindLive(queries);
+        var findings = await Inspector().FindLiveAsync(queries);
 
         var session = Assert.Single(_holders.Sessions);
         Assert.Equal(queries.SelectMany(query => query.LockFileNames), session);
@@ -39,12 +39,12 @@ public sealed class LiveTreeSharedSessionTests
     [InlineData(0)]
     [InlineData(17)]
     [InlineData(Candidates - 1)]
-    public void OneHeldCandidateAmongFortyIsTheOnlyOneLiveAndNamedWithItsHolder(int open)
+    public async Task OneHeldCandidateAmongFortyIsTheOnlyOneLiveAndNamedWithItsHolder(int open)
     {
         var queries = Queries();
         _holders.Holding(queries[open].LockFileNames[1], "DevHub");
 
-        var findings = Inspector().FindLive(queries);
+        var findings = await Inspector().FindLiveAsync(queries);
 
         var live = Assert.Single(findings.Live);
         Assert.Equal(queries[open].Directory, live.Directory);
@@ -61,12 +61,12 @@ public sealed class LiveTreeSharedSessionTests
     /// a held one included, so one unusual path does not hold back forty solutions.
     /// </summary>
     [Fact]
-    public void AnUnansweredSharedSessionLeavesEachCandidateWithItsOwnAnswer()
+    public async Task AnUnansweredSharedSessionLeavesEachCandidateWithItsOwnAnswer()
     {
         var queries = Queries();
         _holders.Refusing(queries[5].LockFileNames[0]).Holding(queries[30].LockFileNames[2], "devenv");
 
-        var findings = Inspector().FindLive(queries);
+        var findings = await Inspector().FindLiveAsync(queries);
 
         Assert.False(findings.Complete);
         Assert.False(findings.IsAnswered(queries[5].Directory));
@@ -81,13 +81,13 @@ public sealed class LiveTreeSharedSessionTests
     /// asked in its own session alone, as before: nothing is asked twice to share one session.
     /// </summary>
     [Fact]
-    public void OneCandidateWithLockFilesIsAskedInOneSessionOfItsOwn()
+    public async Task OneCandidateWithLockFilesIsAskedInOneSessionOfItsOwn()
     {
         var queries = Queries();
         LiveTreeQuery[] asked = [new(@"C:\Users\testuser\src\app\bin", @"C:\Users\testuser\src\app"), queries[3]];
         _holders.Holding(queries[3].LockFileNames[0], "DevHub");
 
-        var findings = Inspector().FindLive(asked);
+        var findings = await Inspector().FindLiveAsync(asked);
 
         Assert.Equal(queries[3].LockFileNames, Assert.Single(_holders.Sessions));
         Assert.Equal(queries[3].Directory, Assert.Single(findings.Live).Directory);

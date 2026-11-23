@@ -139,11 +139,11 @@ public sealed class VsCodeExtensionBrowsersProvider : CleanupProviderBase
         // A browser the extension launched runs from inside its build, and removing the build under
         // it fails part of the way through on the files it holds open. Each build is its own project,
         // because a browser running from one is using none of the builds beside it.
-        var live = LiveTreeVeto.Apply(
+        var live = await LiveTreeVeto.ApplyAsync(
             _liveTrees,
             [.. builds.Keys.Select(build => new RecognisedBuildDirectory(build, build))],
             lockFiles: [],
-            ct);
+            ct).ConfigureAwait(false);
 
         var notes = new List<PlanNote>(search.Notes.Concat(search.Caches.SelectMany(cache => cache.Survey.Notes)));
 

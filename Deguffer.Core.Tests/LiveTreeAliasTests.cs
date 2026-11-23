@@ -28,11 +28,11 @@ public sealed class LiveTreeAliasTests
     [InlineData(@"W:\", true)]
     [InlineData(@"S:\other\", false)]
     [InlineData(@"S:\", false)]
-    public void AProgramWorkingThroughASubstitutedLetterIsWorkingInTheFolderItStandsFor(string working, bool live)
+    public async Task AProgramWorkingThroughASubstitutedLetterIsWorkingInTheFolderItStandsFor(string working, bool live)
     {
         _volumes.Substituting(@"W:\", Project);
 
-        var findings = Inspector(Working("cmd", working)).FindLive([Build]);
+        var findings = await Inspector(Working("cmd", working)).FindLiveAsync([Build]);
 
         Assert.True(findings.Complete);
         Assert.Equal(live, findings.IsLive(Build.Directory));
@@ -45,11 +45,11 @@ public sealed class LiveTreeAliasTests
     [Theory]
     [InlineData(@"Q:\SysMount\Users\testuser\src\app\bin\app.exe", true)]
     [InlineData(@"Q:\SysMount\Users\testuser\src\app\tools\app.exe", false)]
-    public void AProgramRunningThroughAnotherMountOfTheVolumeRunsFromWhereItIs(string image, bool live)
+    public async Task AProgramRunningThroughAnotherMountOfTheVolumeRunsFromWhereItIs(string image, bool live)
     {
         _volumes.With(@"C:\", alsoMountedAt: [@"Q:\SysMount\"]);
 
-        var findings = Inspector(new FakeListedProcess { Id = 4399, Name = "app", ImagePath = image }).FindLive([Build]);
+        var findings = await Inspector(new FakeListedProcess { Id = 4399, Name = "app", ImagePath = image }).FindLiveAsync([Build]);
 
         Assert.Equal(live, findings.IsLive(Build.Directory));
     }
@@ -61,11 +61,11 @@ public sealed class LiveTreeAliasTests
     [Theory]
     [InlineData(@"S:\", true)]
     [InlineData(@"S:\other\", false)]
-    public void AProgramWorkingInAWorkspaceThroughASubstitutedLetterIsWorkingThere(string working, bool live)
+    public async Task AProgramWorkingInAWorkspaceThroughASubstitutedLetterIsWorkingThere(string working, bool live)
     {
         var query = new LiveTreeQuery(Project + @"\obj", Project) { Workspaces = [Source] };
 
-        var findings = Inspector(Working("devenv", working)).FindLive([query]);
+        var findings = await Inspector(Working("devenv", working)).FindLiveAsync([query]);
 
         Assert.Equal(live, findings.IsLive(query.Directory));
     }
@@ -76,16 +76,16 @@ public sealed class LiveTreeAliasTests
     /// itself, which names no entry, and an entry nothing uses is not reported (§5.6).
     /// </summary>
     [Fact]
-    public void AProgramInAScratchEntryThroughASubstitutedLetterHoldsTheEntryAsAsked()
+    public async Task AProgramInAScratchEntryThroughASubstitutedLetterHoldsTheEntryAsAsked()
     {
         const string scratch = @"C:\Users\testuser\AppData\Local\Temp";
         _volumes.Substituting(@"T:\", scratch);
 
-        var findings = Inspector(
+        var findings = await Inspector(
                 Working("build", @"T:\run-1\obj\"),
                 Working("shell", @"T:\"),
                 new FakeListedProcess { Id = 4399, Name = "runner", CommandLine = @"runner.exe --log=T:\run-2\out.log" })
-            .FindLiveChildren([scratch]);
+            .FindLiveChildrenAsync([scratch]);
 
         Assert.Equal(
             [Path.Combine(scratch, "run-1"), Path.Combine(scratch, "run-2")],

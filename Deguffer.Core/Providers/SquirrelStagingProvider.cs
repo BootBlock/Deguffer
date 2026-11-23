@@ -186,17 +186,17 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
     /// one of them. The plan names the folder as unreached, and a declaration only ever narrows what
     /// Explore allows.</para>
     /// </summary>
-    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
+    public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
     {
         if (_discovery.StagingRoot is not { } root)
         {
-            return Task.FromResult<IReadOnlyList<ToolRoot>>([]);
+            return [];
         }
 
         switch (LongPath.ProbeDirectory(root, out var isLink))
         {
             case PathPresence.Refused:
-                return Task.FromResult<IReadOnlyList<ToolRoot>>(
+                return
                 [
                     new ToolRoot(
                         root,
@@ -205,15 +205,15 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
                         + "this machine that uses the Squirrel updater shares it, so Deguffer leaves all of it "
                         + "alone.",
                         static _ => false),
-                ]);
+                ];
 
             case PathPresence.Absent:
-                return Task.FromResult<IReadOnlyList<ToolRoot>>([]);
+                return [];
         }
 
         if (isLink is true)
         {
-            return Task.FromResult<IReadOnlyList<ToolRoot>>([]);
+            return [];
         }
 
         var scan = ChildDirectories.Under(root);
@@ -226,9 +226,9 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
             .Select(child => new RecognisedBuildDirectory(LongPath.Display(child.FullName), root))
             .ToList();
 
-        var live = LiveTreeVeto.Apply(_liveTrees, candidates, QuestionAbout(root), ct);
+        var live = await LiveTreeVeto.ApplyAsync(_liveTrees, candidates, QuestionAbout(root), ct).ConfigureAwait(false);
 
-        return Task.FromResult<IReadOnlyList<ToolRoot>>(
+        return
         [
             .. live.Vetoed.Select(vetoed => new ToolRoot(
                 vetoed.Directory,
@@ -239,15 +239,15 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
                 + "finished.",
                 static _ => false)),
             .. live.Unchecked.Select(path => new ToolRoot(path, LiveTreeVeto.UncheckedReason, static _ => false)),
-        ]);
+        ];
     }
 
     /// <summary>
     /// The rule that builds the veto's question about the directories in <paramref name="root"/>, for
     /// each reading of the machine. See <see cref="SquirrelStagingQuestion"/>.
     /// </summary>
-    private Func<CancellationToken, LiveTreeQuestion> QuestionAbout(string root) =>
-        ct => SquirrelStagingQuestion.For(_discovery, Environment, Volumes, root, ct);
+    private Func<CancellationToken, Task<LiveTreeQuestion>> QuestionAbout(string root) =>
+        ct => Task.FromResult(SquirrelStagingQuestion.For(_discovery, Environment, Volumes, root, ct));
 
     public override void InvalidateCaches()
     {
@@ -328,7 +328,7 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
             unreadable = true;
         }
 
-        var staging = CollectStaging(notes, survivors, ct);
+        var staging = await CollectStagingAsync(notes, survivors, ct).ConfigureAwait(false);
 
         targets.AddRange(staging.Targets);
         unreadable |= staging.Unreadable;
@@ -388,7 +388,7 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
     /// running right now — the collision Squirrel's maintainer named as the reason the library
     /// leaves the folder alone.</para>
     /// </summary>
-    private Collected CollectStaging(
+    private async Task<Collected> CollectStagingAsync(
         List<PlanNote> notes,
         List<(string Path, string Reason)> survivors,
         CancellationToken ct)
@@ -474,7 +474,7 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
             }
         }
 
-        var live = LiveTreeVeto.Apply(_liveTrees, candidates, QuestionAbout(root), ct);
+        var live = await LiveTreeVeto.ApplyAsync(_liveTrees, candidates, QuestionAbout(root), ct).ConfigureAwait(false);
 
         survivors.AddRange(live.Survivors);
 

@@ -104,24 +104,24 @@ public sealed class NxSharedCacheProvider : CleanupProviderBase
     /// would offer, and that folder recognises its <c>cache</c> and nothing else, so Explore cannot take
     /// an index or a whole workspace's folder. A cache the plan holds back is refused whole.
     /// </summary>
-    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
+    public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
     {
         // A refusal offers no roots, as an absence does: nothing behind it was classified.
         if (LongPath.ProbeDirectory(Root, out var rootIsLink) is not PathPresence.Present || rootIsLink is true)
         {
-            return Task.FromResult<IReadOnlyList<ToolRoot>>([]);
+            return [];
         }
 
         var examination = NxSharedCaches.Examine(Root, ct);
-        var live = Veto(examination, ct);
+        var live = await VetoAsync(examination, ct).ConfigureAwait(false);
 
-        return Task.FromResult<IReadOnlyList<ToolRoot>>(
+        return
         [
             .. ToolRoot.WayDown(Root, live.Cleared.Select(cleared => cleared.Path), RootReason)
                 .Select(level => level.Path.Equals(Root, StringComparison.OrdinalIgnoreCase) ? level : level with { Reason = WorkspaceReason }),
             .. live.Vetoed.Select(vetoed => new ToolRoot(vetoed.Directory, LiveTreeVeto.ProtectedReason, static _ => false)),
             .. live.Unchecked.Select(path => new ToolRoot(path, LiveTreeVeto.UncheckedReason, static _ => false)),
-        ]);
+        ];
     }
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
@@ -141,7 +141,7 @@ public sealed class NxSharedCacheProvider : CleanupProviderBase
         }
 
         var examination = NxSharedCaches.Examine(root, ct);
-        var live = Veto(examination, ct);
+        var live = await VetoAsync(examination, ct).ConfigureAwait(false);
 
         var (steps, measured) = await PlanDeletionsAsync(
             [
@@ -217,10 +217,10 @@ public sealed class NxSharedCacheProvider : CleanupProviderBase
     /// long as it runs, wherever the workspace is. So the question is about those files, read from the
     /// disk again at the clean, because a database made after the preview is one Nx has open.
     /// </summary>
-    private LiveTreeVetoResult Veto(NxSharedCacheExamination examination, CancellationToken ct) =>
-        LiveTreeVeto.Apply(
+    private Task<LiveTreeVetoResult> VetoAsync(NxSharedCacheExamination examination, CancellationToken ct) =>
+        LiveTreeVeto.ApplyAsync(
             _liveTrees,
             [.. examination.Caches.Select(cache => new RecognisedBuildDirectory(cache, Path.GetDirectoryName(cache)!))],
-            _ => LiveTreeQuestion.ForLockFiles(candidate => NxCacheIndex.Read(NxSharedCaches.IndexOf(candidate.Project)).Files),
+            _ => Task.FromResult(LiveTreeQuestion.ForLockFiles(candidate => NxCacheIndex.Read(NxSharedCaches.IndexOf(candidate.Project)).Files)),
             ct);
 }

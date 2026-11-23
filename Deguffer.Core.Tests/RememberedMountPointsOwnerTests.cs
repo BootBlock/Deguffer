@@ -25,7 +25,7 @@ public sealed class RememberedMountPointsOwnerTests : IDisposable
     /// output through a mount of the drive made in between makes that output live (§5.6).
     /// </summary>
     [Fact]
-    public void AReadingOfTheProcessTableAsksWhereADriveIsMountedOnceAndTheNextAsksAgain()
+    public async Task AReadingOfTheProcessTableAsksWhereADriveIsMountedOnceAndTheNextAsksAgain()
     {
         var clock = new ManualTimeProvider();
         var calls = new FakeProcessTableCalls()
@@ -37,8 +37,8 @@ public sealed class RememberedMountPointsOwnerTests : IDisposable
             .. Enumerable.Range(0, 100).Select(index => new LiveTreeQuery($@"{Source}\project{index}\bin", $@"{Source}\project{index}")),
         ];
 
-        Assert.False(inspector.FindLive(candidates).IsLive(candidates[0].Directory));
-        inspector.FindLive(candidates);
+        Assert.False((await inspector.FindLiveAsync(candidates)).IsLive(candidates[0].Directory));
+        await inspector.FindLiveAsync(candidates);
 
         Assert.Single(_volumes.MountPointsQueries);
 
@@ -52,7 +52,7 @@ public sealed class RememberedMountPointsOwnerTests : IDisposable
         clock.Advance(IUseCheck.ReadingLimit + TimeSpan.FromSeconds(1));
         inspector.DiscardOlderThan(IUseCheck.ReadingLimit);
 
-        var findings = inspector.FindLive(candidates);
+        var findings = await inspector.FindLiveAsync(candidates);
 
         Assert.True(findings.IsLive(candidates[0].Directory));
         Assert.False(findings.IsLive(candidates[1].Directory));

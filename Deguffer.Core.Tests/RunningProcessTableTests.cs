@@ -18,13 +18,13 @@ public class RunningProcessTableTests
     private static readonly LiveTreeQuery Build = new(Path.Combine(Project, "bin"), Project);
 
     [Fact]
-    public void A32BitShellWorkingInTheProjectMakesItsBuildOutputLive()
+    public async Task A32BitShellWorkingInTheProjectMakesItsBuildOutputLive()
     {
         var calls = new FakeProcessTableCalls()
             .With(FakeProcessTableCalls.Own)
             .With(Shell(FakeProcessMemory.Wow64(Project + @"\", Stale, ShellLine)));
 
-        var findings = new LiveTreeInspector(calls, new FakeVolumeInventory()).FindLive([Build]);
+        var findings = await new LiveTreeInspector(calls, new FakeVolumeInventory()).FindLiveAsync([Build]);
 
         Assert.True(findings.Complete);
         Assert.True(findings.IsLive(Build.Directory));
@@ -36,7 +36,7 @@ public class RunningProcessTableTests
     /// process's directory is still read.
     /// </summary>
     [Fact]
-    public void A32BitBlockThatCannotBeCheckedTurnsTheFindingsIncompleteAndKeepsTheRest()
+    public async Task A32BitBlockThatCannotBeCheckedTurnsTheFindingsIncompleteAndKeepsTheRest()
     {
         var calls = new FakeProcessTableCalls()
             .With(FakeProcessTableCalls.Own)
@@ -49,7 +49,7 @@ public class RunningProcessTableTests
                 Memory = FakeProcessMemory.Native(Other + @"\", "msbuild.exe"),
             });
 
-        var findings = new LiveTreeInspector(calls, new FakeVolumeInventory()).FindOccupiedDirectories();
+        var findings = await new LiveTreeInspector(calls, new FakeVolumeInventory()).FindOccupiedDirectoriesAsync();
 
         Assert.False(findings.Complete);
         Assert.DoesNotContain(findings.Live, place => place.Holders.Any(h => h.StartsWith("cmd ", StringComparison.Ordinal)));
@@ -63,7 +63,7 @@ public class RunningProcessTableTests
     /// read as unused.
     /// </summary>
     [Fact]
-    public void AWorkingDirectoryHoldsTheChildItNames()
+    public async Task AWorkingDirectoryHoldsTheChildItNames()
     {
         var calls = new FakeProcessTableCalls()
             .With(FakeProcessTableCalls.Own)
@@ -75,7 +75,7 @@ public class RunningProcessTableTests
                 Memory = FakeProcessMemory.Native(Project + @".\sub\", "cmd.exe"),
             });
 
-        var findings = new LiveTreeInspector(calls, new FakeVolumeInventory()).FindLiveChildren([Path.GetDirectoryName(Project)!]);
+        var findings = await new LiveTreeInspector(calls, new FakeVolumeInventory()).FindLiveChildrenAsync([Path.GetDirectoryName(Project)!]);
 
         Assert.True(findings.IsLive(Project + "."));
         Assert.False(findings.IsLive(Project));
@@ -87,7 +87,7 @@ public class RunningProcessTableTests
     /// spelled, the project read as unused while the browser held a profile in it.
     /// </summary>
     [Fact]
-    public void AnArgumentIsComparedAsTheProgramOpensIt()
+    public async Task AnArgumentIsComparedAsTheProgramOpensIt()
     {
         var calls = new FakeProcessTableCalls()
             .With(FakeProcessTableCalls.Own)
@@ -99,7 +99,7 @@ public class RunningProcessTableTests
                 Memory = FakeProcessMemory.Native(Other + @"\", $@"chrome.exe --user-data-dir={Project}.\profile"),
             });
 
-        var findings = new LiveTreeInspector(calls, new FakeVolumeInventory()).FindLiveChildren([Path.GetDirectoryName(Project)!]);
+        var findings = await new LiveTreeInspector(calls, new FakeVolumeInventory()).FindLiveChildrenAsync([Path.GetDirectoryName(Project)!]);
 
         Assert.True(findings.Complete);
         Assert.True(findings.IsLive(Project));
@@ -110,13 +110,13 @@ public class RunningProcessTableTests
     /// was: it is one of the processes the veto cannot see, which the design records.
     /// </summary>
     [Fact]
-    public void AProcessWhoseMemoryIsRefusedLeavesTheFindingsComplete()
+    public async Task AProcessWhoseMemoryIsRefusedLeavesTheFindingsComplete()
     {
         var calls = new FakeProcessTableCalls()
             .With(FakeProcessTableCalls.Own)
             .With(new FakeListedProcess { Id = 4323, Name = "elevated", CommandLine = "elevated.exe" });
 
-        var findings = new LiveTreeInspector(calls, new FakeVolumeInventory()).FindOccupiedDirectories();
+        var findings = await new LiveTreeInspector(calls, new FakeVolumeInventory()).FindOccupiedDirectoriesAsync();
 
         Assert.True(findings.Complete);
         Assert.Empty(findings.Live);
@@ -127,7 +127,7 @@ public class RunningProcessTableTests
     /// as it always was, and the processes that can be opened are still read, image path included.
     /// </summary>
     [Fact]
-    public void AProcessThatCannotBeOpenedIsLeftOutAndTheRestAreRead()
+    public async Task AProcessThatCannotBeOpenedIsLeftOutAndTheRestAreRead()
     {
         var otherBuild = new LiveTreeQuery(Path.Combine(Other, "bin"), Other);
 
@@ -147,7 +147,7 @@ public class RunningProcessTableTests
                 ImagePath = Path.Combine(Build.Directory, "app.exe"),
             });
 
-        var findings = new LiveTreeInspector(calls, new FakeVolumeInventory()).FindLive([Build, otherBuild]);
+        var findings = await new LiveTreeInspector(calls, new FakeVolumeInventory()).FindLiveAsync([Build, otherBuild]);
 
         Assert.True(findings.Complete);
         Assert.True(findings.IsLive(Build.Directory));
@@ -159,7 +159,7 @@ public class RunningProcessTableTests
     /// describes this Windows and no working directory is read at all.
     /// </summary>
     [Fact]
-    public void ALayoutThatFailsTheSelfCheckReadsNoWorkingDirectories()
+    public async Task ALayoutThatFailsTheSelfCheckReadsNoWorkingDirectories()
     {
         var calls = new FakeProcessTableCalls()
             .With(new FakeListedProcess
@@ -171,7 +171,7 @@ public class RunningProcessTableTests
             })
             .With(Shell(FakeProcessMemory.Native(Project + @"\", ShellLine)));
 
-        var findings = new LiveTreeInspector(calls, new FakeVolumeInventory()).FindLive([Build]);
+        var findings = await new LiveTreeInspector(calls, new FakeVolumeInventory()).FindLiveAsync([Build]);
 
         Assert.False(findings.Complete);
         Assert.False(findings.IsLive(Build.Directory));
@@ -187,7 +187,7 @@ public class RunningProcessTableTests
     /// a volume with short names disabled too: the refusal is what is under test.</para>
     /// </summary>
     [Fact]
-    public void AnArgumentThatCannotBeMadeCanonicalTurnsTheChildFindingsIncomplete()
+    public async Task AnArgumentThatCannotBeMadeCanonicalTurnsTheChildFindingsIncomplete()
     {
         using var temp = new TempDirectory();
         var scratch = temp.CreateDirectory("Temp");
@@ -203,7 +203,7 @@ public class RunningProcessTableTests
 
         using var denied = new DeniedDirectory(Path.Combine(scratch, "Locked"));
 
-        var findings = new LiveTreeInspector(calls, new FakeVolumeInventory()).FindLiveChildren([scratch]);
+        var findings = await new LiveTreeInspector(calls, new FakeVolumeInventory()).FindLiveChildrenAsync([scratch]);
 
         Assert.False(findings.Complete);
     }
@@ -213,7 +213,7 @@ public class RunningProcessTableTests
     /// a directory nothing could be compared against is not taken as nobody working there.
     /// </summary>
     [Fact]
-    public void AWorkingDirectoryThatCannotBeMadeCanonicalTurnsTheFindingsIncomplete()
+    public async Task AWorkingDirectoryThatCannotBeMadeCanonicalTurnsTheFindingsIncomplete()
     {
         using var temp = new TempDirectory();
         var hidden = temp.CreateDirectory("Locked", "run~1");
@@ -223,7 +223,7 @@ public class RunningProcessTableTests
 
         using var denied = new DeniedDirectory(Path.Combine(temp.Path, "Locked"));
 
-        var findings = new LiveTreeInspector(calls, new FakeVolumeInventory()).FindOccupiedDirectories();
+        var findings = await new LiveTreeInspector(calls, new FakeVolumeInventory()).FindOccupiedDirectoriesAsync();
 
         Assert.False(findings.Complete);
         Assert.Empty(findings.Live);
@@ -234,7 +234,7 @@ public class RunningProcessTableTests
     /// program that may be running from inside a build directory is not taken as no program.
     /// </summary>
     [Fact]
-    public void AnExecutableThatCannotBeMadeCanonicalTurnsTheFindingsIncomplete()
+    public async Task AnExecutableThatCannotBeMadeCanonicalTurnsTheFindingsIncomplete()
     {
         using var temp = new TempDirectory();
         var hidden = temp.CreateDirectory("Locked", "run~1");
@@ -246,8 +246,8 @@ public class RunningProcessTableTests
 
         var inspector = new LiveTreeInspector(calls, new FakeVolumeInventory());
 
-        Assert.False(inspector.FindLive([new LiveTreeQuery(hidden, hidden)]).Complete);
-        Assert.False(inspector.FindOccupiedDirectories().Complete);
+        Assert.False((await inspector.FindLiveAsync([new LiveTreeQuery(hidden, hidden)])).Complete);
+        Assert.False((await inspector.FindOccupiedDirectoriesAsync()).Complete);
     }
 
     /// <summary>
@@ -255,7 +255,7 @@ public class RunningProcessTableTests
     /// have missed a program using one of its entries.
     /// </summary>
     [Fact]
-    public void AFolderAskedAboutThatCannotBeMadeCanonicalTurnsTheChildFindingsIncomplete()
+    public async Task AFolderAskedAboutThatCannotBeMadeCanonicalTurnsTheChildFindingsIncomplete()
     {
         using var temp = new TempDirectory();
         var hidden = temp.CreateDirectory("Locked", "temp~1");
@@ -263,7 +263,7 @@ public class RunningProcessTableTests
 
         using var denied = new DeniedDirectory(Path.Combine(temp.Path, "Locked"));
 
-        var findings = new LiveTreeInspector(calls, new FakeVolumeInventory()).FindLiveChildren([hidden]);
+        var findings = await new LiveTreeInspector(calls, new FakeVolumeInventory()).FindLiveChildrenAsync([hidden]);
 
         Assert.False(findings.Complete);
     }

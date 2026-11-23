@@ -171,11 +171,11 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
                 + "A drive that is not connected is the usual reason."));
         }
 
-        var live = LiveTreeVeto.Apply(
+        var live = await LiveTreeVeto.ApplyAsync(
             _liveTrees,
             [.. examination.Candidates.Select(c => new RecognisedBuildDirectory(c.Cache, c.Owner))],
-            _ => LiveTreeQuestion.ForLockFiles(candidate => examination.LockFiles[candidate.Project]),
-            ct);
+            _ => Task.FromResult(LiveTreeQuestion.ForLockFiles(candidate => examination.LockFiles[candidate.Project])),
+            ct).ConfigureAwait(false);
 
         if (LiveTreeVeto.NoteFor(live.Vetoed, vetoed => $"the previews for '{examination.OwnerOf(vetoed.Directory)}'") is { } held)
         {

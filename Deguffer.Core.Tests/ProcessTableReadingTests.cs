@@ -97,7 +97,7 @@ public sealed class ProcessTableReadingTests : IDisposable
     public async Task AReadUnderWayHoldsNoLock()
     {
         var (calls, inspector) = HeldRead();
-        var asking = Task.Run(() => inspector.FindOccupiedDirectories());
+        var asking = Task.Run(() => inspector.FindOccupiedDirectoriesAsync());
         Assert.True(_opening.Wait(Patience));
 
         var others = Task.Run(() =>
@@ -158,15 +158,15 @@ public sealed class ProcessTableReadingTests : IDisposable
 
     /// <summary>A read that failed is not kept: the next question reads again.</summary>
     [Fact]
-    public void AFailedReadIsNotKept()
+    public async Task AFailedReadIsNotKept()
     {
         var calls = new FakeProcessTableCalls().With(FakeProcessTableCalls.Own);
         calls.ListFailure = new InvalidOperationException("The list could not be read.");
         var inspector = new LiveTreeInspector(calls, new FakeVolumeInventory());
 
-        Assert.Throws<InvalidOperationException>(() => inspector.FindOccupiedDirectories());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => inspector.FindOccupiedDirectoriesAsync());
 
-        Assert.True(inspector.FindOccupiedDirectories().Complete);
+        Assert.True((await inspector.FindOccupiedDirectoriesAsync()).Complete);
         Assert.Equal(1, calls.ListCount);
     }
 
