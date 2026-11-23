@@ -39,10 +39,9 @@ public sealed class MftByRecordTests
 
     /// <summary>
     /// The first pass keeps every extension record that holds something the scan needs, and a
-    /// system volume keeps tens of thousands. Kept in one list, they grew by doubling to one large
-    /// array of 200-byte values, about two and a half times what they hold. What the hand-off
-    /// allocates beyond the parse itself is now each value once, its record number and its sorted
-    /// key, and the part-filled chunks.
+    /// system volume keeps tens of thousands. Beyond the parse itself, the hand-off allocates each
+    /// value once, its record number and its sorted key, and the part-filled chunks: no growth
+    /// that copies what it already holds into an array twice its size.
     /// </summary>
     [Fact]
     public void KeepsManyExtensionRecordsForLittleMoreThanTheirOwnSize()
