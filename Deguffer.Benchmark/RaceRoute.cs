@@ -108,7 +108,7 @@ internal sealed class RaceRoute
         return (
             ct =>
             {
-                using var walking = priorities.Walking([VolumeDisks.Unknown]);
+                using var walking = priorities.Walking(() => [VolumeDisks.Unknown]);
                 return walk(ct);
             },
             ct =>

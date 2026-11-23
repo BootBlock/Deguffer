@@ -15,7 +15,6 @@
 2 Deguffer.Core/Safety/RefusalReason.cs
 1 Deguffer.Core/Safety/RestartManager.cs
 1 Deguffer.Core/Safety/ToolProcessNative.cs
-1 Deguffer.Core/Safety/VolumeCalls.cs
 1 Deguffer.Core/Scanning/Media/StorageQueries.cs
 1 Deguffer.Core/Scanning/Mft/VolumeMftSource.cs
 3 Deguffer.Core/SystemProtection/RestorePointCalls.cs

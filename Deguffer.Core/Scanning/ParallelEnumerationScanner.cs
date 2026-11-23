@@ -97,8 +97,8 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner, IWal
     IWalkRoute IWalkRoute.Because(FallbackReason reason) => Because(reason);
 
     Task<ScanResult[][]> IWalkRoute.MeasureEachAsync(
-        IReadOnlyList<ScanRequest> asked, MinimumAge[] keeps, RunningPaths running, CancellationToken ct) =>
-        MeasureEachAsync(asked, keeps, running, ct);
+        IReadOnlyList<ScanRequest> asked, MinimumAge[] keeps, RunningPaths running, PathStorages storages, CancellationToken ct) =>
+        MeasureEachAsync(asked, keeps, running, storages, ct);
 
     /// <summary>
     /// A file is sized in one read and reported as <see cref="ScanStrategy.DirectRead"/>, dropping
@@ -123,7 +123,7 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner, IWal
     {
         ScanRequest[] asked = [new(path, bounds)];
 
-        return (await MeasureEachAsync(asked, [keep], RunningTotal.Over(asked, progress), ct).ConfigureAwait(false))[0][0];
+        return (await MeasureEachAsync(asked, [keep], RunningTotal.Over(asked, progress), _tuner.ForOneMeasurement(), ct).ConfigureAwait(false))[0][0];
     }
 
     /// <summary>
@@ -136,7 +136,7 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner, IWal
         MinimumAge keep = default,
         IProgress<ScanSize>? progress = null,
         CancellationToken ct = default) =>
-        [.. (await MeasureEachAsync(asked, [keep], RunningTotal.Over(asked, progress), ct).ConfigureAwait(false)).Select(readings => readings[0])];
+        [.. (await MeasureEachAsync(asked, [keep], RunningTotal.Over(asked, progress), _tuner.ForOneMeasurement(), ct).ConfigureAwait(false)).Select(readings => readings[0])];
 
     /// <summary>One walk, tallied twice. See <see cref="IDirectoryScanner.MeasureAgedAsync"/>.</summary>
     public async ValueTask<AgedScan> MeasureAgedAsync(
@@ -144,7 +144,7 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner, IWal
     {
         ScanRequest[] asked = [new(path)];
 
-        return AgedScan.Of((await MeasureEachAsync(asked, AgedScan.Keeps(age), RunningTotal.Over(asked, progress), ct).ConfigureAwait(false))[0]);
+        return AgedScan.Of((await MeasureEachAsync(asked, AgedScan.Keeps(age), RunningTotal.Over(asked, progress), _tuner.ForOneMeasurement(), ct).ConfigureAwait(false))[0]);
     }
 
     /// <summary>
@@ -158,13 +158,15 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner, IWal
     /// <para>A file is read directly, and every directory walked with the others on drives of its kind,
     /// the walks on separate disks at the same time (<see cref="DirectoryWalks"/>).</para>
     /// </summary>
+    /// <param name="storages">What each path is on, asked through the measurement's answers (<see cref="IWalkRoute.MeasureEachAsync"/>).</param>
     internal async Task<ScanResult[][]> MeasureEachAsync(
         IReadOnlyList<ScanRequest> asked,
         MinimumAge[] keeps,
         RunningPaths running,
+        PathStorages storages,
         CancellationToken ct)
     {
-        var (results, owns, walks) = await WorkerThreads.Shared.RunAsync(() => Probe(asked, keeps, running, ct), ct).ConfigureAwait(false);
+        var (results, owns, walks) = await WorkerThreads.Shared.RunAsync(() => Probe(asked, keeps, running, storages, ct), ct).ConfigureAwait(false);
 
         // Each walk writes the slots of its own paths, which no other walk writes.
         await DirectoryWalks.RunAsync(
@@ -232,11 +234,13 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner, IWal
         IReadOnlyList<ScanRequest> asked,
         MinimumAge[] keeps,
         RunningPaths running,
+        PathStorages storages,
         CancellationToken ct)
     {
         var read = DiskBoundWork.Each(
             [.. asked.Select(question => question.Path)],
-            _tuner,
+            path => path,
+            storages.For,
             ListingBudget.Shared,
             path => (Presence: _read(path, out var reading), Reading: reading),
             ct);
@@ -282,7 +286,7 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner, IWal
 
         running.Report(finished, i => results[i][0].Size);
 
-        return (results, owns, DirectoryWalks.Plan(asked, directories, _tuner));
+        return (results, owns, DirectoryWalks.Plan(asked, directories, _tuner, storages));
     }
 
     private ScanResult Slow(Walked measured) =>

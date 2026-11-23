@@ -34,13 +34,15 @@ internal sealed class SoleLinkWalk(ScanTuner tuner, FileInformation files) : IWa
     /// (<see cref="DirectoryWalks"/>), as <see cref="ParallelEnumerationScanner"/> walks.
     /// </summary>
     /// <param name="running">Where each path's first reading goes as it rises.</param>
+    /// <param name="storages">What each path is on, asked through the measurement's answers.</param>
     public async Task<ScanResult[][]> MeasureEachAsync(
         IReadOnlyList<ScanRequest> asked,
         MinimumAge[] keeps,
         RunningPaths running,
+        PathStorages storages,
         CancellationToken ct)
     {
-        var (results, owns, walks) = await WorkerThreads.Shared.RunAsync(() => Probe(asked, keeps, running, ct), ct).ConfigureAwait(false);
+        var (results, owns, walks) = await WorkerThreads.Shared.RunAsync(() => Probe(asked, keeps, running, storages, ct), ct).ConfigureAwait(false);
 
         // Each walk writes the slots of its own paths, which no other walk writes.
         await DirectoryWalks.RunAsync(
@@ -77,6 +79,7 @@ internal sealed class SoleLinkWalk(ScanTuner tuner, FileInformation files) : IWa
         IReadOnlyList<ScanRequest> asked,
         MinimumAge[] keeps,
         RunningPaths running,
+        PathStorages storages,
         CancellationToken ct)
     {
         var results = new ScanResult[asked.Count][];
@@ -121,7 +124,7 @@ internal sealed class SoleLinkWalk(ScanTuner tuner, FileInformation files) : IWa
 
         running.Report(finished, i => results[i][0].Size);
 
-        return (results, owns, DirectoryWalks.Plan(asked, directories, tuner));
+        return (results, owns, DirectoryWalks.Plan(asked, directories, tuner, storages));
     }
 
     /// <summary>

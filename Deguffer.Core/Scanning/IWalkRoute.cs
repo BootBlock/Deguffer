@@ -17,9 +17,14 @@ internal interface IWalkRoute
     /// orders, from one reading of it, so the walk is asked the question the table is asked. Each
     /// path's first reading goes to <paramref name="running"/> as it rises.
     /// </summary>
+    /// <param name="storages">
+    /// What each path is on, asked through the answers of the measurement the walk is part of, so a
+    /// path's drive asked about to choose its route is not asked again to plan its walk.
+    /// </param>
     Task<ScanResult[][]> MeasureEachAsync(
         IReadOnlyList<ScanRequest> asked,
         MinimumAge[] keeps,
         RunningPaths running,
+        PathStorages storages,
         CancellationToken ct);
 }

@@ -125,7 +125,7 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
         CancellationToken ct) =>
         _routes is { } routes
             ? routes.MeasureEachAsync(asked, keeps, running, ct)
-            : _walk.MeasureEachAsync(asked, keeps, running, ct);
+            : _walk.MeasureEachAsync(asked, keeps, running, Tuning.ForOneMeasurement(), ct);
 
     /// <summary>Always null — this figure never searches. See <see cref="ParallelEnumerationScanner"/>.</summary>
     public ValueTask<IReadOnlyList<string>?> TryFindDirectoriesAsync(
@@ -138,7 +138,7 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
     /// has to come from the disk. See <see cref="IDirectoryScanner.MeasureFromDiskAsync"/>.
     /// </summary>
     public async ValueTask<IReadOnlyList<ScanResult>> MeasureFromDiskAsync(IReadOnlyList<ScanRequest> asked, CancellationToken ct = default) =>
-        [.. (await _walk.MeasureEachAsync(asked, [MinimumAge.Off], RunningPaths.None, ct).ConfigureAwait(false)).Select(readings => readings[0])];
+        [.. (await _walk.MeasureEachAsync(asked, [MinimumAge.Off], RunningPaths.None, Tuning.ForOneMeasurement(), ct).ConfigureAwait(false)).Select(readings => readings[0])];
 
     /// <summary>
     /// Nothing to drop here. The indexes this scanner reads belong to the scanner that builds them,

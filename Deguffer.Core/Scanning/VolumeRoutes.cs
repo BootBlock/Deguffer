@@ -54,9 +54,13 @@ internal sealed class VolumeRoutes(
     {
         var results = new ScanResult[asked.Count][];
 
+        // Every question this measurement asks about what a path is on goes through these answers:
+        // its pipelines, its walks' registration with the builds, and its walks' plans (#1065).
+        var storages = tuner.ForOneMeasurement();
+
         // Asks a device only where the paths are on more than one volume, which a measurement of one
         // path never is. Each volume's first table read asks the same cache for its tuning anyway.
-        var pipelines = FolderPipelines.Of([.. asked.Select(question => question.Path)], tuner.StorageOf);
+        var pipelines = FolderPipelines.Of([.. asked.Select(question => question.Path)], storages.Of);
 
         // Each pipeline writes the slots of its own paths, which no other pipeline writes. One of
         // several is started on a worker thread of its own, because a volume's table is opened on the
@@ -65,8 +69,8 @@ internal sealed class VolumeRoutes(
         await PipelinesAtOnce.RunAsync(
             pipelines,
             (pipeline, stop) => pipelines.Count == 1
-                ? MeasurePipelineAsync(pipeline, asked, keeps, running, results, stop)
-                : WorkerThreads.Shared.RunAsync(() => MeasurePipelineAsync(pipeline, asked, keeps, running, results, stop), stop).Unwrap(),
+                ? MeasurePipelineAsync(pipeline, asked, keeps, running, storages, results, stop)
+                : WorkerThreads.Shared.RunAsync(() => MeasurePipelineAsync(pipeline, asked, keeps, running, storages, results, stop), stop).Unwrap(),
             ct).ConfigureAwait(false);
 
         return results;
@@ -81,6 +85,7 @@ internal sealed class VolumeRoutes(
         IReadOnlyList<ScanRequest> asked,
         MinimumAge[] keeps,
         RunningPaths running,
+        PathStorages storages,
         ScanResult[][] results,
         CancellationToken ct)
     {
@@ -132,7 +137,7 @@ internal sealed class VolumeRoutes(
             // the table to be waited for. A table already read answers in a lookup, and one that could not
             // be read has a reason the walk has to carry, which a race would let a quick walk hide.
             var answered = !building.IsCompleted && tuner.Route is ScanRoute.Auto
-                ? await RaceAsync(asked, questions, keeps, driveLetter, building, running, ct).ConfigureAwait(false)
+                ? await RaceAsync(asked, questions, keeps, driveLetter, building, running, storages, ct).ConfigureAwait(false)
                 : FromIndex((await WaitAloneAsync(driveLetter, building, ct).ConfigureAwait(false)).Index, questions);
 
             // The paths the table answered, reported together once its answers are in rather than one at a time.
@@ -158,11 +163,11 @@ internal sealed class VolumeRoutes(
 
         foreach (var (reason, indexes) in walks)
         {
-            using var walking = volumes.Walking([.. indexes.Select(i => asked[i].Path)]);
+            using var walking = volumes.Walking([.. indexes.Select(i => asked[i].Path)], storages);
 
             var walked = await walk
                 .Because(reason)
-                .MeasureEachAsync([.. indexes.Select(i => asked[i])], keeps, running.Of(indexes), ct)
+                .MeasureEachAsync([.. indexes.Select(i => asked[i])], keeps, running.Of(indexes), storages, ct)
                 .ConfigureAwait(false);
 
             for (var j = 0; j < indexes.Count; j++)
@@ -196,13 +201,14 @@ internal sealed class VolumeRoutes(
         char driveLetter,
         Task<MftVolumeIndexCache.Built> building,
         RunningPaths running,
+        PathStorages storages,
         CancellationToken ct)
     {
         var raced = await RouteRace.FirstAsync<IReadOnlyList<ScanResult[]?>>(
             async stop => Answered(FromIndex((await building.WaitAsync(stop).ConfigureAwait(false)).Index, questions)),
             async stop =>
             {
-                using var walking = volumes.Walking([.. questions.Select(question => question.Asked.Path)]);
+                using var walking = volumes.Walking([.. questions.Select(question => question.Asked.Path)], storages);
 
                 return await walk
                     .Because(FallbackReason.WalkAnsweredFirst)
@@ -210,6 +216,7 @@ internal sealed class VolumeRoutes(
                         [.. questions.Select(question => asked[question.Index])],
                         keeps,
                         running.Of([.. questions.Select(question => question.Index)]),
+                        storages,
                         stop)
                     .ConfigureAwait(false);
             },

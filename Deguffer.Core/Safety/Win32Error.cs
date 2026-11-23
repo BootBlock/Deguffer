@@ -24,11 +24,17 @@ internal static class Win32Error
     /// <summary><c>ERROR_INVALID_PARAMETER</c>.</summary>
     public const int InvalidParameter = 87;
 
+    /// <summary><c>ERROR_INSUFFICIENT_BUFFER</c>: the answer is longer than the buffer it was asked into.</summary>
+    public const int InsufficientBuffer = 122;
+
     /// <summary><c>ERROR_DIR_NOT_EMPTY</c>: a folder held up by what is still inside it.</summary>
     public const int DirectoryNotEmpty = 145;
 
     /// <summary><c>ERROR_FILENAME_EXCED_RANGE</c>.</summary>
     public const int NameTooLong = 206;
+
+    /// <summary><c>ERROR_MORE_DATA</c>: as <see cref="InsufficientBuffer"/>, from a call that says how long the answer is.</summary>
+    public const int MoreData = 234;
 
     /// <summary><c>ERROR_DIRECTORY</c>: a folder was asked for, and something else is at the name.</summary>
     public const int NotADirectory = 267;

@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Runtime.InteropServices;
 
 namespace Deguffer.Core.Safety;
@@ -31,7 +32,13 @@ internal static partial class VolumeCalls
     /// <summary><c>MAX_PATH</c> and a terminator, which is the longest label NTFS will store.</summary>
     private const int LabelLength = 261;
 
-    private const int ErrorMoreData = 234;
+    private const char Terminator = '\0';
+
+    /// <summary>
+    /// <c>MAX_PATH</c>, and the two terminators that end a list of targets: room for a device name
+    /// and for any <c>subst</c> folder short enough to be named without the extended-length prefix.
+    /// </summary>
+    private const int UsualTargetLength = 262;
 
     /// <summary>
     /// The longest path an extended-length name can be, 32,767 characters, and a terminator. What
@@ -101,7 +108,7 @@ internal static partial class VolumeCalls
         {
             // ERROR_MORE_DATA is how the sizing call reports the length it wants, so it is the one
             // failure that is not a failure. Anything else is a volume that would not answer.
-            if (Marshal.GetLastPInvokeError() != ErrorMoreData)
+            if (Marshal.GetLastPInvokeError() != Win32Error.MoreData)
             {
                 return [];
             }
@@ -225,22 +232,56 @@ internal static partial class VolumeCalls
     /// a device such as <c>\Device\HarddiskVolume3</c> for a volume's own letter, a <c>\??\</c> folder
     /// for a <c>subst</c>, a redirector's device for a mapped share. Null where the letter is not in
     /// use. About two microseconds, because nothing below the object manager is asked.
+    ///
+    /// <para>Read into a buffer on the stack, which holds a device name and a <c>subst</c> folder of
+    /// ordinary length, and into one rented from the pool only where Windows says the answer is
+    /// longer. A buffer for the longest path is 64 KiB, which a question asked for every path of a
+    /// measurement must not allocate each time (#1065).</para>
     /// </summary>
     internal static string? DeviceOf(char letter)
     {
-        var buffer = Marshal.AllocHGlobal((int)LongestPath * sizeof(char));
+        ReadOnlySpan<char> name = [letter, ':', Terminator];
+
+        if (TargetOf(name, stackalloc char[UsualTargetLength]) is { } usual)
+        {
+            return usual;
+        }
+
+        if (Marshal.GetLastPInvokeError() != Win32Error.InsufficientBuffer)
+        {
+            return null;
+        }
+
+        var rented = ArrayPool<char>.Shared.Rent((int)LongestPath);
 
         try
         {
-            // The first of what may be several targets, which is the one the letter opens now.
-            return QueryDosDevice($"{letter}:", buffer, LongestPath) > 0
-                ? Marshal.PtrToStringUni(buffer)
-                : null;
+            return TargetOf(name, rented);
         }
         finally
         {
-            Marshal.FreeHGlobal(buffer);
+            ArrayPool<char>.Shared.Return(rented);
         }
+    }
+
+    /// <summary>
+    /// The first of the targets <c>QueryDosDevice</c> writes for <paramref name="name"/> into
+    /// <paramref name="buffer"/>, which is the one the letter opens now, or null where it wrote none.
+    /// </summary>
+    private static unsafe string? TargetOf(ReadOnlySpan<char> name, Span<char> buffer)
+    {
+        uint written;
+
+        fixed (char* device = name)
+        fixed (char* target = buffer)
+        {
+            written = QueryDosDevice(device, target, (uint)buffer.Length);
+        }
+
+        // Each target ends at a terminator, and the list at a second one.
+        return written > 0 && buffer[..(int)written].IndexOf(Terminator) is var end and >= 0
+            ? new string(buffer[..end])
+            : null;
     }
 
     /// <summary>
@@ -357,12 +398,8 @@ internal static partial class VolumeCalls
     private static partial bool GetVolumeNameForVolumeMountPoint(
         string volumeMountPoint, IntPtr volumeName, uint bufferLength);
 
-    [LibraryImport(
-        "kernel32.dll",
-        EntryPoint = "QueryDosDeviceW",
-        SetLastError = true,
-        StringMarshalling = StringMarshalling.Utf16)]
-    private static partial uint QueryDosDevice(string deviceName, IntPtr targetPath, uint bufferLength);
+    [LibraryImport("kernel32.dll", EntryPoint = "QueryDosDeviceW", SetLastError = true)]
+    private static unsafe partial uint QueryDosDevice(char* deviceName, char* targetPath, uint bufferLength);
 
     [LibraryImport("kernel32.dll", EntryPoint = "GetDriveTypeW", StringMarshalling = StringMarshalling.Utf16)]
     private static partial uint GetDriveType(string rootPathName);
