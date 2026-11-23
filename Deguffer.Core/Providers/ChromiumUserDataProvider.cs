@@ -282,7 +282,7 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
         var withheld = 0;
 
         // Every profile is walked, and its survivors asked, before either is awaited: the measurement
-        // needs only the targets, and the first survivors question in a pass reads every row's declarations.
+        // needs only the targets, and a survivors question reads every row that can declare its folder.
         var walks = new Dictionary<string, (LevelWalk Walk, Task<IReadOnlyList<(string Path, string Reason)>> Sparing)>(
             StringComparer.OrdinalIgnoreCase);
 

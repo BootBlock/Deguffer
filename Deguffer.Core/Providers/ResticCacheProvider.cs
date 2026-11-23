@@ -179,7 +179,7 @@ public sealed class ResticCacheProvider : CleanupProviderBase
         var unreadable = false;
 
         // Asked for every folder before any folder is measured, and each awaited only after its folder's
-        // measurement: the first such question in a pass reads every row's declarations.
+        // measurement: each question reads every row that can declare its folder.
         var sparing = folders.Select(folder => _declarations.UnofferedAsync(folder.Unrecognised, ct)).ToList();
 
         foreach (var (folder, spared) in folders.Zip(sparing))

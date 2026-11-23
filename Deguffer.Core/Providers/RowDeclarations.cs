@@ -155,8 +155,8 @@ public sealed class RowDeclarations
     {
         private readonly Row[] _rows;
 
-        // No more rows read at once than a pass plans, as when every row was read together: each read
-        // holds a thread of its own for as long as its row walks. Never disposed, since a question
+        // No more rows read at once than a pass plans: each read holds a thread of its own for as long
+        // as its row walks. Never disposed, since a question
         // cancelled while queued here may still be waiting when the pass is forgotten.
         private readonly SemaphoreSlim _atOnce = new(CleanupPlanner.ProvidersAtOnce);
 

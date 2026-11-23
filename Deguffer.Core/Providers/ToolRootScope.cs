@@ -9,9 +9,9 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>Why it exists.</b> <see cref="RowDeclarations"/> answers whether another row offers a
 /// child of a folder, and a row may build its declaration from a walk: the Claude Code conversations
-/// row reads thousands of entries and the Chromium rows walk both application-data roots. Asked of
-/// every row, the Gradle row's question about its own home waited for both, though neither can ever
-/// declare a root there.</para>
+/// row reads thousands of entries and the Chromium rows walk both application-data roots. Neither can
+/// ever declare a root under the Gradle row's home, so the Gradle row's question about it must not
+/// wait for either.</para>
 ///
 /// <para><b>A scope that misses a root fails towards a false alarm.</b> The missed root's offers are
 /// not seen by a row asking about its folder, so that row asserts as a survivor a child the first row

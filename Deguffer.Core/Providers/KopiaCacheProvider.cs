@@ -208,7 +208,7 @@ public sealed class KopiaCacheProvider : CleanupProviderBase
         const string CacheReason = "Kopia's cache folder must survive. Only the folders Kopia caches into are removed.";
 
         // Every cache is walked, and its survivors asked, before either is awaited: the measurement needs
-        // only the targets, and the first survivors question in a pass reads every row's declarations.
+        // only the targets, and a survivors question reads every row that can declare its folder.
         List<(string Cache, LevelWalk Walk, Task<IReadOnlyList<(string Path, string Reason)>> Sparing)> walks = [];
 
         foreach (var cache in layout.Caches)

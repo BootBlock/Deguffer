@@ -201,7 +201,7 @@ public sealed class VsCodeLogProvider : CleanupProviderBase
         }
 
         // Every editor is walked, and its survivors asked, before either is awaited: the measurement needs
-        // only the targets, and the first survivors question in a pass reads every row's declarations.
+        // only the targets, and a survivors question reads every row that can declare its folder.
         List<(LevelWalk Walk, Task<IReadOnlyList<(string Path, string Reason)>> Sparing)> walks = [];
 
         foreach (var editor in editors)
