@@ -20,5 +20,5 @@ internal readonly record struct MftFirstPass(
     bool Abandoned,
     IReadOnlyList<MftDeferredRecord> Deferred,
     long Wanted,
-    IReadOnlyList<MftExtensionRecord> Extensions,
+    MftByRecord<MftExtensionRecord>.Sorted Extensions,
     long Reached);
