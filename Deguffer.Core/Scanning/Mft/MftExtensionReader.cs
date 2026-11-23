@@ -9,8 +9,9 @@ namespace Deguffer.Core.Scanning.Mft;
 /// record holding something the scan needs holds as it reads it, so an extension record it reached
 /// is never read again: every wanted one is collected, sorted by record number, and merged against
 /// what was kept.
-/// The disk is read again only for the attribute lists kept outside the table, and for a wanted
-/// record the first pass never reached because it stopped first.</para>
+/// The disk is read again only for the attribute lists kept outside the table, where they were not
+/// already read beside the first pass (<see cref="MftListReadAhead"/>), and for a wanted record the
+/// first pass never reached because it stopped first.</para>
 ///
 /// <para>Bytes only, like <see cref="MftRecordStream"/>. What a record that could not be completed
 /// means is for the caller to decide, and each <see cref="MftDeferredRecord"/> already says which
@@ -54,6 +55,45 @@ internal static class MftExtensionReader
             }, ct);
         }
 
+        return Complete(source, first, budget, batch, ct);
+    }
+
+    /// <summary>
+    /// <see cref="TryResolve"/> where every list kept outside the table was already read beside the
+    /// first pass and landed (<see cref="MftListReadAhead"/>), so none is read here. Each is followed
+    /// all the same, in the order <see cref="TryResolve"/> would hand it on, so the budget is spent
+    /// alike either way and the same records are lost.
+    /// </summary>
+    public static bool TryResolveLanded(
+        IMftSource source,
+        MftFirstPass first,
+        long budget,
+        Span<byte> batch,
+        CancellationToken ct)
+    {
+        if (budget >= 0)
+        {
+            foreach (var (record, _, _) in MftAttributeListReader.InReadOrder(first.Deferred))
+            {
+                record.FollowLanded();
+                budget -= record.Segments.Count;
+
+                if (budget < 0)
+                {
+                    break;
+                }
+            }
+        }
+
+        return Complete(source, first, budget, batch, ct);
+    }
+
+    /// <summary>
+    /// Everything after the lists: lose whole every record whose list the budget did not reach, fold
+    /// in what the first pass kept, and read the wanted records it never reached.
+    /// </summary>
+    private static bool Complete(IMftSource source, MftFirstPass first, long budget, Span<byte> batch, CancellationToken ct)
+    {
         if (budget < 0)
         {
             foreach (var record in first.Deferred)

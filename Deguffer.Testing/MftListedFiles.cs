@@ -102,6 +102,12 @@ public static class MftListedFiles
         this MftFixture fixture, uint number, long listCluster, uint firstNamed, int count) =>
         AddFileWhoseListNamesRecordsForItsNames(fixture, number, firstNamed, count, listCluster);
 
+    /// <summary>The same, with the list kept inside the record, which spends the first pass's budget.</summary>
+    /// <param name="count">At most 24, which is what fits in a record beside its header and dates.</param>
+    public static MftFixture AddFileWhoseListInsideTheRecordNamesRecords(
+        this MftFixture fixture, uint number, uint firstNamed, int count) =>
+        AddFileWhoseListNamesRecordsForItsNames(fixture, number, firstNamed, count, listCluster: null);
+
     /// <param name="listCluster">Where the list is kept outside the table, or null to keep it in the record.</param>
     private static MftFixture AddFileWhoseListNamesRecordsForItsNames(
         MftFixture fixture, uint number, uint firstNamed, int count, long? listCluster)

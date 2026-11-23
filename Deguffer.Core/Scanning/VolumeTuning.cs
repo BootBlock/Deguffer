@@ -58,6 +58,6 @@ public sealed record VolumeTuning(StorageMedia Media, MediaScanPreferences Chose
             media,
             chosen,
             new WalkTuning(threads, listingKiB * 1024),
-            new TableTuning(tableKiB * 1024, readsInFlight, parseThreads, listReadsInFlight));
+            new TableTuning(tableKiB * 1024, readsInFlight, parseThreads, listReadsInFlight, AutoTuning.TableListReads(media)));
     }
 }
