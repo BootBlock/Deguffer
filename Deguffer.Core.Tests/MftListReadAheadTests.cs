@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Scanning.Mft;
 using Deguffer.Testing;
@@ -163,14 +164,18 @@ public sealed class MftListReadAheadTests
         // Read beside the pass until the lists landed wanted more than the table holds, and then
         // read again in cluster order until the budget was spent: never every list, let alone twice.
         Assert.True(besideReads < 24, $"{besideReads} lists were read");
+
+        // The read again has buffers of its own, so the read beside the pass let its buffer go first.
+        Assert.Equal(1, source.MostBuffersHeld);
     }
 
     /// <summary>
     /// A pass that fails while a list read beside it is in flight cancels that read and waits for it
-    /// before the failure leaves, so no buffer is released while a read can still land in it.
+    /// before the failure leaves, so no buffer is released while a read can still land in it. A read
+    /// that is never cancelled keeps the failure from leaving, so the pass is given a bounded time.
     /// </summary>
     [Fact]
-    public void WaitsForAListReadInFlightBeforeAFailedPassLeaves()
+    public async Task WaitsForAListReadInFlightBeforeAFailedPassLeaves()
     {
         using var table = new MftFixture()
             .AddFileWithANonResidentAttributeList(20, MftRecord.RootRecordNumber, "a.tgz", allocated: 4096, logical: 1000, extension: 30, listCluster: 700)
@@ -179,7 +184,7 @@ public sealed class MftListReadAheadTests
             .Build();
         using var source = new HeldTableReads(table, heldFrom: long.MaxValue, slowClusters: true);
 
-        Assert.Throws<InvalidOperationException>(() => MftRecordStream.TryReadAll(
+        var failed = Task.Run(() => Assert.Throws<InvalidOperationException>(() => MftRecordStream.TryReadAll(
             source,
             (int)source.RecordCount,
             new TableTuning(TableTuning.MinimumReadBytes, 1, 1, 1, AttributeListReads.BesideFirstPass, listBatch: 1),
@@ -194,8 +199,10 @@ public sealed class MftListReadAheadTests
                 return true;
             },
             onProgress: null,
-            default));
+            default)));
 
+        Assert.True(await Task.WhenAny(failed, Task.Delay(TimeSpan.FromSeconds(30))) == failed, "the failed pass left");
+        await failed;
         Assert.True(source.ClusterReadCancelled, "the list read in flight was cancelled");
         Assert.Equal(0, source.ClusterReadsInFlight);
     }
@@ -260,8 +267,9 @@ public sealed class MftListReadAheadTests
     /// A table whose overlapped reads of records from <c>heldFrom</c> on wait until a read of clusters
     /// has started, for up to <c>heldSeconds</c>, and which records every read of clusters and every read of
     /// records made one at a time. A read of the cluster <c>unreadableCluster</c> fails. Where
-    /// <c>slowClusters</c>, a read of clusters waits until it is cancelled, and lands a little after,
-    /// as a real read does.
+    /// <c>slowClusters</c>, a read of clusters waits until it is cancelled, for up to <c>heldSeconds</c>,
+    /// and lands a little after, as a real read does. Every buffer a read of clusters lands in is
+    /// counted while it is held, until it is released.
     /// </summary>
     private sealed class HeldTableReads(
         IMftSource table, long heldFrom, long unreadableCluster = -1, bool slowClusters = false, int heldSeconds = 10) : IMftSource
@@ -270,6 +278,7 @@ public sealed class MftListReadAheadTests
         private int _clusterReads;
         private int _inFlight;
         private bool _released;
+        private readonly HashSet<VolumeReadBuffer> _buffers = [];
 
         public bool ListReadBeforeTheTableEnded { get; private set; }
 
@@ -278,6 +287,9 @@ public sealed class MftListReadAheadTests
         public int ClusterReads => Volatile.Read(ref _clusterReads);
 
         public int ClusterReadsInFlight => Volatile.Read(ref _inFlight);
+
+        /// <summary>The most buffers that reads of clusters landed in, and that were not yet released, at once.</summary>
+        public int MostBuffersHeld { get; private set; }
 
         public List<(long First, int Records)> RecordReads { get; } = [];
 
@@ -320,6 +332,7 @@ public sealed class MftListReadAheadTests
             Interlocked.Increment(ref _clusterReads);
             Interlocked.Increment(ref _inFlight);
             _listRead.TrySetResult();
+            Held(destination);
 
             try
             {
@@ -327,7 +340,7 @@ public sealed class MftListReadAheadTests
                 {
                     try
                     {
-                        await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+                        await Task.Delay(TimeSpan.FromSeconds(heldSeconds), ct);
                     }
                     catch (OperationCanceledException)
                     {
@@ -346,5 +359,34 @@ public sealed class MftListReadAheadTests
         }
 
         public void Dispose() => table.Dispose();
+
+        private void Held(Memory<byte> destination)
+        {
+            if (!MemoryMarshal.TryGetMemoryManager<byte, VolumeReadBuffer>(destination, out var buffer))
+            {
+                return;
+            }
+
+            lock (_buffers)
+            {
+                _buffers.Add(buffer);
+                _buffers.RemoveWhere(Released);
+                MostBuffersHeld = Math.Max(MostBuffersHeld, _buffers.Count);
+            }
+        }
+
+        private static bool Released(VolumeReadBuffer buffer)
+        {
+            try
+            {
+                _ = buffer.GetSpan();
+                return false;
+            }
+            catch (ObjectDisposedException)
+            {
+                // A released buffer refuses to give its memory, which is the only sign it shows.
+                return true;
+            }
+        }
     }
 }

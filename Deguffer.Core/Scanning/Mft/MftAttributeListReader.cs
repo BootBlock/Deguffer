@@ -133,9 +133,10 @@ internal sealed class MftAttributeListReader
     /// <summary>Release the buffers lent to every read, once nothing is in flight in them.</summary>
     public static void Release(VolumeReadBuffer?[] buffers)
     {
-        foreach (var buffer in buffers)
+        for (var i = 0; i < buffers.Length; i++)
         {
-            ((IDisposable?)buffer)?.Dispose();
+            ((IDisposable?)buffers[i])?.Dispose();
+            buffers[i] = null;
         }
     }
 

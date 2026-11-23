@@ -159,7 +159,7 @@ internal static class AutoTuning
     /// 1.58 s, 2.12 against 1.75 s and 1.71 against 1.51 s on <c>table</c>, and 1.96 against 1.74 s,
     /// 1.88 against 2.32 s and 1.72 against 1.59 s on <c>index</c>. Eight of the twelve were faster
     /// beside the pass, by a median of about 0.2 s. The stage after the pass fell from 0.37 to 0.75 s
-    /// to 0.09 to 0.35 s, and the pass itself grew in ten of the twelve, by a median of 0.12 s, because
+    /// to 0.09 to 0.35 s, by 0.27 to 0.63 s in each pair, and the pass itself grew in ten of the twelve, by a median of 0.12 s, because
     /// the lists' reads share the disk with it, and lists close together on the disk are read apart when they
     /// fall in different batches: 15,400 reads of clusters against 13,889, and 11,200 against
     /// 8,170.</para>

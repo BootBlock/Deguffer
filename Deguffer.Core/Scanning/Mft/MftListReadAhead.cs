@@ -26,7 +26,9 @@ namespace Deguffer.Core.Scanning.Mft;
 /// as it reads. Holding every want of a hostile table would grow without bound.</para>
 ///
 /// <para><b>One buffer per read in flight serves every batch</b>, as it serves every read of one
-/// batch, so reading in batches makes no more buffers than reading after the pass.</para>
+/// batch, and they are released once the last batch is read, before the lists are followed or, where
+/// reading stopped, read again with buffers of their own. So reading beside the pass never holds
+/// more buffers than reading after it.</para>
 ///
 /// <para><b>Nothing is released while a read is in flight.</b> Every way out, a failure of the pass or
 /// of a list read, or a cancellation, cancels the reads and waits for the thread reading them.</para>
@@ -102,6 +104,7 @@ internal sealed class MftListReadAhead : IDisposable
         // The reading is synchronous work on a thread of its own, so this waits for that thread, and
         // throws what it failed with here, on the thread that will follow the lists.
         Task.WaitAny(_reading);
+        MftAttributeListReader.Release(_buffers);
 
         if (_reading.Exception is { } failure)
         {
