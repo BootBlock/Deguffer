@@ -103,32 +103,48 @@ public sealed class PlaceholderWalksTests
     }
 
     /// <summary>
-    /// Two volumes of one disk tuned to one thread are read one placeholder at a time: a walk of each at
-    /// once would make a spinning disk seek between them for the length of both.
+    /// X: and Y: on one disk where <paramref name="yDiskKnown"/>, and otherwise Y: on a disk not known,
+    /// which might be the disk of any other.
     /// </summary>
-    [Fact]
-    public async Task VolumesOnOneDiskShareOneWalksThreads()
+    private static FakeStorageQueries MaybeOneDisk(bool yDiskKnown) =>
+        yDiskKnown
+            ? new FakeStorageQueries().Volume(@"X:\", 1).Volume(@"Y:\", 1)
+            : new FakeStorageQueries().Volume(@"X:\", 1);
+
+    /// <summary>
+    /// Two volumes that may share a disk, tuned to one thread, are read one placeholder at a time: a
+    /// walk of each at once would make a spinning disk seek between them for the length of both.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task VolumesThatMayShareADiskNeverReadItWithMoreThreadsThanItsTuning(bool yDiskKnown)
     {
         var watch = new PlaceholderOverlapWatch(
             Roots((@"X:\Personal", 4), (@"Y:\Work", 4)), IsFile, wanted: 2, Company, holdsAtMost: 2);
-        var tuner = Tuner(1, new FakeStorageQueries().Volume(@"X:\", 1).Volume(@"Y:\", 1), @"X:\", @"Y:\");
+        var tuner = Tuner(1, MaybeOneDisk(yDiskKnown), @"X:\", @"Y:\");
 
         await WalkAsync(watch, tuner, @"X:\Personal", @"Y:\Work");
 
         Assert.Equal(1, watch.MostAtOnce);
     }
 
-    /// <summary>A volume that would not say which disk it is on might be on the disk of any other.</summary>
-    [Fact]
-    public async Task AVolumeOnADiskNotKnownSharesItsThreadsWithTheOthers()
+    /// <summary>
+    /// Two volumes that may share a disk, tuned to two threads, share one walk, so a root on each is read
+    /// at once. Walked in turn, each root of loose files would be read one placeholder at a time.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task VolumesThatMayShareADiskShareOneWalksThreads(bool yDiskKnown)
     {
         var watch = new PlaceholderOverlapWatch(
-            Roots((@"X:\Personal", 4), (@"Y:\Work", 4)), IsFile, wanted: 2, Company, holdsAtMost: 2);
-        var tuner = Tuner(1, new FakeStorageQueries().Volume(@"X:\", 1), @"X:\", @"Y:\");
+            Roots((@"X:\Personal", 4), (@"Y:\Work", 4)), IsFile, wanted: 2, Deadline, beyond: Company);
+        var tuner = Tuner(2, MaybeOneDisk(yDiskKnown), @"X:\", @"Y:\");
 
         await WalkAsync(watch, tuner, @"X:\Personal", @"Y:\Work");
 
-        Assert.Equal(1, watch.MostAtOnce);
+        Assert.Equal(2, watch.MostAtOnce);
     }
 
     /// <summary>
