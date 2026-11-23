@@ -675,6 +675,53 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
         Assert.True(File.Exists(Path.Combine(logs, "setupact.log")));
     }
 
+    /// <summary>
+    /// Windows' own cleanup is asked whether it starts while the logs removed by path are measured,
+    /// neither before nor after: the measurement waits for the question to be asked, and the handler
+    /// answers only once the measurement has reached the servicing logs. A plan that asked only after
+    /// measuring leaves the measurement waiting out its patience. What is offered is unchanged.
+    /// </summary>
+    [Fact]
+    public async Task AsksWindowsOwnCleanupWhileTheOtherLogsAreMeasured()
+    {
+        var logs = AtTheTop(Path.Combine("$SysReset", "Logs"));
+        var cbs = Populate(Path.Combine("Logs", "CBS"), file: "CBS.log");
+        var inner = new FakeDirectoryScanner();
+        var handlers = FakeDiskCleanupHandlers.Measuring(inner.WhenMeasured(cbs));
+        var scanner = new MeasuringOnceAsked(inner, handlers.SurveyStarted);
+        var provider = new WindowsServicingLogProvider(
+            handlers, _environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, scanner, _system);
+
+        var plan = await provider.PlanAsync().WaitAsync(TimeSpan.FromSeconds(30));
+
+        Assert.True(scanner.MetTheQuestion);
+        Assert.Equal([cbs, logs], plan.TargetedPaths);
+        Assert.Equal(WindowsServicingLogProvider.ResetLogsHandler, Assert.IsType<DiskCleanupStep>(plan.Steps[1]).Handler);
+    }
+
+    /// <summary>
+    /// A measurement that fails while Windows' own cleanup is still deciding fails the plan, and the
+    /// handler is told to stop and has returned by then, so none is left running past the plan that
+    /// started it, where the clean could start a second beside it.
+    /// </summary>
+    [Fact]
+    public async Task AMeasurementThatFailsStopsWindowsOwnCleanupAndWaitsForIt()
+    {
+        AtTheTop(Path.Combine("$SysReset", "Logs"));
+        Populate(Path.Combine("Logs", "CBS"), file: "CBS.log");
+        var undecided = new TaskCompletionSource();
+        var handlers = FakeDiskCleanupHandlers.Measuring(undecided.Task);
+        var failure = new InvalidOperationException("The measurement failed.");
+        var scanner = new MeasuringOnceAsked(new FakeDirectoryScanner(), handlers.SurveyStarted, failure);
+        var provider = new WindowsServicingLogProvider(
+            handlers, _environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, scanner, _system);
+
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(() => provider.PlanAsync().WaitAsync(TimeSpan.FromSeconds(30)));
+
+        Assert.Same(failure, thrown);
+        Assert.Equal([(WindowsServicingLogProvider.ResetLogsHandler, true)], handlers.Returned);
+    }
+
     /// <summary>The reset logs' declaration, pinned by name as the four removed by path are.</summary>
     [Fact]
     public void TheResetLogDeclarationIsTheThreeDirectoriesWindowsOwnCleanupNames()
@@ -713,5 +760,69 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
 
         Assert.Single(plan.Steps);
         Assert.Equal(FallbackReason.NotElevated, plan.Fallback);
+    }
+
+    /// <summary>
+    /// A scanner whose measurements wait, up to a patience, for Windows' own cleanup to be asked, and
+    /// then measure or throw <c>failure</c>. A measurement that waited out its patience ran before the
+    /// question was asked.
+    /// </summary>
+    private sealed class MeasuringOnceAsked(FakeDirectoryScanner inner, Task asked, Exception? failure = null) : IDirectoryScanner
+    {
+        private static readonly TimeSpan Patience = TimeSpan.FromSeconds(10);
+
+        private const int Unmeasured = 0, Met = 1, Missed = 2;
+
+        /// <summary>
+        /// The first measurement's only: the reset logs are measured after the question in any order,
+        /// so a later measurement always finds it asked.
+        /// </summary>
+        private int _first;
+
+        /// <summary>Whether the first measurement saw the question asked within its patience.</summary>
+        public bool MetTheQuestion => Volatile.Read(ref _first) == Met;
+
+        public ScanTuner Tuning => inner.Tuning;
+
+        public async ValueTask<IReadOnlyList<ScanResult>> MeasureManyAsync(
+            IReadOnlyList<ScanRequest> requests,
+            MinimumAge keep = default,
+            IProgress<ScanSize>? progress = null,
+            CancellationToken ct = default)
+        {
+            var met = await Task.WhenAny(asked, Task.Delay(Patience, ct)).ConfigureAwait(false) == asked;
+            Interlocked.CompareExchange(ref _first, met ? Met : Missed, Unmeasured);
+
+            if (failure is not null)
+            {
+                throw failure;
+            }
+
+            return await inner.MeasureManyAsync(requests, keep, progress, ct).ConfigureAwait(false);
+        }
+
+        public ValueTask<ScanResult> MeasureAsync(
+            string path,
+            MinimumAge keep = default,
+            ScanBounds bounds = default,
+            IProgress<ScanSize>? progress = null,
+            CancellationToken ct = default) =>
+            inner.MeasureAsync(path, keep, bounds, progress, ct);
+
+        public ValueTask<AgedScan> MeasureAgedAsync(string path, MinimumAge age, IProgress<ScanSize>? progress = null, CancellationToken ct = default) =>
+            inner.MeasureAgedAsync(path, age, progress, ct);
+
+        public ValueTask<IReadOnlyList<ScanResult>> MeasureFromDiskAsync(IReadOnlyList<ScanRequest> requests, CancellationToken ct = default) =>
+            inner.MeasureFromDiskAsync(requests, ct);
+
+        public ValueTask<IReadOnlyList<string>?> TryFindDirectoriesAsync(
+            DirectorySearch search,
+            string root,
+            CancellationToken ct = default) =>
+            inner.TryFindDirectoriesAsync(search, root, ct);
+
+        public void Invalidate() => inner.Invalidate();
+
+        public PassHold Hold() => inner.Hold();
     }
 }
