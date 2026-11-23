@@ -275,7 +275,7 @@ public sealed class PlanExecutor(
                     await releasing.ReleaseAsync(ct).ConfigureAwait(false);
                 }
 
-                recheck = UseRecheck.Of(deletion, ct);
+                recheck = await UseRecheck.OfAsync(deletion, ct).ConfigureAwait(false);
             }
             finally
             {
@@ -386,7 +386,7 @@ public sealed class PlanExecutor(
 
         // Asked before the look so a command already refused costs no walk, and again once the look
         // and any measurement are done.
-        if (step.TargetCheck?.WhyNot(step, ct) is { } retargeted)
+        if (step.TargetCheck is { } target && await target.WhyNotAsync(step, ct).ConfigureAwait(false) is { } retargeted)
         {
             return Retargeted(step, retargeted);
         }
@@ -429,7 +429,7 @@ public sealed class PlanExecutor(
         // Asked again, because the look walks every path the command clears and the tool's measurement
         // can take a minute, and what a target check guards against happens at the machine's pace, not
         // the run's: a build started, or a handle given to another item, while either ran.
-        if (step.TargetCheck?.WhyNot(step, ct) is { } retargetedSince)
+        if (step.TargetCheck is { } targetSince && await targetSince.WhyNotAsync(step, ct).ConfigureAwait(false) is { } retargetedSince)
         {
             return Retargeted(step, retargetedSince);
         }

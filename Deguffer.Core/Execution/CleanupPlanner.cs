@@ -20,6 +20,7 @@ public sealed class CleanupPlanner
     private readonly IReadOnlyList<ICleanupProvider> _providers;
     private readonly Dictionary<ICleanupProvider, int> _places;
     private readonly RowDeclarations? _declarations;
+    private readonly ILiveTreeInspector? _liveTrees;
     private readonly IVolumeInventory _volumes;
     private readonly RunningAccount _account;
     private readonly TimeProvider _time;
@@ -43,13 +44,19 @@ public sealed class CleanupPlanner
     /// </param>
     /// <param name="time">The clock each provider's plan is timed on (<see cref="ProviderPlanTime"/>). The system's by default.</param>
     /// <param name="tuning">What the walks of each volume run with, which bounds the reads a clean makes first (<see cref="RunResidue"/>).</param>
+    /// <param name="liveTrees">
+    /// The inspector the rows share, whose reading of the process table every pass starts at its top,
+    /// after the rows have dropped their caches and before any of them plans. Asked inside a row's slot
+    /// instead, the first rows to ask would each wait for the whole read. Null where no row asks it.
+    /// </param>
     public CleanupPlanner(
         IEnumerable<ICleanupProvider> providers,
         RowDeclarations? declarations = null,
         IVolumeInventory? volumes = null,
         RunningAccount? account = null,
         TimeProvider? time = null,
-        ScanTuner? tuning = null)
+        ScanTuner? tuning = null,
+        ILiveTreeInspector? liveTrees = null)
     {
         _providers = [.. providers];
         _volumes = volumes ?? VolumeInventory.Current;
@@ -58,6 +65,7 @@ public sealed class CleanupPlanner
         _tuning = tuning ?? ScanTuner.Shipped;
         _places = new Dictionary<ICleanupProvider, int>(_providers.Count, ReferenceEqualityComparer.Instance);
         _declarations = declarations;
+        _liveTrees = liveTrees;
 
         for (var place = 0; place < _providers.Count; place++)
         {
@@ -174,7 +182,7 @@ public sealed class CleanupPlanner
 
         return new CleanupPlanner(
         [
-            .. SourceTreeProviders(roots, sourceTrees, liveTrees, environment, scanner),
+            .. SourceTreeRows.Create(roots, sourceTrees, liveTrees, environment, scanner),
             .. CacheProviders(
                 environment,
                 squirrel,
@@ -192,53 +200,8 @@ public sealed class CleanupPlanner
         ],
         declarations,
         account: RunningAccount.Of(environment),
-        tuning: tuning);
-    }
-
-    /// <summary>
-    /// Every row that searches the user's approved source folders, sharing <paramref name="sourceTrees"/>.
-    /// Building them registers each one's names with it, which is how the benchmark walks with the set
-    /// a scan walks with rather than a copy of it.
-    /// </summary>
-    internal static IReadOnlyList<ICleanupProvider> SourceTreeProviders(
-        SourceRootStore roots,
-        SourceDirectoryDiscovery sourceTrees,
-        ILiveTreeInspector liveTrees,
-        IUserEnvironment environment,
-        IDirectoryScanner scanner)
-    {
-        // One reading of each Cargo target directory for both Rust rows, which divide it between them:
-        // the build output row leaves each profile's incremental cache to the other, and that holds
-        // only while both read the same layout.
-        var cargoTargets = new CargoTargetSurvey();
-
-        // One reading of each Godot project's settings and data folder for the three Godot rows, the
-        // two Godot 4 ones dividing its data folder between them as the Rust rows divide a target.
-        var godotProjects = new GodotProjectSurvey();
-
-        return
-        [
-            new DotNetObjProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-            new VisualStudioSolutionCacheProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-            new UnityLibraryProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-            new UnrealIntermediateProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-            new UnrealProjectDerivedDataProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-            new CargoTargetProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner, targets: cargoTargets),
-            new CargoIncrementalProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner, targets: cargoTargets),
-            new GodotImportCacheProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner, projects: godotProjects),
-            new GodotShaderCacheProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner, projects: godotProjects),
-            new Godot3ImportCacheProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner, projects: godotProjects),
-            new NodeModulesProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-            new PythonVirtualEnvironmentProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-            new PytestCacheProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-            new MypyCacheProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-            new RuffCacheProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-            new ToxEnvironmentProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-            new NoxEnvironmentProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-            new DartToolProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-            new NxWorkspaceCacheProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-            new GitLfsObjectProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-        ];
+        tuning: tuning,
+        liveTrees: liveTrees);
     }
 
     private static IReadOnlyList<ICleanupProvider> CacheProviders(
@@ -545,6 +508,14 @@ public sealed class CleanupPlanner
             foreach (var provider in providers)
             {
                 holds.Add(provider.HoldCaches());
+            }
+
+            // After the rows dropped the reading they share, so this one is of the machine as the pass
+            // finds it. Without a place, because it waits on the kernel rather than an interpreter. Not
+            // awaited here: the rows ask the inspector for it, and the pass's end waits for it.
+            if (_liveTrees is { } liveTrees)
+            {
+                _ = start.Begin(liveTrees.ReadingAsync);
             }
 
             // Before any slot is handed out, so a slow answer a row near the end of the list waits on

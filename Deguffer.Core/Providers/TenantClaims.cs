@@ -1,4 +1,6 @@
+using Deguffer.Core.Execution;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.Text;
 
 namespace Deguffer.Core.Providers;
 
@@ -59,4 +61,23 @@ internal sealed record TenantClaims(IReadOnlySet<string> Paths, IReadOnlyList<st
     }
 
     public bool Contains(string path) => Paths.Contains(Path.TrimEndingDirectorySeparator(path));
+
+    /// <summary>
+    /// The sentence saying what the temporary-folder row leaves to the rows that claimed it, or null
+    /// where they claimed nothing.
+    ///
+    /// <para>Information rather than a warning, because nothing is lost: each entry is offered on a
+    /// row of its own. It is said at all because the figure on the temporary-folder row is smaller
+    /// than the folder, and a reader comparing the two would otherwise have no way to find out
+    /// why.</para>
+    /// </summary>
+    public PlanNote? Note() => Paths.Count == 0
+        ? null
+        : new PlanNote(
+            PlanNoteSeverity.Information,
+            Counted.Form(Paths.Count,
+                "One entry in these folders is offered on the row of the tool that wrote it",
+                $"{Paths.Count:N0} entries in these folders are offered on the rows of the tools that wrote them")
+            + $", so this row leaves {Counted.Form(Paths.Count, "it", "them")} out: "
+            + $"{string.Join(", ", Rows)}.");
 }

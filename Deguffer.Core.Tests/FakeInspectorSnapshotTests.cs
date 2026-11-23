@@ -57,33 +57,33 @@ public sealed class FakeInspectorSnapshotTests
     }
 
     [Fact]
-    public void WhereProgramsAreComesFromTheSnapshotAndHeldFilesAreAskedLive()
+    public async Task WhereProgramsAreComesFromTheSnapshotAndHeldFilesAreAskedLive()
     {
         var lockFile = Path.Combine(Folder, "app.lock");
         var inspector = FakeLiveTreeInspector.NothingLive;
         LiveTreeQuery[] asked = [new(Folder, Folder, ["app.lock"])];
-        Assert.Empty(inspector.FindLive(asked).Live);
+        Assert.Empty((await inspector.FindLiveAsync(asked)).Live);
 
         inspector.WithProgram("editor", workingDirectory: Folder).WithHeldFile(lockFile, "indexer");
 
-        Assert.Equal(["indexer has it open"], Assert.Single(inspector.FindLive(asked).Live).Holders);
-        Assert.Empty(inspector.FindOccupiedDirectories().Live);
+        Assert.Equal(["indexer has it open"], Assert.Single((await inspector.FindLiveAsync(asked)).Live).Holders);
+        Assert.Empty((await inspector.FindOccupiedDirectoriesAsync()).Live);
 
         inspector.PassTheReadingLimit().DiscardOlderThan(IUseCheck.ReadingLimit);
 
-        Assert.Contains("editor is working in it", Assert.Single(inspector.FindOccupiedDirectories().Live).Holders);
+        Assert.Contains("editor is working in it", Assert.Single((await inspector.FindOccupiedDirectoriesAsync()).Live).Holders);
     }
 
     [Fact]
-    public void ATableThatBecameUnreadableIsSeenOnlyOnceTheSnapshotIsDropped()
+    public async Task ATableThatBecameUnreadableIsSeenOnlyOnceTheSnapshotIsDropped()
     {
         var inspector = FakeLiveTreeInspector.NothingLive;
-        Assert.True(inspector.FindOccupiedDirectories().Complete);
+        Assert.True((await inspector.FindOccupiedDirectoriesAsync()).Complete);
 
         inspector.CannotTellFromNow();
-        Assert.True(inspector.FindOccupiedDirectories().Complete);
+        Assert.True((await inspector.FindOccupiedDirectoriesAsync()).Complete);
 
         inspector.Invalidate();
-        Assert.False(inspector.FindOccupiedDirectories().Complete);
+        Assert.False((await inspector.FindOccupiedDirectoriesAsync()).Complete);
     }
 }

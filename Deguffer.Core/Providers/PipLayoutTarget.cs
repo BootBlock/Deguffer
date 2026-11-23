@@ -21,7 +21,9 @@ internal sealed class PipLayoutTarget(string cache) : ICommandTargetCheck
     public static readonly IReadOnlySet<string> Folders =
         new HashSet<string>(["http", "http-v2", "wheels"], StringComparer.OrdinalIgnoreCase);
 
-    public string? WhyNot(RunCommandStep step, CancellationToken ct)
+    public Task<string?> WhyNotAsync(RunCommandStep step, CancellationToken ct) => Task.FromResult(WhyNot(step, ct));
+
+    private string? WhyNot(RunCommandStep step, CancellationToken ct)
     {
         foreach (var path in Folders.Select(folder => Path.Combine(cache, folder)).Prepend(cache))
         {

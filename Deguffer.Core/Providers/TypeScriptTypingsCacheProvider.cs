@@ -178,11 +178,11 @@ public sealed partial class TypeScriptTypingsCacheProvider : CleanupProviderBase
         }
 
         // Each version folder is its own project: an install working in one is using none of the others.
-        var live = LiveTreeVeto.Apply(
+        var live = await LiveTreeVeto.ApplyAsync(
             _liveTrees,
             [.. versions.Keys.Select(folder => new RecognisedBuildDirectory(folder, folder))],
             lockFiles: [],
-            ct);
+            ct).ConfigureAwait(false);
 
         if (LiveTreeVeto.NoteFor(live.Vetoed, vetoed => $"TypeScript {versions[vetoed.Directory]}'s typings") is { } held)
         {

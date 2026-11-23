@@ -108,12 +108,12 @@ internal static class LiveTreeVeto
     /// <summary>Why a place held back on an answer that was not whole is listed as a survivor.</summary>
     public const string UncheckedReason = CannotTell + ", so it is left alone.";
 
-    public static LiveTreeVetoResult Apply(
+    public static Task<LiveTreeVetoResult> ApplyAsync(
         ILiveTreeInspector inspector,
         IReadOnlyList<RecognisedBuildDirectory> candidates,
         IReadOnlyList<string> lockFiles,
         CancellationToken ct = default) =>
-        Apply(inspector, candidates, _ => LiveTreeQuestion.ForLockFiles(_ => lockFiles), ct);
+        ApplyAsync(inspector, candidates, _ => Task.FromResult(LiveTreeQuestion.ForLockFiles(_ => lockFiles)), ct);
 
     /// <param name="questions">
     /// The rule that builds the question for one reading of the machine, for a provider whose evidence
@@ -121,25 +121,26 @@ internal static class LiveTreeVeto
     /// after the project (see <see cref="BuildDirectoryKind.ProjectLockFiles"/>), or the solutions that
     /// open it (see <see cref="LiveTreeQuery.Workspaces"/>).
     /// </param>
-    public static LiveTreeVetoResult Apply(
+    public static async Task<LiveTreeVetoResult> ApplyAsync(
         ILiveTreeInspector inspector,
         IReadOnlyList<RecognisedBuildDirectory> candidates,
-        Func<CancellationToken, LiveTreeQuestion> questions,
+        Func<CancellationToken, Task<LiveTreeQuestion>> questions,
         CancellationToken ct = default) =>
         candidates.Count == 0
             ? Nothing
-            : Apply(inspector, candidates, questions(ct), questions, ct);
+            : await ApplyAsync(inspector, candidates, await questions(ct).ConfigureAwait(false), questions, ct)
+                .ConfigureAwait(false);
 
     /// <param name="question">
     /// The question for this reading, for a caller that has built it already to read something else
     /// from the same reading.
     /// </param>
     /// <param name="questions">The rule that built it, which each check at the clean applies again.</param>
-    public static LiveTreeVetoResult Apply(
+    public static async Task<LiveTreeVetoResult> ApplyAsync(
         ILiveTreeInspector inspector,
         IReadOnlyList<RecognisedBuildDirectory> candidates,
         LiveTreeQuestion question,
-        Func<CancellationToken, LiveTreeQuestion> questions,
+        Func<CancellationToken, Task<LiveTreeQuestion>> questions,
         CancellationToken ct = default)
     {
         if (candidates.Count == 0)
@@ -147,7 +148,7 @@ internal static class LiveTreeVeto
             return Nothing;
         }
 
-        var findings = inspector.FindLive([.. candidates.Select(question.Ask)], ct);
+        var findings = await inspector.FindLiveAsync([.. candidates.Select(question.Ask)], ct).ConfigureAwait(false);
         var unused = candidates.Where(c => !findings.IsLive(c.Path)).ToList();
 
         // The same rule for the question, not the question it produced, because the question is read

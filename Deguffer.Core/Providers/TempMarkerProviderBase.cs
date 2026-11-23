@@ -33,7 +33,7 @@ public abstract class TempMarkerProviderBase : CleanupProviderBase, ITemporaryFo
     private readonly TempFolderListings _listings;
 
     private readonly PassMemo<TempRootSet> _roots = new();
-    private readonly PassMemo<TempMarkerFindings> _findings = new();
+    private readonly PassMemo<Task<TempMarkerFindings>> _findings = new();
 
     /// <param name="listings">
     /// The pass's listing of each folder these rows examine, shared with the other rows built on this
@@ -99,16 +99,16 @@ public abstract class TempMarkerProviderBase : CleanupProviderBase, ITemporaryFo
     /// would not be read. The second is what keeps the note saying so reachable: the planner never
     /// asks an absent provider for a plan.
     /// </summary>
-    public override Task<bool> IsPresentAsync(CancellationToken ct = default)
+    public override async Task<bool> IsPresentAsync(CancellationToken ct = default)
     {
-        var findings = Examine(ct);
-        return Task.FromResult(findings.Recognised.Count > 0 || findings.Unreadable);
+        var findings = await ExamineAsync(ct).ConfigureAwait(false);
+        return findings.Recognised.Count > 0 || findings.Unreadable;
     }
 
-    public Task<IReadOnlyList<string>> ClaimedEntriesAsync(
+    public async Task<IReadOnlyList<string>> ClaimedEntriesAsync(
         IReadOnlyList<string> folders,
         CancellationToken ct = default) =>
-        Task.FromResult(Examine(ct).ClaimsIn(folders, Reach));
+        (await ExamineAsync(ct).ConfigureAwait(false)).ClaimsIn(folders, Reach);
 
     /// <summary>
     /// Explore's reading of the same examination: an entry held back is refused, and in a tool's own
@@ -118,13 +118,13 @@ public abstract class TempMarkerProviderBase : CleanupProviderBase, ITemporaryFo
     /// answer kept for the life of the process would say a finished build is still going on. The
     /// folders are listed afresh for the same reason, rather than read from a pass's listing.</para>
     /// </summary>
-    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
+    public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
     {
-        var findings = TempMarkerSurvey.Examine(
-            PlacesIn(AccountFolders), TempFolderListings.Read, Inspector, _liveTrees, ct);
+        var findings = await TempMarkerSurvey.ExamineAsync(
+            PlacesIn(AccountFolders), TempFolderListings.Read, Inspector, _liveTrees, ct).ConfigureAwait(false);
         var taken = new TargetedEntries(findings.Targets);
 
-        return Task.FromResult<IReadOnlyList<ToolRoot>>(
+        return
         [
             .. findings.OwnedPlaces.Select(place => new ToolRoot(
                 place.Directory,
@@ -136,7 +136,7 @@ public abstract class TempMarkerProviderBase : CleanupProviderBase, ITemporaryFo
                 "The tool that left this in the temporary folder may still be using it, so Deguffer "
                 + "leaves it alone.",
                 static _ => false)),
-        ]);
+        ];
     }
 
     /// <summary>
@@ -161,7 +161,7 @@ public abstract class TempMarkerProviderBase : CleanupProviderBase, ITemporaryFo
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
-        var findings = Examine(ct);
+        var findings = await ExamineAsync(ct).ConfigureAwait(false);
         var settings = NotesFor(AccountFolders).ToList();
 
         if (findings.Targets.Count == 0 && findings.Declined == 0 && !findings.Unreadable)
@@ -198,6 +198,6 @@ public abstract class TempMarkerProviderBase : CleanupProviderBase, ITemporaryFo
     }
 
     /// <summary>The examination for this planning pass, shared by the plan, the presence probe and the claim.</summary>
-    private TempMarkerFindings Examine(CancellationToken ct) =>
-        _findings.Get(() => TempMarkerSurvey.Examine(PlacesIn(AccountFolders), _listings.Of, Inspector, _liveTrees, ct));
+    private Task<TempMarkerFindings> ExamineAsync(CancellationToken ct) =>
+        _findings.Get(() => TempMarkerSurvey.ExamineAsync(PlacesIn(AccountFolders), _listings.Of, Inspector, _liveTrees, ct));
 }

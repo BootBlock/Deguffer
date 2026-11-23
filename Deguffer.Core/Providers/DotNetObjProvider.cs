@@ -234,13 +234,13 @@ public sealed class DotNetObjProvider : CleanupProviderBase
         // project on the disk, while the compiler server actually holding a directory open need not
         // be called any of them. Each step asks again at the clean, because a build started after the
         // preview is exactly the one a removal breaks.
-        var live = LiveTreeVeto.Apply(
+        var live = await LiveTreeVeto.ApplyAsync(
             _liveTrees,
             [.. targets.Select(t => new RecognisedBuildDirectory(
                 t.Path,
                 Path.GetDirectoryName(t.Project.ProjectFilePath)!))],
             Questions,
-            ct);
+            ct).ConfigureAwait(false);
 
         var stillUnused = live.Cleared.ToDictionary(c => c.Path, c => c.StillUnused, StringComparer.OrdinalIgnoreCase);
         targets = [.. targets.Where(t => stillUnused.ContainsKey(t.Path))];
@@ -290,9 +290,9 @@ public sealed class DotNetObjProvider : CleanupProviderBase
     /// layout that folder is above the project, where a program working in the project alone would
     /// never see it.
     /// </summary>
-    private LiveTreeQuestion Questions(CancellationToken ct)
+    private async Task<LiveTreeQuestion> Questions(CancellationToken ct)
     {
-        var solutions = SolutionWorkspaces.Read(_liveTrees, ApprovedRoots, ct);
+        var solutions = await SolutionWorkspaces.ReadAsync(_liveTrees, ApprovedRoots, ct).ConfigureAwait(false);
 
         return new LiveTreeQuestion(candidate => new LiveTreeQuery(candidate.Path, candidate.Project)
         {

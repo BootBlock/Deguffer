@@ -14,13 +14,13 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 internal sealed class TempMarkerCheck(IReadOnlyList<IUseCheck> rules) : IUseCheck
 {
-    public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
+    public async Task<IReadOnlyList<InUseNow>> AskAsync(DeleteStep step, CancellationToken ct)
     {
         foreach (var rule in rules)
         {
             ct.ThrowIfCancellationRequested();
 
-            if (rule.Ask(step, ct) is { Count: > 0 } inUse)
+            if (await rule.AskAsync(step, ct).ConfigureAwait(false) is { Count: > 0 } inUse)
             {
                 return inUse;
             }

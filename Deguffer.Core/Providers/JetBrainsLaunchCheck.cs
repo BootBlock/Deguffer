@@ -16,7 +16,9 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 internal sealed class JetBrainsLaunchCheck(TimeProvider time, TimeSpan shelfLife) : IUseCheck
 {
-    public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
+    public Task<IReadOnlyList<InUseNow>> AskAsync(DeleteStep step, CancellationToken ct) => Task.FromResult(Ask(step, ct));
+
+    private IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
     {
         // Each step is a derived folder inside the version's folder, which is where .home is.
         var home = Path.Combine(Path.GetDirectoryName(step.Path)!, JetBrainsSystemDirectory.HomeFileName);

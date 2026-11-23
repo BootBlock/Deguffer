@@ -179,10 +179,10 @@ public sealed class UseRecheckTests : IDisposable
     {
         public int Asked { get; private set; }
 
-        public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
+        public Task<IReadOnlyList<InUseNow>> AskAsync(DeleteStep step, CancellationToken ct)
         {
             Asked++;
-            return answer(step);
+            return Task.FromResult(answer(step));
         }
     }
 }

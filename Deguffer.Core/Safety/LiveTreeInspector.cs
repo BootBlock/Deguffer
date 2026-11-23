@@ -1,3 +1,5 @@
+using Deguffer.Core.Scanning;
+
 namespace Deguffer.Core.Safety;
 
 /// <inheritdoc />
@@ -9,7 +11,7 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
     private readonly IVolumeInventory _volumes;
     private readonly FileHolderQuery _holdersOf;
     private readonly Lock _gate = new();
-    private readonly TimedReading<ProcessTable> _snapshot;
+    private readonly TimedReading<Task<ProcessTable>> _snapshot;
     private LiveTreeMatch? _match;
 
     public LiveTreeInspector()
@@ -35,7 +37,7 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
         _holdersOf = holdersOf ?? RestartManager.Query;
     }
 
-    public LiveTreeFindings FindLive(IReadOnlyList<LiveTreeQuery> candidates, CancellationToken ct = default)
+    public async Task<LiveTreeFindings> FindLiveAsync(IReadOnlyList<LiveTreeQuery> candidates, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(candidates);
 
@@ -44,7 +46,7 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
             return LiveTreeFindings.Nothing;
         }
 
-        var (table, match) = Snapshot(ct);
+        var (table, match, _) = await SnapshotAsync(ct).ConfigureAwait(false);
         var programs = match.Programs(table);
         var holders = new List<string>[candidates.Count];
         var answered = new bool[candidates.Count];
@@ -112,9 +114,9 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
             : new LiveTreeFindings(live, Complete: false);
     }
 
-    public LiveTreeFindings FindOccupiedDirectories(CancellationToken ct = default)
+    public async Task<LiveTreeFindings> FindOccupiedDirectoriesAsync(CancellationToken ct = default)
     {
-        var (table, _) = Snapshot(ct);
+        var (table, _, _) = await SnapshotAsync(ct).ConfigureAwait(false);
 
         // Keyed by the directory, because one program is several processes and a browser leaves
         // four of them in one folder. Four rows naming the same folder would be read as four folders.
@@ -140,11 +142,11 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
     }
 
     /// <summary>
-    /// <see cref="FindOccupiedDirectories"/> narrowed to the immediate children of
+    /// <see cref="FindOccupiedDirectoriesAsync"/> narrowed to the immediate children of
     /// <paramref name="directories"/>, so the two can never disagree about where a program is — and
     /// widened by the paths each program was started with, which only a scratch folder needs.
     /// </summary>
-    public LiveTreeFindings FindLiveChildren(IReadOnlyList<string> directories, CancellationToken ct = default)
+    public async Task<LiveTreeFindings> FindLiveChildrenAsync(IReadOnlyList<string> directories, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(directories);
 
@@ -157,8 +159,8 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
         // cannot be made so is still compared as well as it can be, and the answer says it may have
         // missed something about that folder.
         IReadOnlyList<string> unanswered = [.. directories.Where(asked => LongPath.Canonical(asked) is null)];
-        var occupied = FindOccupiedDirectories(ct);
-        var (table, match) = Snapshot(ct);
+        var occupied = await FindOccupiedDirectoriesAsync(ct).ConfigureAwait(false);
+        var (table, match, _) = await SnapshotAsync(ct).ConfigureAwait(false);
 
         // Keyed by the child, because programs in two folders below one scratch entry are both
         // using that entry, and two rows naming it would be read as two entries.
@@ -221,14 +223,8 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
 
     public ReachedFolder Reach(string path) => Match.Reach(path);
 
-    public LiveTreeReading Reading(CancellationToken ct = default)
-    {
-        lock (_gate)
-        {
-            Snapshot(ct);
-            return new LiveTreeReading(_snapshot.Number);
-        }
-    }
+    public async Task<LiveTreeReading> ReadingAsync(CancellationToken ct = default) =>
+        new((await SnapshotAsync(ct).ConfigureAwait(false)).Number);
 
     public void Invalidate()
     {
@@ -267,13 +263,39 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
         }
     }
 
-    /// <summary>One reading of the process table, and the rule that matches it.</summary>
-    private (ProcessTable Table, LiveTreeMatch Match) Snapshot(CancellationToken ct)
+    /// <summary>
+    /// One reading of the process table, the rule that matches it, and which reading it is.
+    ///
+    /// <para><b>The lock hands out the reading, and nobody reads under it.</b> The reading is a task,
+    /// started by the first to ask (a planning pass starts it at its top, through
+    /// <see cref="ReadingAsync"/>), and everyone who asks while it runs waits for that one task. A read
+    /// under the lock would hold every other asker on the lock for the whole read, and
+    /// <see cref="Invalidate"/> and <see cref="Reach"/> behind it too.</para>
+    ///
+    /// <para><b>A reading that failed or was stopped is not kept</b>, and one stopped for whoever
+    /// started it is read again for an asker that still wants it (<see cref="SharedTask"/>).</para>
+    /// </summary>
+    private async Task<(ProcessTable Table, LiveTreeMatch Match, long Number)> SnapshotAsync(CancellationToken ct)
     {
-        lock (_gate)
-        {
-            return (_snapshot.Get(() => Filtered(RunningProcessTable.Read(_calls, ct))), _match ??= new LiveTreeMatch(_volumes));
-        }
+        var (table, (match, number)) = await SharedTask.AwaitAsync(
+            () =>
+            {
+                lock (_gate)
+                {
+                    var reading = _snapshot.Get(() => WorkerThreads.Shared.RunAsync(() => Filtered(RunningProcessTable.Read(_calls, ct)), ct));
+                    return (reading, (_match ??= new LiveTreeMatch(_volumes), _snapshot.Number));
+                }
+            },
+            failed =>
+            {
+                lock (_gate)
+                {
+                    _snapshot.Forget(failed);
+                }
+            },
+            ct).ConfigureAwait(false);
+
+        return (table, match, number);
     }
 
     /// <summary>

@@ -209,7 +209,7 @@ public sealed class TemporaryUserWorkTests : IDisposable
     /// folder either, so a run would keep everything in it whatever the check said.
     /// </summary>
     [Fact]
-    public void HoldsTheFolderBackWhenTheCleanCannotSearchIt()
+    public async Task HoldsTheFolderBackWhenTheCleanCannotSearchIt()
     {
         Abandoned(1024, "temp", "abandoned.tmp");
 
@@ -218,7 +218,7 @@ public sealed class TemporaryUserWorkTests : IDisposable
 
         using var denied = new DeniedDirectory(UserTemp);
 
-        var held = Assert.Single(check.Ask(step, CancellationToken.None));
+        var held = Assert.Single(await check.AskAsync(step, CancellationToken.None));
         Assert.Equal(UserTemp, held.Path);
         Assert.False(held.IsUserWork);
     }

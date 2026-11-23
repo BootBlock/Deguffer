@@ -216,10 +216,10 @@ public sealed class ClaudeCodeSessionReadingAgeTests : IDisposable
 
     private sealed class ChangingCheck(Action change) : IUseCheck
     {
-        public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
+        public Task<IReadOnlyList<InUseNow>> AskAsync(DeleteStep step, CancellationToken ct)
         {
             change();
-            return [];
+            return Task.FromResult<IReadOnlyList<InUseNow>>([]);
         }
     }
 }

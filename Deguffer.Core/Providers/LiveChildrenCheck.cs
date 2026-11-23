@@ -4,7 +4,7 @@ using Deguffer.Core.Safety;
 namespace Deguffer.Core.Providers;
 
 /// <summary>
-/// <see cref="ILiveTreeInspector.FindLiveChildren"/> asked again immediately before the removal, for a
+/// <see cref="ILiveTreeInspector.FindLiveChildrenAsync"/> asked again immediately before the removal, for a
 /// scratch folder whose entries a program may run from, work in, or have been started with.
 ///
 /// <para><b>Two shapes, one question.</b> A folder cleared in place asks about its own entries, and
@@ -20,7 +20,7 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 internal sealed class LiveChildrenCheck(ILiveTreeInspector inspector) : IUseCheck
 {
-    public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
+    public async Task<IReadOnlyList<InUseNow>> AskAsync(DeleteStep step, CancellationToken ct)
     {
         var folder = step is ClearDirectoryStep ? step.Path : Path.GetDirectoryName(step.Path);
 
@@ -34,7 +34,7 @@ internal sealed class LiveChildrenCheck(ILiveTreeInspector inspector) : IUseChec
         inspector.DiscardOlderThan(IUseCheck.ReadingLimit);
 
         IReadOnlyList<string> elsewhere = step is ClearDirectoryStep clear ? [.. clear.OwnedElsewhere, .. clear.UserWork] : [];
-        var findings = inspector.FindLiveChildren([folder], ct);
+        var findings = await inspector.FindLiveChildrenAsync([folder], ct).ConfigureAwait(false);
 
         IReadOnlyList<InUseNow> inUse =
         [

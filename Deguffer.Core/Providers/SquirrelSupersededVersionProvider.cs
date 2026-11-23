@@ -147,7 +147,7 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
     /// the folder beside it while an update finishes. It lists them as survivors under §5.6, and
     /// §7.1 refuses every path a provider names as protected.</para>
     /// </summary>
-    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
+    public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
     {
         var installations = _discovery.Look(ct).Installations
             .Where(i => i.Superseded.Count > 0)
@@ -156,17 +156,17 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
         // One query per installation, as the plan asks it: the process holding an application open
         // runs from the build that superseded these, so asking about a superseded directory would
         // answer no every time.
-        var live = LiveTreeVeto.Apply(
+        var live = await LiveTreeVeto.ApplyAsync(
             _liveTrees,
             [.. installations.Select(i => new RecognisedBuildDirectory(i.Root, i.Root))],
             lockFiles: [],
-            ct);
+            ct).ConfigureAwait(false);
 
         var held = new HashSet<string>(
             live.Vetoed.Select(v => v.Directory), StringComparer.OrdinalIgnoreCase);
         var unsure = new HashSet<string>(live.Unchecked, StringComparer.OrdinalIgnoreCase);
 
-        return Task.FromResult<IReadOnlyList<ToolRoot>>(
+        return
         [
             .. from installation in installations
                where held.Contains(installation.Root)
@@ -181,7 +181,7 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
                from version in installation.Superseded
                where !version.IsLink
                select new ToolRoot(version.Path, SquirrelSupersededPlanNotes.UncheckedBuildReason(installation), static _ => false),
-        ]);
+        ];
     }
 
     public override void InvalidateCaches()
@@ -286,12 +286,12 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
         // this is whether the application is running at all, and the process holding it open is
         // running from the build it did *not* supersede — so asking about the superseded directory
         // alone would answer no every time.
-        var live = LiveTreeVeto.Apply(
+        var live = await LiveTreeVeto.ApplyAsync(
             _liveTrees,
             [.. installations.Where(i => i.Superseded.Count > 0)
                 .Select(i => new RecognisedBuildDirectory(i.Root, i.Root))],
             lockFiles: [],
-            ct);
+            ct).ConfigureAwait(false);
 
         var held = new HashSet<string>(live.Held, StringComparer.OrdinalIgnoreCase);
         var running = new HashSet<string>(live.Vetoed.Select(v => v.Directory), StringComparer.OrdinalIgnoreCase);

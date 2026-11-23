@@ -54,7 +54,7 @@ public sealed class CleanReadingAgeTests : IDisposable
         var scratch = Path.GetDirectoryName(busy)!;
 
         // The preview's reading, with nothing working in the folder.
-        Assert.Empty(inspector.FindLiveChildren([scratch]).Live);
+        Assert.Empty((await inspector.FindLiveChildrenAsync([scratch])).Live);
 
         _calls.With(new FakeListedProcess
         {

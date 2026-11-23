@@ -15,8 +15,9 @@ namespace Deguffer.Core.Providers;
 /// <param name="inUse">The in-use check the cache was cleared by.</param>
 internal sealed class NxIndexCheck(string index, bool absentIsEmpty, IUseCheck inUse) : IUseCheck
 {
-    public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct) =>
+    public Task<IReadOnlyList<InUseNow>> AskAsync(DeleteStep step, CancellationToken ct) =>
         NxCacheIndex.Read(index).AllowsRemoval(absentIsEmpty)
-            ? inUse.Ask(step, ct)
-            : [new InUseNow(step.Path, "its index has changed since the preview to one an older Nx reads")];
+            ? inUse.AskAsync(step, ct)
+            : Task.FromResult<IReadOnlyList<InUseNow>>(
+                [new InUseNow(step.Path, "its index has changed since the preview to one an older Nx reads")]);
 }

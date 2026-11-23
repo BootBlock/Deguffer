@@ -198,7 +198,7 @@ public abstract class InstallerPayloadProvider : CleanupProviderBase
             }
         }
 
-        var live = Veto(found, ct);
+        var live = await VetoAsync(found, ct).ConfigureAwait(false);
 
         // Counted as a link is: a payload held back is something real left out, and a plan whose only
         // payload is in use would otherwise read "Already clear" beside a warning saying it is not.
@@ -334,18 +334,18 @@ public abstract class InstallerPayloadProvider : CleanupProviderBase
     /// reason. Found exactly as the plan finds them, walk and link rule included, so the two cannot
     /// disagree about which folders are payloads.
     /// </summary>
-    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
+    public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
     {
-        var live = Veto(Recognised(ct), ct);
+        var live = await VetoAsync(Recognised(ct), ct).ConfigureAwait(false);
 
-        return Task.FromResult<IReadOnlyList<ToolRoot>>(
+        return
         [
             .. live.Vetoed.Select(vetoed => new ToolRoot(
                 vetoed.Directory,
                 InUseReason + (vetoed.Holders.Count > 0 ? $" ({string.Join("; ", vetoed.Holders)})" : string.Empty),
                 static _ => false)),
             .. live.Unchecked.Select(path => new ToolRoot(path, LiveTreeVeto.UncheckedReason, static _ => false)),
-        ]);
+        ];
     }
 
     /// <summary>
@@ -397,8 +397,8 @@ public abstract class InstallerPayloadProvider : CleanupProviderBase
     /// Each payload is its own project: a program working elsewhere in the vendor's folder is using
     /// that folder, not the payloads beside it.
     /// </summary>
-    private LiveTreeVetoResult Veto(IReadOnlyList<Payload> found, CancellationToken ct) =>
-        LiveTreeVeto.Apply(
+    private Task<LiveTreeVetoResult> VetoAsync(IReadOnlyList<Payload> found, CancellationToken ct) =>
+        LiveTreeVeto.ApplyAsync(
             _liveTrees,
             [.. found.Select(p => new RecognisedBuildDirectory(p.Path, p.Path))],
             lockFiles: [],

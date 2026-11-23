@@ -35,7 +35,7 @@ namespace Deguffer.Core.Providers;
 /// The plan holds each of them back, so Explore refuses each of them.</para>
 ///
 /// <para><b>Each is judged exactly as the plan judges it.</b> The same boundary as discovery, the
-/// provider's own recogniser, and <see cref="LiveTreeVeto.Apply"/> with the question the plan
+/// provider's own recogniser, and <see cref="LiveTreeVeto.ApplyAsync"/> with the question the plan
 /// asks. Lying below a project is not the verdict: a program started from a project's own
 /// <c>tools</c> folder, working somewhere else, is using neither the project nor its build output,
 /// and the plan offers that build output. Declaring it here would refuse what the Storage page
@@ -69,7 +69,7 @@ internal static class InUseBuildDirectories
         IReadOnlyList<string> names,
         ScanTuner tuning,
         Func<string, string?> recognise,
-        Func<CancellationToken, LiveTreeQuestion> questions,
+        Func<CancellationToken, Task<LiveTreeQuestion>> questions,
         CancellationToken ct)
     {
         if (roots.Count == 0)
@@ -77,20 +77,24 @@ internal static class InUseBuildDirectories
             return [];
         }
 
+        // Started before the search, because the process table and the question do not depend on it.
+        // The question is built once, so the projects it names and the question the veto asks come from
+        // one reading.
+        var occupiedNow = inspector.FindOccupiedDirectoriesAsync(ct);
+        var questionNow = questions(ct);
+        var searched = await discovery.FindAsync(roots, ct).ConfigureAwait(false);
+
         // Resolved first, because the process table holds whatever form a program was started with:
         // a path with '..' in it would otherwise be followed to somewhere it is not. Each is followed
         // through the inspector, which keeps the answer for the planning pass every build provider shares.
-        var occupied = inspector.FindOccupiedDirectories(ct).Live
+        var occupied = (await occupiedNow.ConfigureAwait(false)).Live
             .Select(place => LongPath.Entry(place.Directory))
             .OfType<string>()
             .Select(inspector.Reach)
             .ToList();
 
-        // Built once, so the projects it names and the question the veto asks come from one reading.
-        var question = questions(ct);
+        var question = await questionNow.ConfigureAwait(false);
         var named = question.NamedProjects.Select(inspector.Reach).ToList();
-
-        var searched = await discovery.FindAsync(roots, ct).ConfigureAwait(false);
 
         // A set, because approved roots may nest, and because the search and the places programs are
         // find many of the same directories. Each would otherwise be asked about and declared twice.
@@ -147,7 +151,7 @@ internal static class InUseBuildDirectories
             }
         }
 
-        var live = LiveTreeVeto.Apply(inspector, recognised, question, questions, ct);
+        var live = await LiveTreeVeto.ApplyAsync(inspector, recognised, question, questions, ct).ConfigureAwait(false);
 
         return
         [

@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using Deguffer.Core.Diagnostics;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Safety;
 
@@ -93,70 +95,120 @@ internal sealed record ProcessTable(
 /// </summary>
 internal static class RunningProcessTable
 {
-    public static ProcessTable Read(IProcessTableCalls calls, CancellationToken ct = default)
+    /// <summary>
+    /// How many processes are read at once.
+    ///
+    /// <para>Each read is a handful of kernel calls (an open, a memory read, an image path and a
+    /// command line), and one after another a table of 774 processes took 65 to 99 ms on one machine,
+    /// and 151 to 219 ms inside a planning pass. The calls wait on the kernel rather than on one
+    /// disk, so the bound is the processors, and never more than eight, the number of rows a pass
+    /// plans at once (<see cref="Execution.CleanupPlanner.ProvidersAtOnce"/>), whose own work the read
+    /// runs beside.</para>
+    /// </summary>
+    internal static readonly int ProcessesAtOnce = Math.Clamp(Environment.ProcessorCount, 1, Execution.CleanupPlanner.ProvidersAtOnce);
+
+    public static ProcessTable Read(IProcessTableCalls calls, CancellationToken ct = default) =>
+        Read(calls, ProcessesAtOnce, ct);
+
+    /// <param name="threads">How many processes are read at once: the seam a test holds two opens in flight through.</param>
+    internal static ProcessTable Read(IProcessTableCalls calls, int threads, CancellationToken ct)
     {
         using var timing = MachineCallTally.Time(MachineCall.ProcessTable);
 
         var readable = LayoutIsSound(calls);
-        var verified = readable;
         var commandLines = CommandLinesAreReadable(calls);
-        var imagesWhole = true;
-        var argumentsWhole = true;
-        var processes = new List<RunningProcess>();
+        var listed = calls.List();
 
         // One program is many processes started with the same paths, and a path carrying an alias
         // costs a walk up the disk to put in canonical form, so each spelling is put in it once.
-        var known = new Dictionary<string, string?>(StringComparer.Ordinal);
+        // Two threads may both make one spelling canonical, which costs a walk and changes nothing.
+        var known = new ConcurrentDictionary<string, string?>(StringComparer.Ordinal);
+        Func<string, string?> canonical = path => known.GetOrAdd(path, LongPath.Canonical);
 
-        string? Canonical(string path) =>
-            known.TryGetValue(path, out var canonical) ? canonical : known[path] = LongPath.Canonical(path);
+        // Each process's answer goes in its own place, so the table lists them in the order the system
+        // did, whatever order they were read in.
+        var read = new ProcessReading[listed.Count];
 
-        foreach (var (id, name) in calls.List())
+        ListWorkers.Run(
+            listed.Count,
+            threads,
+            index => read[index] = ReadOne(calls, listed[index], readable, commandLines, canonical),
+            ct);
+
+        var verified = readable;
+        var imagesWhole = true;
+        var argumentsWhole = true;
+        var processes = new List<RunningProcess>(read.Length);
+
+        foreach (var reading in read)
         {
-            ct.ThrowIfCancellationRequested();
-
-            using var process = calls.Open(id, withMemory: readable);
-
-            if (process is null)
+            if (reading.Process is not { } process)
             {
-                // A process of another account, or a protected one. Neither is the developer's
-                // own editor or build, which is the only thing this is looking for.
                 continue;
             }
 
-            var directory = readable && process.Memory is { } memory
-                ? ProcessWorkingDirectory.Of(memory)
-                : WorkingDirectoryRead.Unread;
-
-            var working = directory.Directory is { } read ? Canonical(read) : null;
-            var imageRead = process.ImagePath();
-            var image = imageRead is { } path ? Canonical(path) : null;
-
-            // Only this process's directory is in doubt, so the others are still read.
-            if (directory.LayoutUnverified || (directory.Directory is not null && working is null))
-            {
-                verified = false;
-            }
-
-            if (imageRead is not null && image is null)
-            {
-                imagesWhole = false;
-            }
-
-            processes.Add(new RunningProcess(
-                id,
-                name,
-                image,
-                working,
-                commandLines && process.CommandLine() is { } line
-                    ? CanonicalArguments(line, Canonical, ref argumentsWhole)
-                    : [])
-            {
-                Started = process.StartTime(),
-            });
+            verified &= reading.DirectoryWhole;
+            imagesWhole &= reading.ImageWhole;
+            argumentsWhole &= reading.ArgumentsWhole;
+            processes.Add(process);
         }
 
         return new ProcessTable(processes, imagesWhole, verified, commandLines && argumentsWhole);
+    }
+
+    /// <summary>
+    /// One process as it was read, and whether each of its paths that was read could be put in a form
+    /// that compares. <see cref="Process"/> is null where it could not be opened.
+    /// </summary>
+    private readonly record struct ProcessReading(
+        RunningProcess? Process,
+        bool DirectoryWhole,
+        bool ImageWhole,
+        bool ArgumentsWhole);
+
+    private static ProcessReading ReadOne(
+        IProcessTableCalls calls,
+        ListedProcess listed,
+        bool readable,
+        bool commandLines,
+        Func<string, string?> canonical)
+    {
+        using var process = calls.Open(listed.Id, withMemory: readable);
+
+        if (process is null)
+        {
+            // A process of another account, or a protected one. Neither is the developer's
+            // own editor or build, which is the only thing this is looking for.
+            return default;
+        }
+
+        var directory = readable && process.Memory is { } memory
+            ? ProcessWorkingDirectory.Of(memory)
+            : WorkingDirectoryRead.Unread;
+
+        var working = directory.Directory is { } read ? canonical(read) : null;
+        var imageRead = process.ImagePath();
+        var image = imageRead is { } path ? canonical(path) : null;
+        var argumentsWhole = true;
+
+        var running = new RunningProcess(
+            listed.Id,
+            listed.Name,
+            image,
+            working,
+            commandLines && process.CommandLine() is { } line
+                ? CanonicalArguments(line, canonical, ref argumentsWhole)
+                : [])
+        {
+            Started = process.StartTime(),
+        };
+
+        // Only this process's directory is in doubt, so the others are still read.
+        return new ProcessReading(
+            running,
+            DirectoryWhole: !directory.LayoutUnverified && (directory.Directory is null || working is not null),
+            ImageWhole: imageRead is null || image is not null,
+            ArgumentsWhole: argumentsWhole);
     }
 
     /// <summary>

@@ -44,6 +44,18 @@ internal sealed class TimedReading<T>(TimeProvider time)
     public void Forget() => _reading = null;
 
     /// <summary>
+    /// Drop <paramref name="reading"/> where it is still the one held, so the next question reads
+    /// again. For a reading that is a task which failed: one taken since it was handed out is kept.
+    /// </summary>
+    public void Forget(T reading)
+    {
+        if (ReferenceEquals(_reading, reading))
+        {
+            _reading = null;
+        }
+    }
+
+    /// <summary>
     /// Drop the reading where it began longer ago than <paramref name="maxAge"/>. True where one was
     /// dropped, so an owner can drop what it derived from it too.
     /// </summary>

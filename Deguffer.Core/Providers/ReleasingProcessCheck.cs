@@ -44,7 +44,7 @@ internal sealed class ReleasingProcessCheck(
 
     private int _asked;
 
-    public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct) => _running.Ask(step, ct);
+    public Task<IReadOnlyList<InUseNow>> AskAsync(DeleteStep step, CancellationToken ct) => _running.AskAsync(step, ct);
 
     /// <summary>
     /// Send the command if one of the programs runs now, and wait for them to exit. Reports nothing,

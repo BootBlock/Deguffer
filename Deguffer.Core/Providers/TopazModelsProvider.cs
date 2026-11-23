@@ -179,15 +179,15 @@ public sealed class TopazModelsProvider : CleanupProviderBase
     public override ToolRootScope ToolRootScope => ToolRootScope.Under(Root);
 
     /// <summary>§7.1: while a Topaz program runs, Explore refuses what the plan holds back, with its reason.</summary>
-    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
+    public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
     {
         var survey = Survey(ct);
-        var (held, reason) = Held(survey, ct);
+        var (held, reason) = await HeldAsync(survey, ct).ConfigureAwait(false);
 
-        return Task.FromResult<IReadOnlyList<ToolRoot>>(
+        return
         [
             .. held.Select(product => new ToolRoot(product.Target!, reason, static _ => false)),
-        ]);
+        ];
     }
 
     /// <summary>
@@ -266,7 +266,7 @@ public sealed class TopazModelsProvider : CleanupProviderBase
         }
 
         var use = Use(survey);
-        var (held, heldReason) = Held(survey, use, ct);
+        var (held, heldReason) = await HeldAsync(survey, use, ct).ConfigureAwait(false);
 
         if (held.Count > 0)
         {
@@ -346,19 +346,19 @@ public sealed class TopazModelsProvider : CleanupProviderBase
         };
     }
 
-    private (List<TopazProduct> Held, string Reason) Held(TopazSurvey survey, CancellationToken ct) =>
-        Held(survey, Use(survey), ct);
+    private Task<(List<TopazProduct> Held, string Reason)> HeldAsync(TopazSurvey survey, CancellationToken ct) =>
+        HeldAsync(survey, Use(survey), ct);
 
     /// <summary>
     /// The products whose models are held back while something may be loading them, and why: every
     /// one that may be installed. Nothing loads the models of a product that is gone.
     /// </summary>
-    private static (List<TopazProduct> Held, string Reason) Held(TopazSurvey survey, TopazModelsUse use, CancellationToken ct)
+    private static async Task<(List<TopazProduct> Held, string Reason)> HeldAsync(TopazSurvey survey, TopazModelsUse use, CancellationToken ct)
     {
         List<TopazProduct> installed =
             [.. survey.Products.Where(p => p.Target is not null && p.Standing is not TopazInstallStanding.NotInstalled)];
 
-        if (installed.Count == 0 || use.WhyInUse(ct) is not { } why)
+        if (installed.Count == 0 || await use.WhyInUseAsync(ct).ConfigureAwait(false) is not { } why)
         {
             return ([], string.Empty);
         }

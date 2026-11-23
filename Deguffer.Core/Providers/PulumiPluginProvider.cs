@@ -144,12 +144,12 @@ public sealed class PulumiPluginProvider : CleanupProviderBase
     /// runs or while what runs from it cannot be read in full, each plugin a program runs from, and what
     /// Pulumi keeps in a folder the variable names that this declines.
     /// </summary>
-    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
+    public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
     {
         IReadOnlyList<string> caches = [.. DeclaredHomes.Select(PluginsIn)];
-        var findings = PulumiIsRunning() ? null : _liveTrees.FindLiveChildren(caches, ct);
+        var findings = PulumiIsRunning() ? null : await _liveTrees.FindLiveChildrenAsync(caches, ct).ConfigureAwait(false);
 
-        return Task.FromResult<IReadOnlyList<ToolRoot>>(
+        return
         [
             .. findings is null
                 ? caches.Select(cache => new ToolRoot(cache, PulumiPluginUse.PulumiRunningReason, static _ => false))
@@ -162,7 +162,7 @@ public sealed class PulumiPluginProvider : CleanupProviderBase
                 .OfType<string>()
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Select(declined => ToolRoot.Sparing(declined, DeclinedRootReason, NamesInTheHome)),
-        ]);
+        ];
     }
 
     /// <summary>The plugin cache of every Pulumi folder either reading of the variable names, whole.</summary>
@@ -210,7 +210,7 @@ public sealed class PulumiPluginProvider : CleanupProviderBase
             return UnreadableRootPlan(plugins);
         }
 
-        var choice = PulumiPluginChoice.Make(cache, pulumi is not null, PulumiIsRunning(), _liveTrees, ct);
+        var choice = await PulumiPluginChoice.MakeAsync(cache, pulumi is not null, PulumiIsRunning(), _liveTrees, ct).ConfigureAwait(false);
         var notes = new List<PlanNote>(choice.Notes);
 
         var (steps, measured, recent) = pulumi is null

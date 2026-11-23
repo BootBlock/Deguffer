@@ -36,7 +36,7 @@ namespace Deguffer.Core.Providers;
 /// <item>The temporary-files age limit, which the plan carries as its <see cref="CleanupPlan.Keep"/>
 /// exactly as the temporary files row does. See <see cref="TemporaryAgeLimit"/>.</item>
 /// <item>A profile a running browser was started with is never a target.
-/// <see cref="ILiveTreeInspector.FindLiveChildren"/> is what sees that: the browser runs from its
+/// <see cref="ILiveTreeInspector.FindLiveChildrenAsync"/> is what sees that: the browser runs from its
 /// own install and works wherever the test runner does, and names the profile only on its command
 /// line. Anything running from or working in a profile is excluded as well. The clean asks again
 /// immediately before it removes each profile, and leaves one a browser has taken up since the
@@ -154,11 +154,11 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
     /// Every profile a running program is using, as a root recognising no child, so Explore refuses
     /// it as the plan does (§7.1).
     /// </summary>
-    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
+    public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
     {
-        var live = FindLive(Profiles(), ct);
+        var live = await FindLiveAsync(Profiles(), ct).ConfigureAwait(false);
 
-        return Task.FromResult<IReadOnlyList<ToolRoot>>(
+        return
         [
             .. live.Live.Select(held => new ToolRoot(
                 held.Directory,
@@ -168,7 +168,7 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
             .. Profiles()
                 .Where(profile => !live.IsLive(profile.Path) && !IsAnswered(live, profile))
                 .Select(profile => new ToolRoot(profile.Path, LiveTreeVeto.UncheckedReason, static _ => false)),
-        ]);
+        ];
     }
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
@@ -221,7 +221,7 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
             };
         }
 
-        var live = FindLive(profiles, ct);
+        var live = await FindLiveAsync(profiles, ct).ConfigureAwait(false);
         var stillUnused = new LiveChildrenCheck(_liveTrees);
         var targets = new List<DeletionTarget>();
         var withheld = 0;
@@ -260,7 +260,7 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
                 IsLeftover: true,
                 Group: profile.Group,
 
-                // Asked of the profile's folder, as FindLive asked it, because a browser a test starts
+                // Asked of the profile's folder, as FindLiveAsync asked it, because a browser a test starts
                 // while the preview is on screen names its profile only on its command line.
                 UseCheck: stillUnused));
         }
@@ -426,14 +426,14 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
     /// running from or working in one. Asked of the folders rather than the profiles, because the
     /// process table already holds the answer whatever the folder holds.
     /// </summary>
-    private LiveTreeFindings FindLive(IReadOnlyList<Profile> profiles, CancellationToken ct)
+    private async Task<LiveTreeFindings> FindLiveAsync(IReadOnlyList<Profile> profiles, CancellationToken ct)
     {
         if (profiles.Count == 0)
         {
             return LiveTreeFindings.Nothing;
         }
 
-        var children = _liveTrees.FindLiveChildren([.. Scans.Select(s => s.Folder)], ct);
+        var children = await _liveTrees.FindLiveChildrenAsync([.. Scans.Select(s => s.Folder)], ct).ConfigureAwait(false);
         var named = profiles.Select(p => p.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         return children with { Live = [.. children.Live.Where(l => named.Contains(l.Directory))] };

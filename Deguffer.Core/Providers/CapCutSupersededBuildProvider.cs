@@ -105,14 +105,14 @@ public sealed class CapCutSupersededBuildProvider : CleanupProviderBase
         ToolRootScope.Under(CapCutLayout.Editions.Select(edition => CapCutLayout.AppsIn(Environment, edition)));
 
     /// <summary>The superseded builds of an editor that is running, each as a root recognising no child.</summary>
-    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
+    public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
     {
         var withBuilds = Installations.Where(i => i.Superseded.Count > 0).ToList();
-        var live = Veto(withBuilds, ct);
+        var live = await VetoAsync(withBuilds, ct).ConfigureAwait(false);
         var running = new HashSet<string>(live.Vetoed.Select(v => v.Directory), StringComparer.OrdinalIgnoreCase);
         var unsure = new HashSet<string>(live.Unchecked, StringComparer.OrdinalIgnoreCase);
 
-        return Task.FromResult<IReadOnlyList<ToolRoot>>(
+        return
         [
             .. from installation in withBuilds
                where running.Contains(installation.Apps) || unsure.Contains(installation.Apps)
@@ -120,7 +120,7 @@ public sealed class CapCutSupersededBuildProvider : CleanupProviderBase
                from build in installation.Superseded
                where !build.IsLink
                select new ToolRoot(build.Path, reason, static _ => false),
-        ]);
+        ];
     }
 
     public override void InvalidateCaches()
@@ -157,7 +157,7 @@ public sealed class CapCutSupersededBuildProvider : CleanupProviderBase
         }
 
         var withBuilds = installations.Where(i => i.Superseded.Count > 0).ToList();
-        var live = Veto(withBuilds, ct);
+        var live = await VetoAsync(withBuilds, ct).ConfigureAwait(false);
         var held = new HashSet<string>(live.Held, StringComparer.OrdinalIgnoreCase);
         var stillUnused = live.Cleared.ToDictionary(c => c.Path, c => c.StillUnused, StringComparer.OrdinalIgnoreCase);
 
@@ -236,8 +236,8 @@ public sealed class CapCutSupersededBuildProvider : CleanupProviderBase
     /// One query per installation at its <c>Apps</c> folder: whatever is running, it runs from the build
     /// that superseded these, so asking about a superseded folder would answer no every time.
     /// </summary>
-    private LiveTreeVetoResult Veto(IReadOnlyList<CapCutBuilds> installations, CancellationToken ct) =>
-        LiveTreeVeto.Apply(
+    private Task<LiveTreeVetoResult> VetoAsync(IReadOnlyList<CapCutBuilds> installations, CancellationToken ct) =>
+        LiveTreeVeto.ApplyAsync(
             _liveTrees,
             [.. installations.Select(i => new RecognisedBuildDirectory(i.Apps, i.Apps))],
             lockFiles: [],

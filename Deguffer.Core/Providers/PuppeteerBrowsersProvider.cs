@@ -183,14 +183,14 @@ public sealed class PuppeteerBrowsersProvider : CleanupProviderBase
 
         var survey = PuppeteerCacheSurvey.Of(root, ct);
 
-        var live = LiveTreeVeto.Apply(
+        var live = await LiveTreeVeto.ApplyAsync(
             _liveTrees,
 
             // The build is its own project: a browser runs from inside its build, and a program
             // working in one browser folder is using none of the builds beside it.
             [.. survey.Builds.Select(build => new RecognisedBuildDirectory(build.Path, build.Path))],
             lockFiles: [],
-            ct);
+            ct).ConfigureAwait(false);
 
         var builds = survey.Builds.ToDictionary(build => build.Path, StringComparer.OrdinalIgnoreCase);
         var notes = new List<PlanNote>(survey.Notes);

@@ -13,7 +13,9 @@ namespace Deguffer.Core.Providers;
 /// <param name="globalFolder">The global folder whose cache the step removes.</param>
 internal sealed class YarnBerryCacheCheck(string globalFolder) : IUseCheck
 {
-    public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
+    public Task<IReadOnlyList<InUseNow>> AskAsync(DeleteStep step, CancellationToken ct) => Task.FromResult(Ask(step, ct));
+
+    private IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
     {
         var now = YarnBerryFolder.Read(globalFolder);
 

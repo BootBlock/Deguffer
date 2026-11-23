@@ -130,7 +130,7 @@ public static class TempMarkerSurvey
     /// Lists one place's entries, on the terms of <see cref="TempFolderListings.Read"/>: a pass's shared
     /// listing for a plan, or a fresh one where the answer must not be the pass's.
     /// </param>
-    public static TempMarkerFindings Examine(
+    public static Task<TempMarkerFindings> ExamineAsync(
         IReadOnlyList<TempMarkerPlace> places,
         Func<string, IReadOnlyList<TempFolderEntry>?> list,
         IProcessInspector inspector,
@@ -150,7 +150,7 @@ public static class TempMarkerSurvey
             survey.Visit(place, ct);
         }
 
-        return survey.Finish(liveTrees, ct);
+        return survey.FinishAsync(liveTrees, ct);
     }
 
     /// <summary>One examination's running state, kept together because every visit adds to all of it.</summary>
@@ -236,7 +236,7 @@ public static class TempMarkerSurvey
             }
         }
 
-        public TempMarkerFindings Finish(ILiveTreeInspector liveTrees, CancellationToken ct)
+        public async Task<TempMarkerFindings> FinishAsync(ILiveTreeInspector liveTrees, CancellationToken ct)
         {
             foreach (var (marker, count) in _heldByProcess)
             {
@@ -256,7 +256,7 @@ public static class TempMarkerSurvey
                 .Select(c => new RecognisedBuildDirectory(c.Path, c.Holder))
                 .ToList();
 
-            var live = LiveTreeVeto.Apply(liveTrees, directories, lockFiles: [], ct);
+            var live = await LiveTreeVeto.ApplyAsync(liveTrees, directories, lockFiles: [], ct).ConfigureAwait(false);
             var stillUnused = live.Cleared
                 .DistinctBy(c => c.Path, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(c => c.Path, c => c.StillUnused, StringComparer.OrdinalIgnoreCase);
@@ -358,7 +358,7 @@ public static class TempMarkerSurvey
         }
 
         /// <summary>
-        /// The rules <see cref="Consider"/> and <see cref="Finish"/> offered <paramref name="path"/>
+        /// The rules <see cref="Consider"/> and <see cref="FinishAsync"/> offered <paramref name="path"/>
         /// under, in their order, for the clean to ask again. Null for an entry offered on none of them.
         ///
         /// <para>A directory carries the question the veto handed out with it, which holds it back where

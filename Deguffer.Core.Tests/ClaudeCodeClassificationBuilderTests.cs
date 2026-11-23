@@ -27,6 +27,6 @@ public sealed class ClaudeCodeClassificationBuilderTests
     {
         public static readonly NeverChecked Instance = new();
 
-        public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct) => [];
+        public Task<IReadOnlyList<InUseNow>> AskAsync(DeleteStep step, CancellationToken ct) => Task.FromResult<IReadOnlyList<InUseNow>>([]);
     }
 }

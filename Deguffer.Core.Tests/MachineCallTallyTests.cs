@@ -83,7 +83,7 @@ public sealed class MachineCallTallyTests
 
         using (tally.CountIn())
         {
-            await Planner(new FakeCleanupProvider("row") { WhilePlanning = () => inspector.FindLive([]) })
+            await Planner(new FakeCleanupProvider("row") { AwaitWhilePlanning = ct => inspector.FindLiveAsync([], ct) })
                 .PlanAllAsync()
                 .WaitAsync(Deadline);
         }
@@ -109,7 +109,7 @@ public sealed class MachineCallTallyTests
 
         using (tally.CountIn())
         {
-            await Planner(new FakeCleanupProvider("row") { WhilePlanning = () => inspector.FindLive(queries) })
+            await Planner(new FakeCleanupProvider("row") { AwaitWhilePlanning = ct => inspector.FindLiveAsync(queries, ct) })
                 .PlanAllAsync()
                 .WaitAsync(Deadline);
         }

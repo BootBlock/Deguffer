@@ -114,7 +114,9 @@ internal sealed class ClaudeCodeSessionCheck : IUseCheck
                 ? null
                 : "a Claude Code session that is running now may have made it");
 
-    public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
+    public Task<IReadOnlyList<InUseNow>> AskAsync(DeleteStep step, CancellationToken ct) => Task.FromResult(Ask(step, ct));
+
+    private IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
     {
         var list = _sessions.ReadNoOlderThan(IUseCheck.ReadingLimit, ct);
 

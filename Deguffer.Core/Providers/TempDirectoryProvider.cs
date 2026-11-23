@@ -30,7 +30,7 @@ namespace Deguffer.Core.Providers;
 /// <item><b>Exclusion of what a running program is using.</b> An entry a process is running from or
 /// working in is never a target, however old its files are: the process holding it may have opened
 /// nothing this minute, so nothing is locked and the timestamps prove nothing.
-/// <see cref="ILiveTreeInspector.FindLiveChildren"/> answers that in one pass over the process
+/// <see cref="ILiveTreeInspector.FindLiveChildrenAsync"/> answers that in one pass over the process
 /// table, and each entry it names is asserted to have survived (§5.6). The clean asks again
 /// immediately before it empties each folder, and spares an entry a program has taken up since the
 /// preview in the same way. See <see cref="LiveChildrenCheck"/>.</item>
@@ -258,7 +258,7 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
     /// names as protected.</para>
     ///
     /// <para>One pass over the process table however large the folder, which is what
-    /// <see cref="ILiveTreeInspector.FindLiveChildren"/> exists for: the measured machine held
+    /// <see cref="ILiveTreeInspector.FindLiveChildrenAsync"/> exists for: the measured machine held
     /// 18,056 immediate entries, and naming them to ask about each would be a walk per entry.</para>
     ///
     /// <para><b>A folder Windows would not describe is refused whole</b>, because nothing could ask
@@ -266,13 +266,13 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
     /// narrows what Explore allows. A folder whose question could not be asked in full is refused
     /// whole for the same reason, as the plan withholds it.</para>
     /// </summary>
-    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
+    public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
     {
         var folders = ReachedDirectories.Of(DeclaredPaths());
-        var live = _liveTrees.FindLiveChildren(folders.Present, ct);
+        var live = await _liveTrees.FindLiveChildrenAsync(folders.Present, ct).ConfigureAwait(false);
         var work = folders.Present.ToDictionary(folder => folder, TemporaryUserWork.In, StringComparer.OrdinalIgnoreCase);
 
-        return Task.FromResult<IReadOnlyList<ToolRoot>>(
+        return
         [
             .. folders.Refused.Select(refused => new ToolRoot(
                 refused,
@@ -302,7 +302,7 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
                 + ". A temporary folder holds live working files among abandoned ones, and Deguffer "
                 + "leaves anything in use alone however old it looks.",
                 static _ => false)),
-        ]);
+        ];
     }
 
     /// <summary>
@@ -344,8 +344,9 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
         }
 
         IReadOnlyList<string> folders = [.. scan.Targets.Select(t => t.Path)];
-        var live = _liveTrees.FindLiveChildren(folders, ct);
+        var liveNow = _liveTrees.FindLiveChildrenAsync(folders, ct);
         var owned = await TenantClaims.ReadAsync(_tenants, folders, ct).ConfigureAwait(false);
+        var live = await liveNow.ConfigureAwait(false);
         var work = folders.ToDictionary(folder => folder, TemporaryUserWork.In, StringComparer.OrdinalIgnoreCase);
         // The live entries above are the preview's. Each folder carries the same question to the
         // clean, which spares whatever a program has taken up since, and keeps any unsaved work begun
@@ -360,7 +361,7 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
             effective,
             ct).ConfigureAwait(false);
 
-        if (OwnedElsewhereNote(owned) is { } elsewhere)
+        if (owned.Note() is { } elsewhere)
         {
             notes.Add(elsewhere);
         }
@@ -511,23 +512,6 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
 
         return (bounded, spared);
     }
-
-    /// <summary>
-    /// The sentence saying what this row leaves to others, or null where it leaves nothing.
-    ///
-    /// <para>Information rather than a warning, because nothing is lost: each entry is offered on a
-    /// row of its own. It is said at all because the figure on this row is smaller than the folder,
-    /// and a reader comparing the two would otherwise have no way to find out why.</para>
-    /// </summary>
-    private static PlanNote? OwnedElsewhereNote(TenantClaims owned) => owned.Paths.Count == 0
-        ? null
-        : new PlanNote(
-            PlanNoteSeverity.Information,
-            Counted.Form(owned.Paths.Count,
-                "One entry in these folders is offered on the row of the tool that wrote it",
-                $"{owned.Paths.Count:N0} entries in these folders are offered on the rows of the tools that wrote them")
-            + $", so this row leaves {Counted.Form(owned.Paths.Count, "it", "them")} out: "
-            + $"{string.Join(", ", owned.Rows)}.");
 
     private IEnumerable<string> DeclaredPaths() => Roots.Folders;
 }

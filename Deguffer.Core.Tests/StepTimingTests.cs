@@ -290,10 +290,10 @@ public sealed class StepTimingTests : IDisposable
     /// <summary>A use check that takes <paramref name="takes"/> on the clock, and finds the step's own path in use where told to.</summary>
     private sealed class AdvancingUseCheck(ManualTimeProvider clock, TimeSpan takes, string? inUse = null) : IUseCheck
     {
-        public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
+        public Task<IReadOnlyList<InUseNow>> AskAsync(DeleteStep step, CancellationToken ct)
         {
             clock.Advance(takes);
-            return inUse is null ? [] : [new InUseNow(step.Path, inUse)];
+            return Task.FromResult<IReadOnlyList<InUseNow>>(inUse is null ? [] : [new InUseNow(step.Path, inUse)]);
         }
     }
 

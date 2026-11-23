@@ -38,7 +38,7 @@ internal static class SourcesRoute
         var environment = UserEnvironment.Current;
         var discovery = new SourceDirectoryDiscovery(ParallelEnumerationScanner.Default);
 
-        CleanupPlanner.SourceTreeProviders(
+        SourceTreeRows.Create(
             new SourceRootStore(environment),
             discovery,
             LiveTreeInspector.Default,

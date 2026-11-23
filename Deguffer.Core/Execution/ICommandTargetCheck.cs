@@ -31,5 +31,5 @@ public interface ICommandTargetCheck
     /// the run's look on the disk, and again immediately before the command, because the look can
     /// take minutes.
     /// </summary>
-    string? WhyNot(RunCommandStep step, CancellationToken ct);
+    Task<string?> WhyNotAsync(RunCommandStep step, CancellationToken ct);
 }

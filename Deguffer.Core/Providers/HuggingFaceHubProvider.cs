@@ -264,8 +264,9 @@ public sealed class HuggingFaceHubProvider : CleanupProviderBase
         };
 
         var candidates = Locate(hub, repositories, notes);
-        var use = HuggingFaceRepositoryUse.Partition(
-            _liveTrees, candidates.ToDictionary(item => item.Folder, item => item.Repository.Id, StringComparer.OrdinalIgnoreCase), ct);
+        var use = await HuggingFaceRepositoryUse.PartitionAsync(
+            _liveTrees, candidates.ToDictionary(item => item.Folder, item => item.Repository.Id, StringComparer.OrdinalIgnoreCase), ct)
+            .ConfigureAwait(false);
         var unused = candidates.Where(item => use.Unused.Contains(item.Folder)).ToList();
         notes.AddRange(use.Notes);
 

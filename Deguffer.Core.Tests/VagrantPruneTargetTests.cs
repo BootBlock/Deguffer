@@ -47,15 +47,15 @@ public sealed class VagrantPruneTargetTests : IDisposable
         return Assert.Single(plan.Steps.OfType<RunCommandStep>());
     }
 
-    private static string? WhyNot(RunCommandStep step) =>
-        Assert.IsType<VagrantPruneTarget>(step.TargetCheck).WhyNot(step, CancellationToken.None);
+    private static Task<string?> WhyNotAsync(RunCommandStep step) =>
+        Assert.IsType<VagrantPruneTarget>(step.TargetCheck).WhyNotAsync(step, CancellationToken.None);
 
     [Fact]
     public async Task RunsWhileTheBoxesAndMachinesAreAsThePlanSawThem()
     {
         var step = await PlannedPrune();
 
-        Assert.Null(WhyNot(step));
+        Assert.Null(await WhyNotAsync(step));
     }
 
     /// <summary>
@@ -69,7 +69,7 @@ public sealed class VagrantPruneTargetTests : IDisposable
 
         Install(Home, "hashicorp-VAGRANTSLASH-bionic64", "1.0.300", "virtualbox");
 
-        Assert.Contains("have changed since the preview", WhyNot(step), StringComparison.Ordinal);
+        Assert.Contains("have changed since the preview", await WhyNotAsync(step), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -91,7 +91,7 @@ public sealed class VagrantPruneTargetTests : IDisposable
         var plan = await new VagrantSupersededBoxProvider(_environment, runner, FakeProcessInspector.NothingRunning, system: _system)
             .PlanAsync();
 
-        Assert.Contains("have changed since the preview", WhyNot(Assert.Single(plan.Steps.OfType<RunCommandStep>())), StringComparison.Ordinal);
+        Assert.Contains("have changed since the preview", await WhyNotAsync(Assert.Single(plan.Steps.OfType<RunCommandStep>())), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -105,7 +105,7 @@ public sealed class VagrantPruneTargetTests : IDisposable
 
         Install(Home, "hashicorp-VAGRANTSLASH-bionic64", "1.0.0", "virtualbox", architecture: "arm64");
 
-        Assert.Contains("have changed since the preview", WhyNot(step), StringComparison.Ordinal);
+        Assert.Contains("have changed since the preview", await WhyNotAsync(step), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -122,7 +122,7 @@ public sealed class VagrantPruneTargetTests : IDisposable
             ("default", "hashicorp/bionic64", "virtualbox", "1.0.282"),
             ("pinned", "hashicorp/bionic64", "virtualbox", "1.0.0"));
 
-        var why = WhyNot(step);
+        var why = await WhyNotAsync(step);
 
         Assert.NotNull(why);
         Assert.Contains("'pinned'", why, StringComparison.Ordinal);
@@ -138,7 +138,7 @@ public sealed class VagrantPruneTargetTests : IDisposable
 
         File.WriteAllText(IndexPath, content);
 
-        Assert.Contains(IndexPath, WhyNot(step), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(IndexPath, await WhyNotAsync(step), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -149,7 +149,7 @@ public sealed class VagrantPruneTargetTests : IDisposable
         using var denied = DeniedDirectory.WithUnreadableFile(IndexPath);
         Assert.Equal(PathPresence.Refused, LongPath.ProbeFile(IndexPath));
 
-        Assert.Contains("Windows would not say", WhyNot(step), StringComparison.Ordinal);
+        Assert.Contains("Windows would not say", await WhyNotAsync(step), StringComparison.Ordinal);
     }
 
     /// <summary>A folder that will not be listed at the clean could hold a newer version.</summary>
@@ -161,7 +161,7 @@ public sealed class VagrantPruneTargetTests : IDisposable
 
         using var denied = new DeniedDirectory(version);
 
-        Assert.Contains("could not read every box folder", WhyNot(step), StringComparison.Ordinal);
+        Assert.Contains("could not read every box folder", await WhyNotAsync(step), StringComparison.Ordinal);
     }
 
     /// <summary>
