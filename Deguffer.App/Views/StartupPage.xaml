@@ -25,11 +25,11 @@
                     <ColumnDefinition Width="Auto" MinWidth="96" />
                 </Grid.ColumnDefinitions>
 
-                <Grid ColumnSpacing="12" RowSpacing="2" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                <Grid ColumnSpacing="12" RowSpacing="{StaticResource LabelGap}" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
                     <TextBlock Text="{x:Bind Title, Mode=OneWay}" Style="{StaticResource BodyStrongTextBlockStyle}"
                                TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
 
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="{StaticResource ControlGap}" VerticalAlignment="Center">
                         <FontIcon Glyph="&#xEA18;" FontSize="{StaticResource GlyphSizeBody}" VerticalAlignment="Center"
                                   Foreground="{ThemeResource SystemFillColorCautionBrush}"
                                   Visibility="{x:Bind HasShield, Mode=OneWay}"
@@ -91,7 +91,7 @@
         </Style>
     </Page.Resources>
 
-    <Grid Padding="20,12,20,16" RowSpacing="10" RowDefinitions="Auto,Auto,Auto,Auto,*">
+    <Grid Padding="20,12,20,16" RowSpacing="{StaticResource RegionGap}" RowDefinitions="Auto,Auto,Auto,Auto,*">
 
         <Grid Grid.Row="0" ColumnSpacing="12" ColumnDefinitions="*,Auto,Auto,Auto,Auto">
             <StackPanel Spacing="4">
@@ -121,7 +121,7 @@
 
         <!-- A change's report, and its §5.6 checks on the surface the other pages use: what was
              written, the entry, and each value beside it, by name and where it is. -->
-        <StackPanel Grid.Row="2" Spacing="6">
+        <StackPanel Grid.Row="2" Spacing="{StaticResource ControlGap}">
             <InfoBar IsOpen="{x:Bind ViewModel.HasReport, Mode=OneWay}"
                      Severity="{x:Bind ViewModel.ReportSeverity, Mode=OneWay}"
                      Message="{x:Bind ViewModel.Report, Mode=OneWay}"

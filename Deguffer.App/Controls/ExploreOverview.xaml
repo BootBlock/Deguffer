@@ -19,7 +19,7 @@
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1"
                 CornerRadius="4"
-                Padding="3">
+                Padding="4">
             <Grid>
                 <!-- The picture and the rectangle are composition visuals hosted here, so the
                      rectangle follows the camera on the compositor. A picture, so raw to a screen
@@ -36,8 +36,7 @@
                 <Button x:Name="HideButton"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Top"
-                        Margin="2"
-                        Padding="3"
+                        Padding="4"
                         MinWidth="0"
                         MinHeight="0"
                         Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
@@ -51,7 +50,7 @@
 
         <Button x:Name="ShowButton"
                 Visibility="Collapsed"
-                Padding="6"
+                Padding="8"
                 Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 Click="OnShowClicked"

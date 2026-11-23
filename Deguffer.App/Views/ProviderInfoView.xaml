@@ -13,11 +13,11 @@
         <DataTemplate x:Key="PlanStep" x:DataType="vm:StepViewModel">
             <!-- Size and age stack in one fixed-width column, so a step with no age costs the
                  description no width for a cell it never fills. -->
-            <Grid ColumnSpacing="10"
-                  Margin="0,2"
+            <Grid ColumnSpacing="{StaticResource ControlGap}"
+                  Margin="0,0,0,4"
                   ColumnDefinitions="*,80">
 
-                <StackPanel Grid.Column="0" Spacing="2">
+                <StackPanel Grid.Column="0" Spacing="{StaticResource LabelGap}">
                     <TextBlock Text="{x:Bind Description}"
                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                TextWrapping="Wrap"
@@ -56,9 +56,9 @@
 
         <PivotItem Header="What is this?">
             <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,4,16,0">
-                <StackPanel Spacing="18">
+                <StackPanel Spacing="{StaticResource RegionGap}">
 
-                    <StackPanel Spacing="2">
+                    <StackPanel Spacing="{StaticResource LabelGap}">
                         <TextBlock Text="Application" Style="{StaticResource FieldLabel}" />
                         <TextBlock Text="{x:Bind Finding.Description.Application}"
                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
@@ -68,7 +68,7 @@
 
                     <!-- Provenance, stated rather than implied. Somebody deciding whether to let a
                          cleaner near a directory is entitled to know whose directory it is. -->
-                    <StackPanel Spacing="2">
+                    <StackPanel Spacing="{StaticResource LabelGap}">
                         <TextBlock Text="Published by" Style="{StaticResource FieldLabel}" />
                         <TextBlock Text="{x:Bind Finding.Description.Publisher}"
                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
@@ -76,7 +76,7 @@
                                    TextWrapping="Wrap" />
                     </StackPanel>
 
-                    <StackPanel Spacing="2">
+                    <StackPanel Spacing="{StaticResource LabelGap}">
                         <TextBlock Text="What it is for" Style="{StaticResource FieldLabel}" />
                         <TextBlock Text="{x:Bind Finding.Description.Purpose}"
                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
@@ -87,7 +87,7 @@
                     <!-- Where the rules come from, beside whose files these are: how Deguffer
                          knows what it says above. Shown for both bases, because "checked against
                          a real installation" is information too. -->
-                    <StackPanel Spacing="2">
+                    <StackPanel Spacing="{StaticResource LabelGap}">
                         <TextBlock Text="How Deguffer knows this" Style="{StaticResource FieldLabel}" />
                         <TextBlock Text="{x:Bind Finding.BasisExplanation}"
                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
@@ -103,7 +103,7 @@
                         <!-- The verdict is §3's, so it arrives with the tier that produced it.
                              Tier is text on a tinted chip, never colour alone: the classification
                              must survive a flat background and a high-contrast theme (§6.5). -->
-                        <StackPanel Orientation="Horizontal" Spacing="10">
+                        <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
                             <ContentControl Content="{x:Bind Finding.TierLabel}"
                                             Style="{x:Bind Finding.Tier, Converter={StaticResource TierChipStyle}}"
                                             ToolTipService.ToolTip="{x:Bind Finding.TierExplanation}"
@@ -127,7 +127,7 @@
                     <!-- §7's own sentence, repeated here rather than moved here. It stays on the
                          row, because §7 requires it to be reachable from the row by whatever the
                          reader is using, and a dialog is not that. -->
-                    <StackPanel Spacing="2">
+                    <StackPanel Spacing="{StaticResource LabelGap}">
                         <TextBlock Text="What it costs you" Style="{StaticResource FieldLabel}" />
                         <TextBlock Text="{x:Bind Finding.WhatHappensOnNextUse}"
                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
@@ -140,7 +140,7 @@
 
         <PivotItem x:Name="ContentsSection" Header="Contents">
             <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,4,16,0">
-                <StackPanel Spacing="10">
+                <StackPanel Spacing="{StaticResource ControlGap}">
                     <TextBlock Text="{x:Bind Finding.Text.DetailHeader, Mode=OneWay}"
                                Style="{StaticResource FieldLabel}" />
 
@@ -187,7 +187,7 @@
              tab is offered, and a cause that grew is ticked or not exactly as it would be without it. -->
         <PivotItem x:Name="HistorySection" Header="Size history">
             <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,4,16,0">
-                <StackPanel Spacing="10">
+                <StackPanel Spacing="{StaticResource ControlGap}">
                     <TextBlock Text="Its size at each scan" Style="{StaticResource FieldLabel}" />
 
                     <TextBlock Visibility="{x:Bind HasNoHistory}"
@@ -205,17 +205,19 @@
                                           AutomationProperties.Name="Size at each kept scan">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>
-                                        <StackPanel Orientation="Horizontal" Spacing="2" />
+                                        <StackPanel Orientation="Horizontal" />
                                     </ItemsPanelTemplate>
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="vm:ProviderSizeRow">
-                                        <!-- Transparent and full height, so the tooltip is reached
-                                             over the whole column rather than only over the bar. -->
-                                        <Grid Width="10" Height="48" Background="Transparent"
+                                        <!-- Transparent across the whole column, the gap beside the
+                                             bar included, so the tooltip is reached anywhere over it
+                                             rather than only over the bar. The bar stands a hairline in
+                                             from each side, which draws the gap between bars. -->
+                                        <Grid Width="12" Height="48" Background="Transparent"
                                               ToolTipService.ToolTip="{x:Bind Description}"
                                               AutomationProperties.Name="{x:Bind Description}">
-                                            <controls:ColumnBar Value="{x:Bind Share}" />
+                                            <controls:ColumnBar Value="{x:Bind Share}" Margin="1,0" />
                                         </Grid>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
@@ -231,7 +233,7 @@
                                       AutomationProperties.Name="Size at each kept scan, newest first">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:ProviderSizeRow">
-                                    <Grid ColumnSpacing="16" Margin="0,2" ColumnDefinitions="*,Auto,150"
+                                    <Grid ColumnSpacing="16" Margin="0,0,0,4" ColumnDefinitions="*,Auto,150"
                                           AutomationProperties.Name="{x:Bind Description}">
                                         <TextBlock Text="{x:Bind When}"
                                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}" />

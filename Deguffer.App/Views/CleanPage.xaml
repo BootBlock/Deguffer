@@ -44,7 +44,7 @@
             minimum width is set so that even that trim is shallow.
         -->
         <DataTemplate x:Key="CompactFindingRow" x:DataType="vm:FindingViewModel">
-            <Grid ColumnSpacing="10" ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto" Padding="16,8,0,8">
+            <Grid ColumnSpacing="{StaticResource ControlGap}" ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto" Padding="16,8,0,8">
 
                 <!-- §7's sentence, announced where the decision is made. A tooltip cannot serve a
                      screen reader or a keyboard, and this is the control both of them land on to
@@ -76,7 +76,7 @@
                 <HyperlinkButton Grid.Column="2"
                                  Content="{x:Bind Text.ItemsLinkLabel, Mode=OneWay}"
                                  Visibility="{x:Bind OffersItems, Mode=OneWay}"
-                                 Padding="4,2"
+                                 Padding="{StaticResource LinkPadding}"
                                  VerticalAlignment="Center"
                                  Tag="{x:Bind}"
                                  Click="OnItemsLinkClicked"
@@ -104,7 +104,7 @@
                      straight column against the figures. -->
                 <StackPanel Grid.Column="4"
                             Orientation="Horizontal"
-                            Spacing="6"
+                            Spacing="{StaticResource ControlGap}"
                             HorizontalAlignment="Right">
                     <ContentControl Content="{x:Bind BasisLabel}"
                                     Visibility="{x:Bind IsResearched}"
@@ -141,18 +141,18 @@
         <DataTemplate x:Key="StandardFinding" x:DataType="vm:FindingViewModel">
             <Grid RowDefinitions="Auto,Auto">
 
-                <Grid Grid.Row="0" ColumnSpacing="14" Padding="16,14" ColumnDefinitions="Auto,*,Auto">
+                <Grid Grid.Row="0" ColumnSpacing="12" Padding="{StaticResource CardRowPadding}" ColumnDefinitions="Auto,*,Auto">
 
                     <CheckBox Grid.Column="0"
                               VerticalAlignment="Top"
                               MinWidth="0"
-                              Margin="0,2,0,0"
+                              Margin="{StaticResource FirstLineOffset}"
                               IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
                               IsEnabled="{x:Bind CanBeSelected, Mode=OneWay}"
                               AutomationProperties.Name="{x:Bind Name}"
                               AutomationProperties.AutomationId="{x:Bind AutomationIds.Toggle}" />
 
-                    <StackPanel Grid.Column="1" Spacing="6">
+                    <StackPanel Grid.Column="1" Spacing="{StaticResource ControlGap}">
 
                         <!-- The longest name, the widest chip and the links together want more than
                              this line has at the window's minimum width, so the slack column is
@@ -165,7 +165,7 @@
                              them gives up anything, after the tier is already legible. The label
                              in full stays on the chip's automation name, and the sentence saying
                              what the tier means stays on its tooltip and help text. -->
-                        <Grid ColumnSpacing="10" ColumnDefinitions="Auto,Auto,*,Auto">
+                        <Grid ColumnSpacing="{StaticResource ControlGap}" ColumnDefinitions="Auto,Auto,*,Auto">
                             <TextBlock Text="{x:Bind Name}"
                                        Style="{StaticResource BodyStrongTextBlockStyle}"
                                        TextWrapping="NoWrap"
@@ -178,7 +178,7 @@
                                              Content="{x:Bind Text.ItemsLinkLabel, Mode=OneWay}"
                                              Visibility="{x:Bind OffersItems, Mode=OneWay}"
                                              VerticalAlignment="Center"
-                                             Padding="0,2"
+                                             Padding="{StaticResource InlineLinkPadding}"
                                              Tag="{x:Bind}"
                                              Click="OnItemsLinkClicked"
                                              AutomationProperties.Name="{x:Bind Text.ItemsLinkName}"
@@ -199,7 +199,7 @@
                                  and in the star column, so it is what gives up letters first. -->
                             <Grid Grid.Column="2"
                                   HorizontalAlignment="Right"
-                                  ColumnSpacing="6"
+                                  ColumnSpacing="{StaticResource ControlGap}"
                                   ColumnDefinitions="*,Auto">
                                 <ContentControl Content="{x:Bind BasisLabel}"
                                                 Visibility="{x:Bind IsResearched}"
@@ -228,7 +228,7 @@
                             <HyperlinkButton Grid.Column="3"
                                              Content="What is this?"
                                              VerticalAlignment="Center"
-                                             Padding="0,2"
+                                             Padding="{StaticResource InlineLinkPadding}"
                                              Tag="{x:Bind}"
                                              Click="OnWhatIsThisClicked"
                                              AutomationProperties.Name="{x:Bind Text.InformationLinkName}"
@@ -239,7 +239,7 @@
                                    Style="{StaticResource SecondaryText}" />
                     </StackPanel>
 
-                    <StackPanel Grid.Column="2" Spacing="3" MinWidth="104" VerticalAlignment="Top">
+                    <StackPanel Grid.Column="2" Spacing="{StaticResource LabelGap}" MinWidth="104" VerticalAlignment="Top">
                         <TextBlock Text="{x:Bind SizeLabel, Mode=OneWay}"
                                    Style="{StaticResource Figure}"
                                    HorizontalAlignment="Right" />
@@ -257,7 +257,7 @@
                                    HorizontalAlignment="Right" />
                         <controls:FillBar Style="{StaticResource ShareBar}"
                                           Value="{x:Bind SharePercent, Mode=OneWay}"
-                                          Margin="0,5,0,0" />
+                                          Margin="0,4,0,0" />
                     </StackPanel>
                 </Grid>
 
@@ -283,7 +283,7 @@
                           HorizontalContentAlignment="Stretch"
                           Background="Transparent"
                           BorderThickness="0"
-                          Padding="0,0,0,6">
+                          Padding="0,0,0,8">
                     <Expander.Header>
                         <ContentPresenter Content="{x:Bind}"
                                           ContentTemplate="{StaticResource CompactFindingRow}" />
@@ -291,7 +291,7 @@
 
                     <!-- Indented to the name above it rather than to the card edge, so the
                          disclosure reads as belonging to its row and not to the list. -->
-                    <StackPanel Spacing="2" Margin="72,0,16,0">
+                    <StackPanel Spacing="{StaticResource LabelGap}" Margin="72,0,16,0">
                         <TextBlock Text="{x:Bind WhatHappensOnNextUse}"
                                    Style="{StaticResource SecondaryText}" />
 
@@ -306,7 +306,7 @@
                              exists to trade prose off the line so the whole list is on screen at
                              once, and a link on every line is prose. -->
                         <HyperlinkButton Content="What is this?"
-                                         Padding="0,2"
+                                         Padding="{StaticResource InlineLinkPadding}"
                                          Tag="{x:Bind}"
                                          Click="OnWhatIsThisClicked"
                                          AutomationProperties.Name="{x:Bind Text.InformationLinkName}"
@@ -369,22 +369,23 @@
             <Border Style="{StaticResource CardStyle}">
                 <Grid ColumnSpacing="28" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
 
-                    <StackPanel Grid.Row="0" Grid.Column="0" Spacing="10">
-                        <StackPanel Orientation="Horizontal" Spacing="10">
+                    <StackPanel Grid.Row="0" Grid.Column="0" Spacing="{StaticResource ControlGap}">
+                        <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
                             <TextBlock Text="{x:Bind ViewModel.FreeSpaceNowLabel, Mode=OneWay}"
                                        Style="{StaticResource HeroFigure}" />
                             <TextBlock Text="{x:Bind ViewModel.CapacityLabel}"
                                        Style="{StaticResource SecondaryText}"
                                        VerticalAlignment="Bottom"
-                                       Margin="0,0,0,7" />
+                                       Margin="{StaticResource HeroFigureBaselineOffset}" />
 
                             <!-- The space the clean under way has given back, counted up as each
                                  row's run finishes, beside the free space it is going into. Only
                                  while a clean runs: once it ends, the card states the same figure
                                  as what Deguffer removed. -->
                             <StackPanel Orientation="Horizontal"
-                                        Spacing="6"
-                                        Margin="18,0,0,7"
+                                        Spacing="{StaticResource ControlGap}"
+                                        Padding="16,0,0,0"
+                                        Margin="{StaticResource HeroFigureBaselineOffset}"
                                         VerticalAlignment="Bottom"
                                         Visibility="{x:Bind ViewModel.IsCleaning, Mode=OneWay}">
                                 <TextBlock Text="{x:Bind ViewModel.CleanProgress.RemovedSoFarLabel, Mode=OneWay}"
@@ -392,7 +393,7 @@
                                 <TextBlock Text="removed so far"
                                            Style="{StaticResource SecondaryText}"
                                            VerticalAlignment="Bottom"
-                                           Margin="0,0,0,2" />
+                                           Margin="{StaticResource FigureBaselineOffset}" />
                             </StackPanel>
                         </StackPanel>
 
@@ -431,13 +432,13 @@
                                 Background="{ThemeResource DividerStrokeColorDefaultBrush}"
                                 VerticalAlignment="Stretch" />
 
-                        <StackPanel Spacing="2" VerticalAlignment="Center">
+                        <StackPanel Spacing="{StaticResource LabelGap}" VerticalAlignment="Center">
                             <TextBlock Text="Removed by Deguffer" Style="{StaticResource FieldLabel}" />
                             <TextBlock Text="{x:Bind ViewModel.RemovedLabel, Mode=OneWay}"
                                        Style="{StaticResource Figure}" />
                         </StackPanel>
 
-                        <StackPanel Spacing="2" VerticalAlignment="Center">
+                        <StackPanel Spacing="{StaticResource LabelGap}" VerticalAlignment="Center">
                             <TextBlock Text="Free space change" Style="{StaticResource FieldLabel}" />
                             <TextBlock Text="{x:Bind ViewModel.FreeSpaceChangeLabel, Mode=OneWay}"
                                        Style="{StaticResource Figure}" />
@@ -445,7 +446,7 @@
 
                         <!-- A request rather than a result: the sync app releases these after the run,
                              so the free space change beside it may not include them yet. -->
-                        <StackPanel Spacing="2"
+                        <StackPanel Spacing="{StaticResource LabelGap}"
                                     VerticalAlignment="Center"
                                     Visibility="{x:Bind ViewModel.HasRequested, Mode=OneWay}"
                                     ToolTipService.ToolTip="Local copies of cloud files your sync app was asked to release. It does that in the background, so free space can keep growing after the clean.">
@@ -456,7 +457,7 @@
 
                         <!-- Nothing has gone yet: the program removes these the next time it starts,
                              so the free space change beside it does not include them. -->
-                        <StackPanel Spacing="2"
+                        <StackPanel Spacing="{StaticResource LabelGap}"
                                     VerticalAlignment="Center"
                                     Visibility="{x:Bind ViewModel.HasScheduled, Mode=OneWay}"
                                     ToolTipService.ToolTip="Marked for removal by the program that owns them. It removes them the next time it starts, so free space grows then rather than now.">
@@ -479,8 +480,8 @@
                                 Grid.Row="1"
                                 Grid.Column="0"
                                 Grid.ColumnSpan="2"
-                                Margin="0,14,0,0"
-                                Spacing="10"
+                                Margin="{StaticResource RegionGapAbove}"
+                                Spacing="{StaticResource ControlGap}"
                                 Visibility="{x:Bind ViewModel.HasRunResult, Mode=OneWay}">
 
                         <TextBlock Text="{x:Bind ViewModel.RunStatement, Mode=OneWay}"
@@ -519,8 +520,8 @@
                                 Grid.Row="2"
                                 Grid.Column="0"
                                 Grid.ColumnSpan="2"
-                                Margin="0,14,0,0"
-                                Spacing="10"
+                                Margin="{StaticResource RegionGapAbove}"
+                                Spacing="{StaticResource ControlGap}"
                                 Visibility="{x:Bind ViewModel.Retrim.IsShown, Mode=OneWay}">
 
                         <TextBlock Text="{x:Bind ViewModel.Retrim.OfferText, Mode=OneWay}"
@@ -533,7 +534,7 @@
                                 Visibility="{x:Bind ViewModel.Retrim.IsOffered, Mode=OneWay}" />
 
                         <StackPanel Orientation="Horizontal"
-                                    Spacing="10"
+                                    Spacing="{StaticResource ControlGap}"
                                     Visibility="{x:Bind ViewModel.Retrim.IsRetrimming, Mode=OneWay}">
                             <ProgressRing IsActive="{x:Bind ViewModel.Retrim.IsRetrimming, Mode=OneWay}"
                                           Width="16"
