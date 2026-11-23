@@ -16,7 +16,15 @@ public sealed class RemovalCheckCostTests
 {
     private const int DeclaredRoots = 400;
     private const int ProbedRoots = 100;
+
+    /// <summary>The checks in one read of the thread's allocation.</summary>
     private const int Calls = 2_000;
+
+    /// <summary>
+    /// The reads whose least is taken. Under a background collection started every few milliseconds,
+    /// one read differed for the two policies in one attempt of twenty, and five or more in none.
+    /// </summary>
+    private const int Reads = 8;
 
     /// <summary>A kibibyte, the budget the issue sets for one check.</summary>
     private const long Budget = 1024;
@@ -33,27 +41,21 @@ public sealed class RemovalCheckCostTests
 
         Assert.True(policy.MayRemove(Target).IsAllowed);
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
-
-        for (var call = 0; call < Calls; call++)
-        {
-            policy.MayRemove(Target);
-        }
-
-        var perCall = (GC.GetAllocatedBytesForCurrentThread() - before) / Calls;
+        var perCall = AllocatedByOneCall(policy);
 
         Assert.True(perCall < Budget, $"One check allocated {perCall} bytes, over the budget of {Budget}.");
     }
 
-    /// <summary>Allocation alone, which no other work on the machine can move.</summary>
+    /// <summary>
+    /// Allocation alone, which the load on the machine cannot slow or speed. Each policy is measured
+    /// as the least of several reads, because a background collection running during a read adds a
+    /// few kilobytes to the thread's count (#1047), and an exact comparison has no room for it.
+    /// </summary>
     [Fact]
     public void ACheckAllocatesTheSameForAThousandRootsAsForTen()
     {
         var few = PolicyOf(declared: 10, probed: 0);
         var many = PolicyOf(declared: 1_000, probed: 0);
-
-        few.MayRemove(Target);
-        many.MayRemove(Target);
 
         Assert.Equal(AllocatedByOneCall(few), AllocatedByOneCall(many));
     }
@@ -86,14 +88,15 @@ public sealed class RemovalCheckCostTests
 
     private static long AllocatedByOneCall(ExploreActionPolicy policy)
     {
-        var before = GC.GetAllocatedBytesForCurrentThread();
-
-        for (var call = 0; call < Calls; call++)
+        var read = () =>
         {
-            policy.MayRemove(Target);
-        }
+            for (var call = 0; call < Calls; call++)
+            {
+                policy.MayRemove(Target);
+            }
+        };
 
-        return (GC.GetAllocatedBytesForCurrentThread() - before) / Calls;
+        return ThreadAllocation.Least(read, Reads) / Calls;
     }
 
     private static ExploreActionPolicy PolicyOf(int declared, int probed) =>
