@@ -26,10 +26,11 @@
                 </Grid.ColumnDefinitions>
 
                 <Grid ColumnSpacing="12" RowSpacing="2" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
-                    <TextBlock Text="{x:Bind Name, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{x:Bind Name, Mode=OneWay}" Style="{StaticResource BodyStrongTextBlockStyle}"
+                               TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
 
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                        <FontIcon Glyph="&#xEA18;" FontSize="14" VerticalAlignment="Center"
+                        <FontIcon Glyph="&#xEA18;" FontSize="{StaticResource GlyphSizeBody}" VerticalAlignment="Center"
                                   Foreground="{ThemeResource SystemFillColorCautionBrush}"
                                   Visibility="{x:Bind HasShield, Mode=OneWay}"
                                   ToolTipService.ToolTip="{x:Bind Shield, Mode=OneWay}"
@@ -71,7 +72,7 @@
                 <!-- One figure across both lines. It is the installer's own estimate, which the
                      tooltip and the help text say. -->
                 <TextBlock Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right"
-                           Text="{x:Bind Size, Mode=OneWay}" Style="{StaticResource Figure}" FontSize="20"
+                           Text="{x:Bind Size, Mode=OneWay}" Style="{StaticResource RowFigure}"
                            Visibility="{x:Bind HasSize, Mode=OneWay}"
                            ToolTipService.ToolTip="The size the program's installer estimated for it, as Windows Settings shows it."
                            AutomationProperties.AccessibilityView="Raw" />

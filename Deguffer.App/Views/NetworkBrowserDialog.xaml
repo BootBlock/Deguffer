@@ -65,7 +65,7 @@
                     Command="{x:Bind Browser.RefreshCommand}"
                     ToolTipService.ToolTip="Refresh the whole tree"
                     AutomationProperties.Name="Refresh the whole tree">
-                <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                <FontIcon Glyph="&#xE72C;" FontSize="{StaticResource GlyphSizeBody}" />
             </Button>
         </Grid>
 
@@ -87,7 +87,7 @@
                                   HasUnrealizedChildren="{x:Bind HasUnrealizedChildren, Mode=OneWay}"
                                   AutomationProperties.Name="{x:Bind Spoken}">
                         <Grid ColumnSpacing="8" ColumnDefinitions="Auto,*,Auto,Auto" Padding="0,4">
-                            <FontIcon Glyph="{x:Bind Glyph}" FontSize="16" VerticalAlignment="Top" Margin="0,2,0,0" />
+                            <FontIcon Glyph="{x:Bind Glyph}" FontSize="{StaticResource GlyphSizeStandard}" VerticalAlignment="Top" Margin="0,2,0,0" />
 
                             <StackPanel Grid.Column="1" Spacing="2">
                                 <!-- Text from another computer, shown as text and nothing else. -->
@@ -122,7 +122,7 @@
                                         Click="OnRemoveComputer"
                                         ToolTipService.ToolTip="Remove this computer from the tree"
                                         AutomationProperties.Name="Remove this computer from the tree">
-                                    <FontIcon Glyph="&#xE711;" FontSize="12" />
+                                    <FontIcon Glyph="&#xE711;" FontSize="{StaticResource GlyphSizeCaption}" />
                                 </Button>
                             </StackPanel>
                         </Grid>

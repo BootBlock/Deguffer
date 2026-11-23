@@ -21,31 +21,27 @@
                     <TextBlock Text="{x:Bind Description}"
                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                TextWrapping="Wrap"
-                               IsTextSelectionEnabled="True"
-                               FontSize="13" />
+                               IsTextSelectionEnabled="True" />
 
                     <!-- Shown when Deguffer can see the location and cannot remove it as it is
                          running. The reason is the whole of what the user needs in order to act. -->
                     <TextBlock Text="Needs administrator rights — use the Elevate button"
                                Visibility="{x:Bind NeedsElevationFirst}"
-                               Style="{StaticResource SecondaryText}"
-                               TextWrapping="Wrap"
-                               FontSize="12" />
+                               Style="{StaticResource Caption}"
+                               TextWrapping="Wrap" />
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" VerticalAlignment="Top">
                     <TextBlock Text="{x:Bind SizeLabel}"
-                               Style="{StaticResource SecondaryText}"
-                               TextAlignment="Right"
-                               FontSize="12" />
+                               Style="{StaticResource Caption}"
+                               TextAlignment="Right" />
 
                     <!-- Text, never colour alone (§6.5). No automation name, because one would replace
                          the value a screen reader announces; the text already says "ago". -->
                     <TextBlock Text="{x:Bind AgeLabel}"
                                Visibility="{x:Bind HasAge}"
-                               Style="{StaticResource SecondaryText}"
-                               TextAlignment="Right"
-                               FontSize="12" />
+                               Style="{StaticResource Caption}"
+                               TextAlignment="Right" />
                 </StackPanel>
             </Grid>
         </DataTemplate>
@@ -179,8 +175,7 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="x:String">
                                 <TextBlock Text="{x:Bind}"
-                                           Style="{StaticResource SecondaryText}"
-                                           FontSize="12" />
+                                           Style="{StaticResource Caption}" />
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -239,26 +234,22 @@
                                     <Grid ColumnSpacing="16" Margin="0,2" ColumnDefinitions="*,Auto,150"
                                           AutomationProperties.Name="{x:Bind Description}">
                                         <TextBlock Text="{x:Bind When}"
-                                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                                   FontSize="13" />
+                                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                                         <TextBlock Grid.Column="1"
                                                    Text="{x:Bind Size}"
                                                    Style="{StaticResource SecondaryText}"
-                                                   TextAlignment="Right"
-                                                   FontSize="13" />
+                                                   TextAlignment="Right" />
                                         <TextBlock Grid.Column="2"
                                                    Text="{x:Bind Change}"
                                                    Style="{StaticResource SecondaryText}"
-                                                   TextAlignment="Right"
-                                                   FontSize="13" />
+                                                   TextAlignment="Right" />
                                     </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </StackPanel>
 
-                    <TextBlock Style="{StaticResource SecondaryText}"
-                               FontSize="12"
+                    <TextBlock Style="{StaticResource Caption}"
                                TextWrapping="Wrap"
                                Text="{x:Bind vm:StorageSizeChanges.HistoryNote}" />
                 </StackPanel>

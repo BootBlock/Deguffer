@@ -24,7 +24,7 @@
                  there is something to warn about. The sentence itself is on the status line,
                  where there is room for it. -->
             <FontIcon Glyph="&#xE7BA;"
-                      FontSize="14"
+                      FontSize="{StaticResource GlyphSizeBody}"
                       VerticalAlignment="Center"
                       Visibility="{x:Bind Choice.IsRefused, Mode=OneWay}"
                       AutomationProperties.AccessibilityView="Raw" />
@@ -32,7 +32,7 @@
             <!-- A drive Health found a concern with, collapsed otherwise for the same reason.
                  The list below names the drive and says what to do. -->
             <FontIcon Glyph="&#xE95E;"
-                      FontSize="14"
+                      FontSize="{StaticResource GlyphSizeBody}"
                       VerticalAlignment="Center"
                       Visibility="{x:Bind HasHealthConcern, Mode=OneWay}"
                       ToolTipService.ToolTip="{x:Bind Health.Text, Mode=OneWay, FallbackValue=''}"
@@ -89,7 +89,7 @@
                         MaxWidth="380"
                         Visibility="{x:Bind HasHealthConcern, Mode=OneWay}"
                         AutomationProperties.AccessibilityView="Raw">
-                <FontIcon Glyph="&#xE95E;" FontSize="14" VerticalAlignment="Top" Margin="0,2,0,0" />
+                <FontIcon Glyph="&#xE95E;" FontSize="{StaticResource GlyphSizeBody}" VerticalAlignment="Top" Margin="0,2,0,0" />
                 <TextBlock TextWrapping="Wrap" MaxWidth="360">
                     <Run Text="{x:Bind Health.Word, Mode=OneWay, FallbackValue=''}" FontWeight="SemiBold" /><Run Text=": " /><Run Text="{x:Bind Health.Text, Mode=OneWay, FallbackValue=''}" />
                 </TextBlock>

@@ -44,7 +44,7 @@
                         Click="OnHideClicked"
                         ToolTipService.ToolTip="Hide the overview"
                         AutomationProperties.Name="Hide the overview">
-                    <FontIcon Glyph="&#xE711;" FontSize="10" />
+                    <FontIcon Glyph="&#xE711;" FontSize="{StaticResource GlyphSizeCompact}" />
                 </Button>
             </Grid>
         </Border>
@@ -57,7 +57,7 @@
                 Click="OnShowClicked"
                 ToolTipService.ToolTip="Show the overview of the whole picture"
                 AutomationProperties.Name="Show the overview">
-            <FontIcon Glyph="&#xE8A9;" FontSize="14" />
+            <FontIcon Glyph="&#xE8A9;" FontSize="{StaticResource GlyphSizeBody}" />
         </Button>
     </Grid>
 </UserControl>

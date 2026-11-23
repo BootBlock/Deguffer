@@ -64,7 +64,7 @@
                     IsEnabled="{x:Bind ViewModel.CanAscend, Mode=OneWay}"
                     ToolTipService.ToolTip="Go up one level"
                     AutomationProperties.Name="Go up one level">
-                <FontIcon Glyph="&#xE74A;" FontSize="12" />
+                <FontIcon Glyph="&#xE74A;" FontSize="{StaticResource GlyphSizeCaption}" />
             </Button>
 
             <ItemsControl Grid.Column="1"
@@ -83,7 +83,7 @@
                                  into something rather than as a row of links. Raw to a screen
                                  reader, which is given the steps themselves and their order. -->
                             <FontIcon Glyph="&#xE76C;"
-                                      FontSize="10"
+                                      FontSize="{StaticResource GlyphSizeCompact}"
                                       Margin="2,0,2,0"
                                       Visibility="{x:Bind FollowsAnother, Mode=OneWay}"
                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -253,7 +253,7 @@
                                         Click="OnOpenRow"
                                         ToolTipService.ToolTip="{x:Bind Opens, Mode=OneWay}"
                                         AutomationProperties.Name="{x:Bind Opens, Mode=OneWay}">
-                                    <FontIcon Glyph="&#xE76C;" FontSize="12" />
+                                    <FontIcon Glyph="&#xE76C;" FontSize="{StaticResource GlyphSizeCaption}" />
                                 </Button>
                             </Grid>
                         </DataTemplate>
