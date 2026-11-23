@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+    The first row of every page the rail opens: the page's name on the left, and on the right what
+    governs the page as a whole: how it is drawn, Refresh, Reopen as administrator, and a link out
+    to Windows. A scan stays with what the reader chooses before it or does after it, and an offer
+    to elevate and scan sits beside Scan. What acts on a selection in a page's list sits in a bar
+    under that list. One control at one height, so the title and the buttons stay where they were
+    as the reader moves between pages.
+-->
+<UserControl
+    x:Class="Deguffer.App.Controls.PageHeader"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="False"
+    MinHeight="40">
+
+    <Grid ColumnSpacing="{StaticResource RegionGap}" ColumnDefinitions="Auto,*">
+        <TextBlock Text="{x:Bind Title}" Style="{StaticResource PageTitle}" VerticalAlignment="Center" />
+
+        <ContentPresenter Grid.Column="1"
+                          Content="{x:Bind Actions, Mode=OneWay}"
+                          HorizontalAlignment="Right"
+                          VerticalAlignment="Center" />
+    </Grid>
+</UserControl>

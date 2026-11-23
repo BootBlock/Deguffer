@@ -1,3 +1,4 @@
+using Deguffer.App.Controls;
 using Deguffer.Core.Viewing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -12,8 +13,8 @@ namespace Deguffer.App.Shell;
 /// <para>Each part comes in as an <see cref="ElementEntrance"/>. A page back from the navigation cache
 /// keeps its state and its scroll position, and plays only this.</para>
 ///
-/// <para>Every page lays itself out as one panel whose first row, or first child, is its header, so
-/// that is what is brought in first. A page laid out otherwise comes in whole, at the header's time.</para>
+/// <para>Every page lays itself out as one panel that opens with its <see cref="PageHeader"/>, so that
+/// is what is brought in first. A page laid out otherwise comes in whole, at the header's time.</para>
 /// </summary>
 internal sealed class PageArrival(IMotionPolicy motion)
 {
@@ -72,7 +73,7 @@ internal sealed class PageArrival(IMotionPolicy motion)
     /// <summary>Each part of <paramref name="page"/> to bring in, and how far behind the header it starts.</summary>
     private static List<(UIElement Part, TimeSpan Delay)> Parts(Page page, Motion played)
     {
-        if (Panel(page) is not { } panel)
+        if (page.Content is not Panel panel)
         {
             return [(page, PageEntrance.Start(isHeader: true, played))];
         }
@@ -82,21 +83,10 @@ internal sealed class PageArrival(IMotionPolicy motion)
         for (var i = 0; i < panel.Children.Count; i++)
         {
             var part = panel.Children[i];
-            var isHeader = panel is Grid ? Grid.GetRow((FrameworkElement)part) == 0 : i == 0;
 
-            parts.Add((part, PageEntrance.Start(isHeader, played)));
+            parts.Add((part, PageEntrance.Start(isHeader: part is PageHeader, played)));
         }
 
         return parts;
     }
-
-    /// <summary>
-    /// The panel a page is laid out in: its content, or the content of the scroller its content is.
-    /// </summary>
-    private static Panel? Panel(Page page) => page.Content switch
-    {
-        Panel panel => panel,
-        ScrollViewer { Content: Panel panel } => panel,
-        _ => null,
-    };
 }

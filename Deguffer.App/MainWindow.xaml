@@ -2,7 +2,8 @@
 <Window
     x:Class="Deguffer.App.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:shell="using:Deguffer.App.Shell">
 
     <Grid RowDefinitions="Auto,*">
         <!--
@@ -30,7 +31,7 @@
                     </Image.Source>
                 </Image>
                 <TextBlock
-                    Text="Deguffer"
+                    Text="{x:Bind shell:DestinationNames.Application}"
                     VerticalAlignment="Center"
                     Style="{StaticResource CaptionTextBlockStyle}"
                     FontWeight="SemiBold"
@@ -65,7 +66,9 @@
                 <!-- Which item starts selected is set in the window's constructor rather than
                      here. A markup IsSelected stays true on the item after the rail has been moved
                      elsewhere, so the rail would report two items selected. Each item is routed to
-                     its page by the item itself, in MainWindow's Destinations table, not by a Tag. -->
+                     its page by the item itself, in MainWindow's tables, not by a Tag. Its label and
+                     the tooltip that leads with it are given there from DestinationNames, the name its
+                     page's header and the window title read; only its help text is written here. -->
 
                 <!-- The drives: what is on them, what can go, and what state they are in. Storage
                      first, because it is the task the window exists for and where it opens. A
@@ -73,8 +76,7 @@
                      also parted by a separator. -->
                 <NavigationViewItemHeader Content="Drives" />
 
-                <NavigationViewItem x:Name="StorageItem" Content="Storage"
-                                    ToolTipService.ToolTip="Storage: clean caches and build output that are safe to remove"
+                <NavigationViewItem x:Name="StorageItem"
                                     AutomationProperties.HelpText="Clean caches and build output that are safe to remove">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xEDA2;" />
@@ -84,8 +86,7 @@
                 <!-- Explore answers "what is using the space"; Storage answers "what is safe to
                      remove". §3 is entirely about those being different questions, so they are
                      different destinations rather than two views of one screen. -->
-                <NavigationViewItem x:Name="ExploreItem" Content="Explore"
-                                    ToolTipService.ToolTip="Explore: see where the space on a drive went"
+                <NavigationViewItem x:Name="ExploreItem"
                                     AutomationProperties.HelpText="See where the space on a drive went">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE9D9;" />
@@ -96,8 +97,7 @@
                      destination for the reason Explore is one: it ranks and matches, and a match
                      says nothing about whether a copy is safe to remove. It removes only copies the
                      user marked, and every group keeps one. -->
-                <NavigationViewItem x:Name="DuplicatesItem" Content="Duplicates"
-                                    ToolTipService.ToolTip="Duplicates: find files that are on a drive more than once"
+                <NavigationViewItem x:Name="DuplicatesItem"
                                     AutomationProperties.HelpText="Find files that are on a drive more than once">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE8C8;" />
@@ -108,8 +108,7 @@
                      Storage, Explore and Duplicates name a drive of concern from what it read. It
                      reads and explains, and sends a drive nothing that could change it. Built on the
                      first visit, so nothing asks a drive anything until then. -->
-                <NavigationViewItem x:Name="HealthItem" Content="Health"
-                                    ToolTipService.ToolTip="Health: see what state each drive reports it is in"
+                <NavigationViewItem x:Name="HealthItem"
                                     AutomationProperties.HelpText="See what state each drive reports it is in">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE95E;" />
@@ -124,8 +123,7 @@
 
                 <!-- Installed apps answers "what does Windows list that is not there", and runs a
                      program's own uninstaller for one that is (§7.3). -->
-                <NavigationViewItem x:Name="InstalledAppsItem" Content="Installed apps"
-                                    ToolTipService.ToolTip="Installed apps: remove entries for programs that are gone, or uninstall one"
+                <NavigationViewItem x:Name="InstalledAppsItem"
                                     AutomationProperties.HelpText="Remove entries for programs that are gone, or uninstall one">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE71D;" />
@@ -135,8 +133,7 @@
                 <!-- Startup answers "what put it there at sign-in", beside Memory because a program
                      closed there comes back at the next sign-in if Windows starts it. It stops an
                      entry starting the way Task Manager does, and removes nothing (§7.5). -->
-                <NavigationViewItem x:Name="StartupItem" Content="Startup"
-                                    ToolTipService.ToolTip="Startup: choose what Windows starts when you sign in"
+                <NavigationViewItem x:Name="StartupItem"
                                     AutomationProperties.HelpText="Choose what Windows starts when you sign in">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xEC4A;" />
@@ -146,8 +143,7 @@
                 <!-- Memory answers "where is the memory going", which §7.2 makes a question of its
                      own. It shows and explains, and has one action on what it shows: asking a
                      program the user picked to close itself (§7.2.1). -->
-                <NavigationViewItem x:Name="MemoryItem" Content="Memory"
-                                    ToolTipService.ToolTip="Memory: see where the memory is going"
+                <NavigationViewItem x:Name="MemoryItem"
                                     AutomationProperties.HelpText="See where the memory is going">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE964;" />
@@ -158,15 +154,13 @@
             <!-- Settings and About sit at the foot of the rail: they are where you go once, not
                  part of the task the window exists for. -->
             <NavigationView.FooterMenuItems>
-                <NavigationViewItem x:Name="SettingsItem" Content="Settings"
-                                    ToolTipService.ToolTip="Settings: choose how Deguffer looks, scans and cleans"
+                <NavigationViewItem x:Name="SettingsItem"
                                     AutomationProperties.HelpText="Choose how Deguffer looks, scans and cleans">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE713;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem x:Name="AboutItem" Content="About"
-                                    ToolTipService.ToolTip="About: see the version, how Deguffer scans and what the safety tiers mean"
+                <NavigationViewItem x:Name="AboutItem"
                                     AutomationProperties.HelpText="See the version, how Deguffer scans and what the safety tiers mean">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE946;" />
@@ -184,7 +178,7 @@
                 -->
                 <InfoBar x:Name="AccountNotice"
                          Grid.Row="0"
-                         Margin="16,8,16,0"
+                         Margin="{StaticResource PageNoticeMargin}"
                          Severity="Warning"
                          IsClosable="False" />
                 <Frame x:Name="ContentFrame" Grid.Row="1" />

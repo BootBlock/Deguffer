@@ -168,16 +168,68 @@
         </DataTemplate>
     </Page.Resources>
 
-    <Grid Padding="20,12,20,16" RowSpacing="{StaticResource RegionGap}"
-          RowDefinitions="Auto,Auto,Auto,Auto,*,Auto">
+    <Grid Padding="{StaticResource PagePadding}" RowSpacing="{StaticResource RegionGap}"
+          RowDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto">
+
+        <controls:PageHeader Destination="Explore">
+            <controls:PageHeader.Actions>
+                <StackPanel Orientation="Horizontal" Spacing="{StaticResource RegionGap}">
+                    <!-- Mapped to ExploreView by ExploreChoice.Views, so the order here is the order
+                         of that list. The three pictures come before the lists because that is the
+                         order they are read in, and the tree is Memory's alone. Each label is Raw:
+                         its box has its own name. -->
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}" VerticalAlignment="Center">
+                        <TextBlock Text="View" Style="{StaticResource FieldLabel}" VerticalAlignment="Center"
+                                   AutomationProperties.AccessibilityView="Raw" />
+                        <ComboBox x:Name="ViewSelector"
+                                  MinWidth="120"
+                                  SelectionChanged="OnViewSelectionChanged"
+                                  AutomationProperties.Name="How to draw what was scanned">
+                            <ComboBoxItem Content="Treemap" />
+                            <ComboBoxItem Content="Icicle" />
+                            <ComboBoxItem Content="Sunburst" />
+                            <ComboBoxItem Content="List" />
+                            <ComboBoxItem Content="Files" />
+                        </ComboBox>
+                    </StackPanel>
+
+                    <!-- Beside the View box because the two are one decision to the reader, what is
+                         on screen and what its colours mean, and orthogonal to it in fact: every
+                         pairing of the two is meaningful. Indexed against ExploreColouring. -->
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}" VerticalAlignment="Center">
+                        <TextBlock Text="Colour" Style="{StaticResource FieldLabel}" VerticalAlignment="Center"
+                                   AutomationProperties.AccessibilityView="Raw" />
+                        <ComboBox x:Name="ColourSelector"
+                                  MinWidth="110"
+                                  SelectionChanged="OnColourSelectionChanged"
+                                  AutomationProperties.Name="What the colours on the map say">
+                            <ComboBoxItem Content="Branch" />
+                            <ComboBoxItem Content="Age" />
+                            <ComboBoxItem Content="Growth" />
+                            <ComboBoxItem Content="Type" />
+                            <ComboBoxItem Content="Depth" />
+                        </ComboBox>
+                    </StackPanel>
+
+                    <!-- Beside the two boxes that decide what the picture shows, because this decides
+                         how it looks. It opens a window of its own, which stays open beside the map
+                         so each change can be watched as it lands. -->
+                    <Button VerticalAlignment="Center"
+                            Padding="8"
+                            Click="OnAppearanceClicked"
+                            ToolTipService.ToolTip="Map appearance: colours and spacing"
+                            AutomationProperties.Name="Map appearance">
+                        <FontIcon Glyph="&#xE713;" FontSize="{StaticResource GlyphSizeStandard}" />
+                    </Button>
+                </StackPanel>
+            </controls:PageHeader.Actions>
+        </controls:PageHeader>
 
         <!--
-            What to scan, the actions, and how to draw it, on one line. The drive and the folder sit
-            at the left where the reading starts, and the view sits at the right beside the picture
-            it governs — a control that changes how something is drawn belongs next to the drawing,
-            not next to the thing that produced the data.
+            What to scan and the scan's own actions, on one line, with the drive and the folder at the
+            left where the reading starts. How the result is drawn is in the header.
         -->
-        <Grid Grid.Row="0" ColumnSpacing="8" ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto,Auto,Auto">
+        <Grid Grid.Row="1" ColumnSpacing="8" ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto">
             <!-- Disabled while a scan runs, because choosing a drive drops a folder scope: the
                  page would otherwise stop naming the folder it is still scanning. -->
             <ComboBox Grid.Column="0"
@@ -337,58 +389,14 @@
                         AutomationProperties.Name="Clear the folder" />
             </Grid>
 
-            <!-- §5.5's fallback made actionable, on the same terms the Storage page offers it:
-                 offered from the start, and withdrawn once a scan has shown that elevating would
-                 not help. -->
+            <!-- §5.5's fallback made actionable, on the same terms the Storage page offers it, and a
+                 way to scan, so it sits on the scan's line: offered from the start, and withdrawn
+                 once a scan has shown that elevating would not help. -->
             <Button Grid.Column="5" Style="{StaticResource ElevateButtonStyle}"
                     VerticalAlignment="Bottom"
                     Content="{x:Bind ViewModel.Elevation.ElevateLabel, Mode=OneWay}"
                     Visibility="{x:Bind ViewModel.Elevation.CanElevate, Mode=OneWay}"
                     Command="{x:Bind ViewModel.Elevation.ElevateAndRescanCommand}" />
-
-            <!-- Mapped to ExploreView by ExploreChoice.Views, so the order here is the order of that
-                 list. The three pictures come before the lists because that is the order they are
-                 read in, and the tree is Memory's alone. -->
-            <ComboBox x:Name="ViewSelector"
-                      Grid.Column="6"
-                      MinWidth="120"
-                      Header="View"
-                      SelectionChanged="OnViewSelectionChanged"
-                      AutomationProperties.Name="How to draw what was scanned">
-                <ComboBoxItem Content="Treemap" />
-                <ComboBoxItem Content="Icicle" />
-                <ComboBoxItem Content="Sunburst" />
-                <ComboBoxItem Content="List" />
-                <ComboBoxItem Content="Files" />
-            </ComboBox>
-
-            <!-- Beside the View box because the two are one decision to the reader — what is on
-                 screen and what its colours mean — and orthogonal to it in fact: every pairing of
-                 the two is meaningful. Indexed against ExploreColouring, like the box above it. -->
-            <ComboBox x:Name="ColourSelector"
-                      Grid.Column="7"
-                      MinWidth="110"
-                      Header="Colour"
-                      SelectionChanged="OnColourSelectionChanged"
-                      AutomationProperties.Name="What the colours on the map say">
-                <ComboBoxItem Content="Branch" />
-                <ComboBoxItem Content="Age" />
-                <ComboBoxItem Content="Growth" />
-                <ComboBoxItem Content="Type" />
-                <ComboBoxItem Content="Depth" />
-            </ComboBox>
-
-            <!-- Beside the two boxes that decide what the picture shows, because this decides how it
-                 looks. It opens a window of its own, which stays open beside the map so each change
-                 can be watched as it lands. -->
-            <Button Grid.Column="8"
-                    VerticalAlignment="Bottom"
-                    Padding="8"
-                    Click="OnAppearanceClicked"
-                    ToolTipService.ToolTip="Map appearance: colours and spacing"
-                    AutomationProperties.Name="Map appearance">
-                <FontIcon Glyph="&#xE713;" FontSize="{StaticResource GlyphSizeStandard}" />
-            </Button>
         </Grid>
 
         <!--
@@ -396,7 +404,7 @@
             not. A walk cannot count the directories it has not opened yet, and a bar that invents
             a total runs to nine tenths and stops there for a minute.
         -->
-        <ProgressBar Grid.Row="1"
+        <ProgressBar Grid.Row="2"
                      Height="3"
                      Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
                      IsIndeterminate="{x:Bind ViewModel.Progress.IsIndeterminate, Mode=OneWay}"
@@ -413,7 +421,7 @@
             Backspace through the page's accelerator (both in ExploreInput); Alt+Left and Alt+Right
             are here, as in a browser.
         -->
-        <Grid Grid.Row="2" ColumnSpacing="8" ColumnDefinitions="Auto,*,Auto"
+        <Grid Grid.Row="3" ColumnSpacing="8" ColumnDefinitions="Auto,*,Auto"
               Visibility="{x:Bind ViewModel.HasTree, Mode=OneWay}">
             <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
                 <Button Padding="8,4"
@@ -494,7 +502,7 @@
             The age is by the last write, and says so. The tree holds no other date for a file, and
             Windows stops keeping last-access times by default.
         -->
-        <Grid Grid.Row="3" ColumnSpacing="8" ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*"
+        <Grid Grid.Row="4" ColumnSpacing="8" ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*"
               Visibility="{x:Bind ViewModel.ShowsFileFilters, Mode=OneWay}">
             <!--
                 What the list is of: the largest files, or the shortcuts and links whose target is
@@ -564,7 +572,7 @@
             over the one action that cannot be undone. The menu below names all five, which is where
             somebody looks for them.
         -->
-        <Grid Grid.Row="4" ColumnSpacing="{StaticResource ControlGap}" ColumnDefinitions="*,Auto">
+        <Grid Grid.Row="5" ColumnSpacing="{StaticResource ControlGap}" ColumnDefinitions="*,Auto">
         <Border Grid.Column="0"
                 Style="{StaticResource CardStyle}"
                 Padding="0">
@@ -1294,7 +1302,7 @@
             </Border>
         </Grid>
 
-        <StackPanel Grid.Row="5" Spacing="{StaticResource ControlGap}">
+        <StackPanel Grid.Row="6" Spacing="{StaticResource ControlGap}">
             <!-- What the pointer is over. A status line rather than a floating tooltip: over tens
                  of thousands of rectangles a popup that follows the pointer never settles.
 

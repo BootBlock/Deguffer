@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:vm="using:Deguffer.App.ViewModels"
     xmlns:views="using:Deguffer.App.Views"
+    xmlns:controls="using:Deguffer.App.Controls"
     Background="Transparent">
 
     <Page.Resources>
@@ -91,33 +92,35 @@
         </Style>
     </Page.Resources>
 
-    <Grid Padding="20,12,20,16" RowSpacing="{StaticResource RegionGap}" RowDefinitions="Auto,Auto,Auto,Auto,*">
+    <Grid Padding="{StaticResource PagePadding}" RowSpacing="{StaticResource RegionGap}" RowDefinitions="Auto,Auto,Auto,Auto,*">
 
-        <Grid Grid.Row="0" ColumnSpacing="12" ColumnDefinitions="*,Auto,Auto,Auto,Auto">
-            <StackPanel Spacing="4">
-                <TextBlock Text="Startup" Style="{StaticResource SubtitleTextBlockStyle}" />
-                <TextBlock Text="{x:Bind ViewModel.Headline, Mode=OneWay}" TextWrapping="Wrap"
-                           Style="{StaticResource SecondaryText}" />
-            </StackPanel>
+        <controls:PageHeader Destination="Startup">
+            <controls:PageHeader.Actions>
+                <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
+                    <ProgressRing IsActive="{x:Bind ViewModel.IsReading, Mode=OneWay}"
+                                  Width="20" Height="20" VerticalAlignment="Center" />
 
-            <ProgressRing Grid.Column="1" IsActive="{x:Bind ViewModel.IsReading, Mode=OneWay}"
-                          Width="20" Height="20" VerticalAlignment="Center" />
+                    <Button Content="Open Startup apps in Settings" VerticalAlignment="Center"
+                            Command="{x:Bind ViewModel.OpenSettingsCommand}"
+                            ToolTipService.ToolTip="Windows' own Startup page, where a packaged app's startup task can be changed too." />
 
-            <Button Grid.Column="2" Content="Open Startup apps in Settings" VerticalAlignment="Center"
-                    Command="{x:Bind ViewModel.OpenSettingsCommand}"
-                    ToolTipService.ToolTip="Windows' own Startup page, where a packaged app's startup task can be changed too." />
+                    <Button Content="Reopen as administrator" VerticalAlignment="Center" Style="{StaticResource ElevateButtonStyle}"
+                            Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
+                            Command="{x:Bind ViewModel.ElevateCommand}"
+                            ToolTipService.ToolTip="Entries that start for every user can be changed only with administrator rights." />
 
-            <Button Grid.Column="3" Content="Reopen as administrator" VerticalAlignment="Center" Style="{StaticResource ElevateButtonStyle}"
-                    Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
-                    Command="{x:Bind ViewModel.ElevateCommand}"
-                    ToolTipService.ToolTip="Entries that start for every user can be changed only with administrator rights." />
+                    <Button Content="Refresh" VerticalAlignment="Center"
+                            Command="{x:Bind ViewModel.RefreshCommand}" />
+                </StackPanel>
+            </controls:PageHeader.Actions>
+        </controls:PageHeader>
 
-            <Button Grid.Column="4" Content="Refresh" VerticalAlignment="Center"
-                    Command="{x:Bind ViewModel.RefreshCommand}" />
-        </Grid>
-
-        <TextBlock Grid.Row="1" TextWrapping="Wrap" Style="{StaticResource SecondaryText}"
-                   Text="What Windows starts when you sign in, from the places Task Manager lists. Disabling an entry records that it should not start, as Task Manager does, and leaves the entry itself alone. The memory beside each one is what its program holds now. A publisher comes from the program's own version information, or for a packaged app from its package." />
+        <StackPanel Grid.Row="1" Spacing="{StaticResource LabelGap}">
+            <TextBlock Text="{x:Bind ViewModel.Headline, Mode=OneWay}" TextWrapping="Wrap"
+                       Style="{StaticResource SecondaryText}" />
+            <TextBlock TextWrapping="Wrap" Style="{StaticResource SecondaryText}"
+                       Text="What Windows starts when you sign in, from the places Task Manager lists. Disabling an entry records that it should not start, as Task Manager does, and leaves the entry itself alone. The memory beside each one is what its program holds now. A publisher comes from the program's own version information, or for a packaged app from its package." />
+        </StackPanel>
 
         <!-- A change's report, and its §5.6 checks on the surface the other pages use: what was
              written, the entry, and each value beside it, by name and where it is. -->
