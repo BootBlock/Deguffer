@@ -173,12 +173,12 @@
 
         <controls:PageHeader Destination="Explore">
             <controls:PageHeader.Actions>
-                <StackPanel Orientation="Horizontal" Spacing="16">
+                <StackPanel Orientation="Horizontal" Spacing="{StaticResource RegionGap}">
                     <!-- Mapped to ExploreView by ExploreChoice.Views, so the order here is the order
                          of that list. The three pictures come before the lists because that is the
                          order they are read in, and the tree is Memory's alone. Each label is Raw:
                          its box has its own name. -->
-                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}" VerticalAlignment="Center">
                         <TextBlock Text="View" Style="{StaticResource FieldLabel}" VerticalAlignment="Center"
                                    AutomationProperties.AccessibilityView="Raw" />
                         <ComboBox x:Name="ViewSelector"
@@ -196,7 +196,7 @@
                     <!-- Beside the View box because the two are one decision to the reader, what is
                          on screen and what its colours mean, and orthogonal to it in fact: every
                          pairing of the two is meaningful. Indexed against ExploreColouring. -->
-                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}" VerticalAlignment="Center">
                         <TextBlock Text="Colour" Style="{StaticResource FieldLabel}" VerticalAlignment="Center"
                                    AutomationProperties.AccessibilityView="Raw" />
                         <ComboBox x:Name="ColourSelector"

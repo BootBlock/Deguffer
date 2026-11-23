@@ -107,7 +107,7 @@
         </controls:PageHeader>
 
         <TextBlock Grid.Row="1" Text="{x:Bind ViewModel.Headline, Mode=OneWay}" TextWrapping="Wrap"
-                   Style="{StaticResource BodyStrongTextBlockStyle}" />
+                   Style="{StaticResource SecondaryText}" />
 
         <Grid Grid.Row="2" ColumnSpacing="16" ColumnDefinitions="*,Auto,Auto">
             <TextBox PlaceholderText="Filter by name, publisher or command"

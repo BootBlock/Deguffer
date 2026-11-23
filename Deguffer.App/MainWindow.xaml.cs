@@ -258,7 +258,7 @@ public sealed partial class MainWindow : Window
     public void ShowStartupEntry(StartupKey entry)
     {
         Go(Destination.Startup, entry);
-        Navigation.SelectedItem = StartupItem;
+        Navigation.SelectedItem = _items[Destination.Startup];
     }
 
     /// <summary>

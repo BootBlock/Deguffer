@@ -85,7 +85,7 @@
 
         <StackPanel Grid.Row="1" Spacing="{StaticResource LabelGap}">
             <TextBlock Text="{x:Bind ViewModel.Headline, Mode=OneWay}" TextWrapping="Wrap"
-                       Style="{StaticResource BodyStrongTextBlockStyle}" AutomationProperties.LiveSetting="Polite" />
+                       Style="{StaticResource SecondaryText}" AutomationProperties.LiveSetting="Polite" />
             <TextBlock TextWrapping="Wrap" Style="{StaticResource SecondaryText}"
                        Text="What each drive reports about its own condition, in plain words. Deguffer only reads this and changes nothing on the drive. Drives can fail without any warning, so keep backups whatever this page says." />
         </StackPanel>

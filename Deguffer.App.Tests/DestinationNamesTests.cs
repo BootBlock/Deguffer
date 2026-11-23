@@ -3,8 +3,9 @@ using Deguffer.App.Shell;
 namespace Deguffer.App.Tests;
 
 /// <summary>
-/// The window is titled after the page it shows, from the name the page's header and its rail item
-/// read, so Alt+Tab and the taskbar say which page is open.
+/// The title the window takes for each page names that page, from the name the page's header and its
+/// rail item read, so Alt+Tab and the taskbar say which page is open. A WinUI window cannot be built
+/// in a test process, so that the window takes this title as it navigates is observed by driving it.
 /// </summary>
 public sealed class DestinationNamesTests
 {
@@ -23,7 +24,7 @@ public sealed class DestinationNamesTests
 
     [Theory]
     [MemberData(nameof(Titles))]
-    public void TheWindowIsTitledAfterThePageShown(Destination destination, string title) =>
+    public void EachPagesWindowTitleNamesThePage(Destination destination, string title) =>
         Assert.Equal(title, DestinationNames.WindowTitle(destination));
 
     [Fact]
