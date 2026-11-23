@@ -1058,7 +1058,7 @@
                          the map and the list; a removed folder has nothing to open. -->
                     <ListView Grid.Row="5"
                               x:Name="GrowthList"
-                              Margin="-12,0,-12,0"
+                              Margin="{StaticResource CardBleed}"
                               SelectionMode="None"
                               IsItemClickEnabled="True"
                               ItemClick="OnGrowthRowClicked"
@@ -1140,7 +1140,7 @@
                     <!-- Largest first. A click lists that kind's files below this folder. -->
                     <ListView Grid.Row="2"
                               x:Name="TypesList"
-                              Margin="-12,0,-12,0"
+                              Margin="{StaticResource CardBleed}"
                               SelectionMode="None"
                               IsItemClickEnabled="True"
                               ItemClick="OnTypeRowClicked"

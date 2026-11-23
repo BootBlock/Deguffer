@@ -87,13 +87,16 @@
                 next; RegionGapAbove is the same gap as a margin, for a heading or card that opens a
                 region inside a stack already spaced by the control gap, and the two move together.
                 Card row padding is a row drawn as a card, or as the heading of one; row padding is a
-                row of a list inside a card.
+                row of a list inside a card. Card bleed cancels the card padding at each side, for a
+                list whose rows and their pointer-over highlight run to a card's inner edges, so the
+                two move together.
             -->
             <x:Double x:Key="LabelGap">4</x:Double>
             <x:Double x:Key="ControlGap">8</x:Double>
             <x:Double x:Key="RegionGap">16</x:Double>
             <Thickness x:Key="RegionGapAbove">0,16,0,0</Thickness>
             <Thickness x:Key="CardPadding">20</Thickness>
+            <Thickness x:Key="CardBleed">-20,0</Thickness>
             <Thickness x:Key="CardRowPadding">16,12</Thickness>
             <Thickness x:Key="RowPadding">12,8</Thickness>
 
@@ -276,11 +279,8 @@
 
             <!-- A panel floating over a map. Solid, because a tint over a treemap's colours is not a
                  surface anybody can read. -->
-            <Style x:Key="OverlayCardStyle" TargetType="Border">
+            <Style x:Key="OverlayCardStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
                 <Setter Property="Background" Value="{ThemeResource SolidBackgroundFillColorBaseBrush}" />
-                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
-                <Setter Property="BorderThickness" Value="1" />
-                <Setter Property="CornerRadius" Value="{ThemeResource OverlayCornerRadius}" />
             </Style>
 
             <!-- A button floating over a map, framed as an overlay card is, for the same reason. -->
