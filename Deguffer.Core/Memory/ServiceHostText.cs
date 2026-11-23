@@ -38,12 +38,6 @@ public static class ServiceHostText
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        return services.Count < 2 ? string.Empty : $"It holds {Join(services)}.";
+        return services.Count < 2 ? string.Empty : $"It holds {Listed.And([.. services.Select(s => s.DisplayName)])}.";
     }
-
-    /// <summary>Service names for a sentence, in the form a reader expects rather than comma-separated throughout.</summary>
-    private static string Join(IReadOnlyList<RunningService> services) =>
-        string.Join(", ", services.Take(services.Count - 1).Select(s => s.DisplayName))
-        + " and "
-        + services[^1].DisplayName;
 }
