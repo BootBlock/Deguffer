@@ -26,7 +26,8 @@
                 </Grid.ColumnDefinitions>
 
                 <Grid ColumnSpacing="12" RowSpacing="2" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
-                    <TextBlock Text="{x:Bind Name, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{x:Bind Name, Mode=OneWay}" Style="{StaticResource BodyStrongTextBlockStyle}"
+                               TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
 
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                         <FontIcon Glyph="&#xEA18;" FontSize="{StaticResource GlyphSizeBody}" VerticalAlignment="Center"

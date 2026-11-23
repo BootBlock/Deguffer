@@ -5,15 +5,14 @@ namespace Deguffer.Core.Tests;
 
 /// <summary>
 /// Text takes its size from the type ramp's styles in <c>App.xaml</c>, never from a font size on an
-/// element. A size chosen element by element is how a section heading came to be 15 on one page and
-/// 20 on the next, and secondary text 12, 13 or 14 for the same role: the hierarchy a reader uses to
-/// find their way drifted from page to page, and nobody could change "the section heading" because
-/// there was no single one. A glyph's size is a named resource too, so an icon keeps its proportion
-/// to the text beside it.
+/// element. A size chosen element by element lets one role take a different size on each page, so
+/// the hierarchy a reader finds their way by differs from page to page, and no role can be changed
+/// in one place. A glyph's size is a named resource too, so an icon keeps its proportion to the
+/// text beside it.
 ///
 /// <para>Fluent's type ramp: text uses the ramp, never a literal size. The ramp's styles name Fluent's
 /// own steps by their resources, so no style can invent a size, and Caption, the smallest step, is
-/// the floor: nothing is drawn below 12.</para>
+/// the floor: no text is drawn below 12.</para>
 /// </summary>
 public sealed partial class DesignTypographyTests
 {
@@ -29,22 +28,16 @@ public sealed partial class DesignTypographyTests
     /// <summary>The glyph sizes <c>App.xaml</c> declares, the only sizes a glyph may take.</summary>
     private static readonly Lazy<IReadOnlySet<string>> GlyphSizes = new(() => ShellMarkup.Files
         .Single(file => file.IsApplicationResources).Elements
-        .Where(element => element.Name.LocalName == "Double"
-            && element.Attribute(Key)?.Value.StartsWith("GlyphSize", StringComparison.Ordinal) == true)
-        .Select(element => element.Attribute(Key)!.Value)
+        .Where(element => element.Name.LocalName == "Double")
+        .Select(element => element.Attribute(Key)?.Value)
+        .OfType<string>()
+        .Where(key => key.StartsWith("GlyphSize", StringComparison.Ordinal))
         .ToHashSet(StringComparer.Ordinal));
 
     [Fact]
     public void TextTakesItsSizeFromTheTypeRamp()
     {
-        var found = ShellMarkup.Files.SelectMany(file => file.Elements
-            .Where(element => element.Attribute("FontSize") is not null)
-            .Select(element => (file, element, detail: AttributeBreak(element)))
-            .Concat(file.IsApplicationResources
-                ? []
-                : file.Elements.Select(element => (file, element, detail: PageSetterBreak(element))))
-            .Where(place => place.detail is not null)
-            .Select(place => place.file.At(place.element, place.detail!)));
+        var found = ShellMarkup.Files.SelectMany(file => file.Elements.SelectMany(element => Breaks(file, element)));
 
         RuleBaseline.Hold("text takes its size from a ramp style in App.xaml, and a glyph from a named GlyphSize resource", found, new Dictionary<string, int>());
     }
@@ -66,10 +59,32 @@ public sealed partial class DesignTypographyTests
         RuleBaseline.Hold("every FontSize setter in App.xaml names a Fluent ramp step, or a declared GlyphSize for a glyph", found, new Dictionary<string, int>());
     }
 
-    private static string? AttributeBreak(XElement element)
+    private static IEnumerable<RuleViolation> Breaks(MarkupFile file, XElement element)
     {
-        var value = element.Attribute("FontSize")!.Value;
+        // A size written as a property element, or set by a visual state, takes no style at all.
+        if (element.Name.LocalName.EndsWith(".FontSize", StringComparison.Ordinal))
+        {
+            yield return file.At(element, $"<{element.Name.LocalName}> sets a font size as a property element");
+        }
 
+        if (element.Name.LocalName == "Setter" && element.Attribute("Target")?.Value.EndsWith(".FontSize", StringComparison.Ordinal) == true)
+        {
+            yield return file.At(element, $"a visual state sets {element.Attribute("Target")?.Value}");
+        }
+
+        if (element.Attribute("FontSize")?.Value is { } size && AttributeBreak(element, size) is { } attributeBreak)
+        {
+            yield return file.At(element, attributeBreak);
+        }
+
+        if (!file.IsApplicationResources && PageSetterBreak(element) is { } setterBreak)
+        {
+            yield return file.At(element, setterBreak);
+        }
+    }
+
+    private static string? AttributeBreak(XElement element, string value)
+    {
         if (ShellMarkup.IsIcon(element.Name.LocalName))
         {
             return IsDeclaredGlyphSize(value) ? null : $"<{element.Name.LocalName}> sizes its glyph with {value}, not a GlyphSize resource";
@@ -99,7 +114,7 @@ public sealed partial class DesignTypographyTests
             return IsDeclaredGlyphSize(value) ? null : $"a glyph style sizes its glyph with {value}, not a GlyphSize resource";
         }
 
-        var target = element.Parent?.Attribute("TargetType")?.Value;
+        var target = TargetType(element);
 
         return target != "TextBlock" && FluentRamp.Contains(ResourceKey(value) ?? string.Empty)
             ? null
@@ -109,8 +124,11 @@ public sealed partial class DesignTypographyTests
     private static bool IsFontSizeSetter(XElement element) =>
         element.Name.LocalName == "Setter" && element.Attribute("Property")?.Value == "FontSize";
 
-    private static bool TargetsIcon(XElement setter) =>
-        setter.Parent?.Attribute("TargetType")?.Value is { } target && ShellMarkup.IsIcon(target);
+    private static bool TargetsIcon(XElement setter) => TargetType(setter) is { } target && ShellMarkup.IsIcon(target);
+
+    /// <summary>The type a setter's style targets, whether the setter sits in the style or in its <c>Style.Setters</c>.</summary>
+    private static string? TargetType(XElement setter) =>
+        setter.Ancestors().FirstOrDefault(ancestor => ancestor.Name.LocalName == "Style")?.Attribute("TargetType")?.Value;
 
     private static bool IsDeclaredGlyphSize(string? value) =>
         ResourceKey(value) is { } key && GlyphSizes.Value.Contains(key);

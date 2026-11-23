@@ -189,7 +189,7 @@
             <!--
                 The type ramp: one style per role, each a step of Fluent's ramp (Caption 12, Body 14,
                 Body Large 18, Subtitle 20, Title 28, Title Large 40) by its resource, so a role is
-                changed in one place and no page decides a size of its own. Nothing is smaller than
+                changed in one place and no page decides a size of its own. No text is smaller than
                 Caption. DesignTypographyTests holds the pages to these styles and these setters to
                 the ramp. A row's name is BodyStrongTextBlockStyle, and a row's figure is RowFigure,
                 which is never larger or heavier than the name, so the eye reads what a number is for
