@@ -32,7 +32,7 @@
                 <TextBlock
                     Text="Deguffer"
                     VerticalAlignment="Center"
-                    FontSize="13"
+                    Style="{StaticResource CaptionTextBlockStyle}"
                     FontWeight="SemiBold"
                     Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
             </StackPanel>

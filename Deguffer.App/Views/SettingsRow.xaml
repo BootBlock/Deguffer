@@ -9,7 +9,7 @@
 
             <FontIcon Grid.Column="0"
                       Glyph="{x:Bind Glyph, Mode=OneWay}"
-                      FontSize="17"
+                      FontSize="{StaticResource GlyphSizeLarge}"
                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                       VerticalAlignment="Center" />
 
@@ -18,8 +18,7 @@
                            Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                            TextWrapping="Wrap" />
                 <TextBlock Text="{x:Bind Description, Mode=OneWay}"
-                           Style="{StaticResource SecondaryText}"
-                           FontSize="12" />
+                           Style="{StaticResource Caption}" />
             </StackPanel>
 
             <ContentPresenter Grid.Column="2"

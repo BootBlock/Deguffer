@@ -50,15 +50,13 @@
                     <TextBlock Text="{x:Bind Description}"
                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                TextWrapping="Wrap"
-                               IsTextSelectionEnabled="True"
-                               FontSize="13" />
+                               IsTextSelectionEnabled="True" />
 
                     <!-- Said in words beside the disabled checkbox, for the reason the elevation line
                          below is (§6.5): a greyed-out control states no reason on its own. -->
                     <TextBlock Text="On your keep list — Deguffer will not offer it, and every clean checks that it is still there"
                                Visibility="{x:Bind IsKept, Mode=OneWay}"
-                               Style="{StaticResource SecondaryText}"
-                               FontSize="12" />
+                               Style="{StaticResource Caption}" />
 
                     <!-- A button rather than a link: this changes what Deguffer will delete. Shown only
                          for an item its provider can identify apart from its path, because only that
@@ -74,8 +72,7 @@
 
                     <TextBlock Text="Needs administrator rights — use the Elevate button"
                                Visibility="{x:Bind NeedsElevationFirst}"
-                               Style="{StaticResource SecondaryText}"
-                               FontSize="12" />
+                               Style="{StaticResource Caption}" />
                 </StackPanel>
 
                 <ItemsControl Grid.Column="2"
@@ -90,7 +87,6 @@
                             <TextBlock Text="{x:Bind}"
                                        Width="{StaticResource FacetColumnWidth}"
                                        Style="{StaticResource SecondaryText}"
-                                       FontSize="13"
                                        TextWrapping="NoWrap"
                                        TextTrimming="CharacterEllipsis"
                                        ToolTipService.ToolTip="{x:Bind}" />
@@ -103,17 +99,15 @@
                             VerticalAlignment="Top"
                             controls:WidthGroup.Group="{StaticResource FigureWidths}">
                     <TextBlock Text="{x:Bind SizeLabel}"
-                               Style="{StaticResource SecondaryText}"
-                               TextAlignment="Right"
-                               FontSize="12" />
+                               Style="{StaticResource Caption}"
+                               TextAlignment="Right" />
 
                     <!-- Text, never colour alone (§6.5). No automation name, because one would replace
                          the value a screen reader announces; the text already says "ago". -->
                     <TextBlock Text="{x:Bind AgeLabel}"
                                Visibility="{x:Bind HasAge}"
-                               Style="{StaticResource SecondaryText}"
-                               TextAlignment="Right"
-                               FontSize="12" />
+                               Style="{StaticResource Caption}"
+                               TextAlignment="Right" />
                 </StackPanel>
             </Grid>
         </DataTemplate>
@@ -129,7 +123,7 @@
                              Click="OnBackClicked"
                              AutomationProperties.Name="Back to every location">
                 <StackPanel Orientation="Horizontal" Spacing="6">
-                    <FontIcon Glyph="&#xE72B;" FontSize="12" AutomationProperties.AccessibilityView="Raw" />
+                    <FontIcon Glyph="&#xE72B;" FontSize="{StaticResource GlyphSizeCaption}" AutomationProperties.AccessibilityView="Raw" />
                     <TextBlock Text="All locations" />
                 </StackPanel>
             </HyperlinkButton>
@@ -137,7 +131,6 @@
             <TextBlock Grid.Column="1"
                        Text="{x:Bind ViewModel.Row.Name}"
                        Style="{StaticResource SectionHeading}"
-                       FontSize="15"
                        VerticalAlignment="Center" />
 
             <!-- Tier is text on a tinted chip, never colour alone (§6.5), with its explanation on the
@@ -170,8 +163,7 @@
         <TextBlock Grid.Row="1"
                    Padding="16,0"
                    Text="{x:Bind ViewModel.Row.WhatHappensOnNextUse}"
-                   Style="{StaticResource SecondaryText}"
-                   FontSize="13" />
+                   Style="{StaticResource SecondaryText}" />
 
         <StackPanel Grid.Row="2" Padding="16,0" Spacing="4">
             <TextBox x:Name="SearchBox"
@@ -183,9 +175,8 @@
 
             <TextBlock Text="{x:Bind ViewModel.HiddenSelectionLabel, Mode=OneWay}"
                        Visibility="{x:Bind ViewModel.HasHiddenSelection, Mode=OneWay}"
-                       Style="{StaticResource SecondaryText}"
-                       FontWeight="SemiBold"
-                       FontSize="12" />
+                       Style="{StaticResource Caption}"
+                       FontWeight="SemiBold" />
         </StackPanel>
 
         <!-- The column headings, laid out on the item row's own columns so each heading stands over
@@ -264,19 +255,18 @@
                                               Command="{x:Bind ToggleCommand}"
                                               AutomationProperties.Name="{x:Bind ToggleName}" />
 
-                                    <!-- Sizes set here, because a list header's own style sets a
-                                         heading-sized font that every text inside it inherits. -->
+                                    <!-- Each text styled here, because a list header's own style sets
+                                         a heading-sized font that every text inside it inherits. -->
                                     <TextBlock Grid.Column="1"
                                                Text="{x:Bind Title}"
-                                               FontSize="14"
-                                               FontWeight="SemiBold"
+                                               Style="{StaticResource BodyStrongTextBlockStyle}"
+                                               TextWrapping="NoWrap"
                                                VerticalAlignment="Center"
                                                TextTrimming="CharacterEllipsis" />
 
                                     <TextBlock Grid.Column="2"
                                                Text="{x:Bind Summary, Mode=OneWay}"
-                                               Style="{StaticResource SecondaryText}"
-                                               FontSize="12"
+                                               Style="{StaticResource Caption}"
                                                TextWrapping="NoWrap"
                                                VerticalAlignment="Center" />
                                 </Grid>

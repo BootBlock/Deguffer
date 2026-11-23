@@ -57,6 +57,8 @@ internal static class ShellMarkup
 
     public static bool IsPressable(XElement element) => Pressable.Contains(element.Name.LocalName);
 
+    public static bool IsIcon(string elementName) => Icons.Contains(elementName);
+
     /// <summary>
     /// A pressable control whose only content is a glyph, so nothing on screen names it and its
     /// accessible name and tooltip are the whole of what it says.

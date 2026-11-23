@@ -32,7 +32,7 @@
         <!-- A small glyph before a line of reasons or a note, so a row that says something stands
              out from one that does not before either is read. -->
         <Style x:Key="LineGlyph" TargetType="FontIcon">
-            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontSize" Value="{StaticResource GlyphSizeCaption}" />
             <Setter Property="Margin" Value="0,3,0,0" />
             <Setter Property="VerticalAlignment" Value="Top" />
             <Setter Property="AutomationProperties.AccessibilityView" Value="Raw" />
@@ -106,7 +106,7 @@
                               Visibility="{x:Bind HasReasons, Mode=OneWay}">
                             <FontIcon Glyph="&#xE946;" Style="{StaticResource LineGlyph}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             <TextBlock Grid.Column="1" TextWrapping="Wrap" Text="{x:Bind Reasons, Mode=OneWay}"
-                                       Style="{StaticResource SecondaryText}" FontSize="12"
+                                       Style="{StaticResource Caption}"
                                        AutomationProperties.AccessibilityView="Raw" />
                         </Grid>
                         <Grid Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="4" ColumnSpacing="6" ColumnDefinitions="Auto,*"
@@ -139,14 +139,14 @@
                           AutomationProperties.Name="{x:Bind Description, Mode=OneWay}">
                         <Border Width="40" Height="40" CornerRadius="6" VerticalAlignment="Top"
                                 Background="{ThemeResource ControlAltFillColorSecondaryBrush}">
-                            <FontIcon Glyph="{x:Bind Glyph}" FontSize="20"
+                            <FontIcon Glyph="{x:Bind Glyph}" FontSize="{StaticResource GlyphSizeLarge}"
                                       Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
                                       AutomationProperties.AccessibilityView="Raw" />
                         </Border>
 
                         <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
                             <StackPanel Orientation="Horizontal" Spacing="10">
-                                <TextBlock Text="{x:Bind Name}" Style="{StaticResource BodyStrongTextBlockStyle}" FontSize="15"
+                                <TextBlock Text="{x:Bind Name}" Style="{StaticResource BodyStrongTextBlockStyle}"
                                            TextTrimming="CharacterEllipsis" IsTextSelectionEnabled="True"
                                            AutomationProperties.AccessibilityView="Raw" />
                                 <ContentControl Content="{x:Bind MarkedCount, Mode=OneWay}" Style="{StaticResource MarkedChip}"
@@ -161,7 +161,7 @@
                         </StackPanel>
 
                         <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                            <TextBlock Text="{x:Bind Freeable}" Style="{StaticResource Figure}" FontSize="16" HorizontalAlignment="Right"
+                            <TextBlock Text="{x:Bind Freeable}" Style="{StaticResource RowFigure}" HorizontalAlignment="Right"
                                        AutomationProperties.AccessibilityView="Raw" />
                             <TextBlock Text="in copies that could go" Style="{StaticResource FieldLabel}" HorizontalAlignment="Right"
                                        AutomationProperties.AccessibilityView="Raw" />
@@ -169,7 +169,7 @@
                     </Grid>
 
                     <TextBlock Text="{x:Bind Checksum}" Visibility="{x:Bind HasChecksum}" Margin="54,0,0,0"
-                               FontFamily="Cascadia Mono, Consolas" FontSize="11"
+                               FontFamily="Cascadia Mono, Consolas" Style="{StaticResource Caption}" TextWrapping="NoWrap"
                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                                TextTrimming="CharacterEllipsis" IsTextSelectionEnabled="True"
                                AutomationProperties.AccessibilityView="Raw" />
@@ -227,7 +227,7 @@
             <Setter Property="Padding" Value="0" />
             <Setter Property="MinHeight" Value="0" />
             <Setter Property="IsTabStop" Value="False" />
-            <Setter Property="FontSize" Value="{ThemeResource ControlContentThemeFontSize}" />
+            <Setter Property="FontSize" Value="{StaticResource BodyTextBlockFontSize}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListViewHeaderItem">
@@ -263,14 +263,14 @@
         <Border Grid.Row="1" Style="{StaticResource CardStyle}" Padding="0">
             <StackPanel>
                 <Grid Padding="16,12" ColumnSpacing="12" ColumnDefinitions="Auto,*,Auto,Auto">
-                    <FontIcon Glyph="&#xE721;" FontSize="20" VerticalAlignment="Center"
+                    <FontIcon Glyph="&#xE721;" FontSize="{StaticResource GlyphSizeLarge}" VerticalAlignment="Center"
                               Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
                               AutomationProperties.AccessibilityView="Raw" />
 
                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                         <TextBlock Text="Search" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                        <TextBlock Text="{x:Bind ViewModel.SetupSummary, Mode=OneWay}" Style="{StaticResource SecondaryText}"
-                                   FontSize="12" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                        <TextBlock Text="{x:Bind ViewModel.SetupSummary, Mode=OneWay}" Style="{StaticResource Caption}"
+                                   TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
                                    ToolTipService.ToolTip="{x:Bind ViewModel.SetupSummary, Mode=OneWay}" />
                     </StackPanel>
 
@@ -278,7 +278,7 @@
                                   IsChecked="{x:Bind ViewModel.IsSetupOpen, Mode=TwoWay}"
                                   AutomationProperties.Name="Show the search settings">
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xE713;" FontSize="14" />
+                            <FontIcon Glyph="&#xE713;" FontSize="{StaticResource GlyphSizeBody}" />
                             <TextBlock Text="Settings" />
                         </StackPanel>
                     </ToggleButton>
@@ -327,14 +327,14 @@
                                     <Button Grid.Column="1" Command="{x:Bind ViewModel.Locations.AddDriveCommand}"
                                             AutomationProperties.Name="Add drive">
                                         <StackPanel Orientation="Horizontal" Spacing="8">
-                                            <FontIcon Glyph="&#xEDA2;" FontSize="14" />
+                                            <FontIcon Glyph="&#xEDA2;" FontSize="{StaticResource GlyphSizeBody}" />
                                             <TextBlock Text="Add drive" />
                                         </StackPanel>
                                     </Button>
                                     <Button Grid.Column="2" Click="OnAddFolder"
                                             AutomationProperties.Name="Choose a folder to add">
                                         <StackPanel Orientation="Horizontal" Spacing="8">
-                                            <FontIcon Glyph="&#xE8F4;" FontSize="14" />
+                                            <FontIcon Glyph="&#xE8F4;" FontSize="{StaticResource GlyphSizeBody}" />
                                             <TextBlock Text="Add folder…" />
                                         </StackPanel>
                                     </Button>
@@ -350,7 +350,7 @@
                                         <DataTemplate x:DataType="vm:LocationRow">
                                             <Grid ColumnSpacing="12" ColumnDefinitions="Auto,*,Auto,Auto"
                                                   AutomationProperties.Name="{x:Bind Description, Mode=OneWay}">
-                                                <FontIcon Glyph="&#xE8B7;" FontSize="14" VerticalAlignment="Center"
+                                                <FontIcon Glyph="&#xE8B7;" FontSize="{StaticResource GlyphSizeBody}" VerticalAlignment="Center"
                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                           AutomationProperties.AccessibilityView="Raw" />
                                                 <TextBlock Grid.Column="1" Text="{x:Bind Path}" VerticalAlignment="Center"
@@ -364,7 +364,7 @@
                                                         Style="{StaticResource SubtleButtonStyle}"
                                                         AutomationProperties.Name="Remove this location"
                                                         ToolTipService.ToolTip="Remove this location from the search">
-                                                    <FontIcon Glyph="&#xE711;" FontSize="12" />
+                                                    <FontIcon Glyph="&#xE711;" FontSize="{StaticResource GlyphSizeCaption}" />
                                                 </Button>
                                             </Grid>
                                         </DataTemplate>
@@ -451,7 +451,7 @@
                           AutomationProperties.Name="{x:Bind ViewModel.NotesHeading, Mode=OneWay}">
                     <Expander.Header>
                         <StackPanel Orientation="Horizontal" Spacing="12">
-                            <FontIcon Glyph="&#xE946;" FontSize="16" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                            <FontIcon Glyph="&#xE946;" FontSize="{StaticResource GlyphSizeStandard}" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
                                       AutomationProperties.AccessibilityView="Raw" />
                             <TextBlock Text="{x:Bind ViewModel.NotesHeading, Mode=OneWay}" VerticalAlignment="Center" />
                         </StackPanel>
@@ -500,13 +500,13 @@
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="28" VerticalAlignment="Center">
                     <StackPanel Spacing="2">
-                        <TextBlock Text="{x:Bind ViewModel.Totals.Groups, Mode=OneWay}" Style="{StaticResource Figure}" FontSize="24"
+                        <TextBlock Text="{x:Bind ViewModel.Totals.Groups, Mode=OneWay}" Style="{StaticResource LargeFigure}"
                                    AutomationProperties.AccessibilityView="Raw" />
                         <TextBlock Text="{x:Bind ViewModel.Totals.GroupsLabel, Mode=OneWay}" Style="{StaticResource FieldLabel}"
                                    AutomationProperties.AccessibilityView="Raw" />
                     </StackPanel>
                     <StackPanel Spacing="2">
-                        <TextBlock Text="{x:Bind ViewModel.Totals.Files, Mode=OneWay}" Style="{StaticResource Figure}" FontSize="24"
+                        <TextBlock Text="{x:Bind ViewModel.Totals.Files, Mode=OneWay}" Style="{StaticResource LargeFigure}"
                                    AutomationProperties.AccessibilityView="Raw" />
                         <TextBlock Text="files in them" Style="{StaticResource FieldLabel}"
                                    AutomationProperties.AccessibilityView="Raw" />
@@ -516,9 +516,8 @@
                 <Border Grid.Column="3" Width="1" Margin="0,4" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
 
                 <StackPanel Grid.Column="4" Spacing="4" VerticalAlignment="Center">
-                    <TextBlock Text="{x:Bind ViewModel.Headline, Mode=OneWay}" Style="{StaticResource CardStatement}"
-                               Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                    <TextBlock Text="{x:Bind ViewModel.SpaceNote}" Style="{StaticResource SecondaryText}" FontSize="12" />
+                    <TextBlock Text="{x:Bind ViewModel.Headline, Mode=OneWay}" TextWrapping="Wrap" />
+                    <TextBlock Text="{x:Bind ViewModel.SpaceNote}" Style="{StaticResource Caption}" />
                 </StackPanel>
             </Grid>
         </Border>
@@ -535,7 +534,7 @@
                                 AutomationProperties.Name="Mark copies by a rule"
                                 ToolTipService.ToolTip="Mark copies in every group by a rule. It never removes anything, and every group keeps a copy that can be kept.">
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon Glyph="&#xE73A;" FontSize="14" />
+                        <FontIcon Glyph="&#xE73A;" FontSize="{StaticResource GlyphSizeBody}" />
                         <TextBlock Text="Mark" />
                     </StackPanel>
                     <DropDownButton.Flyout>
@@ -545,7 +544,7 @@
                 <Button Grid.Column="1" Command="{x:Bind ViewModel.Marking.ClearMarksCommand}"
                         AutomationProperties.Name="Clear marks">
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon Glyph="&#xE8E6;" FontSize="14" />
+                        <FontIcon Glyph="&#xE8E6;" FontSize="{StaticResource GlyphSizeBody}" />
                         <TextBlock Text="Clear marks" />
                     </StackPanel>
                 </Button>
@@ -553,7 +552,7 @@
                         AutomationProperties.Name="Save results…"
                         ToolTipService.ToolTip="Save every group as a CSV file where you choose: one row a copy, with its group, path, size, last-modified time and checksum. Deguffer keeps no other copy.">
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon Glyph="&#xE74E;" FontSize="14" />
+                        <FontIcon Glyph="&#xE74E;" FontSize="{StaticResource GlyphSizeBody}" />
                         <TextBlock Text="Save results…" />
                     </StackPanel>
                 </Button>
@@ -599,7 +598,7 @@
                               Width="18" Height="18" VerticalAlignment="Center" />
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="Marked" Style="{StaticResource FieldLabel}" />
-                    <TextBlock Text="{x:Bind ViewModel.Marking.MarkedFigure, Mode=OneWay}" Style="{StaticResource Figure}" FontSize="16" />
+                    <TextBlock Text="{x:Bind ViewModel.Marking.MarkedFigure, Mode=OneWay}" Style="{StaticResource Figure}" />
                 </StackPanel>
             </StackPanel>
 
@@ -617,7 +616,7 @@
                         AutomationProperties.Name="Move marked to Recycle Bin…"
                         ToolTipService.ToolTip="Lists every marked copy that would go, and moves them only once you confirm. Each is compared byte for byte with a copy that stays first.">
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon Glyph="&#xE74D;" FontSize="14" />
+                        <FontIcon Glyph="&#xE74D;" FontSize="{StaticResource GlyphSizeBody}" />
                         <TextBlock Text="Move marked to Recycle Bin…" />
                     </StackPanel>
                 </Button>

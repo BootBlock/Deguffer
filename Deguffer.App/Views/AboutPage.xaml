@@ -139,9 +139,8 @@
                 <Border Style="{StaticResource SolidCardStyle}" Margin="0,14,0,0">
                     <StackPanel Spacing="14">
                         <StackPanel Spacing="4">
-                            <TextBlock Text="The safety tiers" Style="{StaticResource SectionHeading}" FontSize="15" />
+                            <TextBlock Text="The safety tiers" Style="{StaticResource GroupHeading}" />
                             <TextBlock Style="{StaticResource SecondaryText}"
-                                       FontSize="13"
                                        Text="Every finding is classified before it is offered. Sizes are easy to compute; this classification is the part that takes knowledge, and it is what the tool is for." />
                         </StackPanel>
 
@@ -150,7 +149,7 @@
                                             AutomationProperties.Name="Regenerable cache"
                                             Style="{StaticResource TierChipRegenerableCache}"
                                             HorizontalAlignment="Left" />
-                            <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
+                            <TextBlock Style="{StaticResource SecondaryText}"
                                        Text="{x:Bind RegenerableCacheExplanation}" />
                         </StackPanel>
 
@@ -159,7 +158,7 @@
                                             AutomationProperties.Name="Regenerable, with cost"
                                             Style="{StaticResource TierChipRegenerableWithCost}"
                                             HorizontalAlignment="Left" />
-                            <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
+                            <TextBlock Style="{StaticResource SecondaryText}"
                                        Text="{x:Bind RegenerableWithCostExplanation}" />
                         </StackPanel>
 
@@ -168,7 +167,7 @@
                                             AutomationProperties.Name="User data"
                                             Style="{StaticResource TierChipUserData}"
                                             HorizontalAlignment="Left" />
-                            <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
+                            <TextBlock Style="{StaticResource SecondaryText}"
                                        Text="{x:Bind UserDataExplanation}" />
                         </StackPanel>
 
@@ -177,7 +176,7 @@
                                             AutomationProperties.Name="Do not touch"
                                             Style="{StaticResource TierChipDoNotTouch}"
                                             HorizontalAlignment="Left" />
-                            <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
+                            <TextBlock Style="{StaticResource SecondaryText}"
                                        Text="{x:Bind DoNotTouchExplanation}" />
                         </StackPanel>
                     </StackPanel>
@@ -185,27 +184,26 @@
 
                 <Border Style="{StaticResource SolidCardStyle}" Margin="0,14,0,0">
                     <StackPanel Spacing="10">
-                        <TextBlock Text="What it will not do" Style="{StaticResource SectionHeading}" FontSize="15" />
-                        <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
+                        <TextBlock Text="What it will not do" Style="{StaticResource GroupHeading}" />
+                        <TextBlock Style="{StaticResource SecondaryText}"
                                    Text="Nothing is removed until a scan has shown you what it is, and the exact steps are inspectable on every row before you agree to them." />
-                        <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
+                        <TextBlock Style="{StaticResource SecondaryText}"
                                    Text="It asks a tool to clear its own cache wherever the tool offers that, rather than deleting the folder behind its back." />
-                        <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
+                        <TextBlock Style="{StaticResource SecondaryText}"
                                    Text="It never targets a tool's root directory — only the children it recognises, because configuration and credentials routinely sit beside the cache." />
-                        <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
+                        <TextBlock Style="{StaticResource SecondaryText}"
                                    Text="After every run it checks that the paths it promised to protect are still there, and says so in the status line either way." />
 
                         <!-- §8: undo is not viable at these sizes. Saying so plainly is the alternative
                              to a UI that quietly implies it might be. -->
                         <TextBlock Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                    TextWrapping="Wrap"
-                                   FontSize="13"
                                    Text="There is no undo. What you agree to is removed outright rather than moved anywhere first, so it is gone." />
                     </StackPanel>
                 </Border>
 
                 <Border Style="{StaticResource SolidCardStyle}" Margin="0,14,0,0">
-                    <TextBlock Style="{StaticResource SecondaryText}" FontSize="13"
+                    <TextBlock Style="{StaticResource SecondaryText}"
                                Text="Open source under the MIT licence." />
                 </Border>
             </StackPanel>
