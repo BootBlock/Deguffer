@@ -75,8 +75,8 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
         out bool withheldRecent,
         out IReadOnlyList<IReadOnlyList<string>> mailStores)
     {
-        // These overloads serve a caller with one small question and nothing to cancel. A measurement
-        // a caller can abandon asks the overload below, with its token.
+        // These overloads take no token, so a measurement a caller may abandon asks the overload
+        // below with its own.
         if (TryMeasure(relativePath, [keep], keepRoot, leftOut, CancellationToken.None) is not { } measured)
         {
             withheldRecent = false;

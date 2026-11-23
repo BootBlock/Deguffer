@@ -9,7 +9,7 @@ namespace Deguffer.Core.Tests;
 /// A pass over a volume's table from a folder near its root steps through millions of nodes, so a
 /// scan or preview the user cancels must stop it part-way rather than wait for an answer nobody will
 /// read. The check is paid once a stride of nodes, so each tree here is a few strides deep, and a
-/// run that is not cancelled must total exactly what it did before the check was added.
+/// run that is not cancelled totals every file.
 /// </summary>
 public sealed class MftPassCancellationTests
 {

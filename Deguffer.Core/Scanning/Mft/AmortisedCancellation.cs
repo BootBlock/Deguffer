@@ -6,8 +6,8 @@ namespace Deguffer.Core.Scanning.Mft;
 ///
 /// <para>A pass from a folder near the volume root steps through millions of nodes, so a check on
 /// every one would cost more than the step it guards, and a pass with none runs to its end after the
-/// caller has gone. One step is a few array reads, so the stride answers a cancellation within a
-/// millisecond or two.</para>
+/// caller has gone. One step is a few array reads, so a stride is a small part of a pass that is
+/// millions of steps long.</para>
 /// </summary>
 internal struct AmortisedCancellation(CancellationToken ct)
 {
