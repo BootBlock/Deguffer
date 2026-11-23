@@ -194,6 +194,42 @@ public sealed class CloudLocalCopiesProviderTests : IDisposable
         Assert.Contains(plan.ProtectedPaths, p => p.Path == other);
     }
 
+    /// <summary>
+    /// Several roots, whose running ones are walked together: each running root still gets a step of
+    /// its own files, the notes follow the roots in the order Windows listed them, and every root,
+    /// walked or not, is protected (§5.6).
+    /// </summary>
+    [Fact]
+    public async Task EachRootKeepsItsOwnStepAndNotesInTheOrderListed()
+    {
+        var other = _temp.CreateDirectory("Elsewhere Drive");
+        var work = _temp.CreateDirectory("OneDrive - Contoso");
+        var stopped = _temp.CreateDirectory("OneDrive - Fabrikam");
+        _cloud
+            .File(At("goes.txt"), onDisk: 100)
+            .Root("ElsewhereDrive!S-1-5-21-1111111111-2222222222-3333333333-1001!Me", other, "Elsewhere Drive")
+            .File(Path.Combine(other, "theirs.txt"), onDisk: 100)
+            .Root("OneDrive!S-1-5-21-1111111111-2222222222-3333333333-1001!Business1", work, "OneDrive - Contoso")
+            .File(Path.Combine(work, "budget.xlsx"), onDisk: 2_000)
+            .File(Path.Combine(work, "kept.pptx"), onDisk: 300, pin: PinState.Pinned)
+            .Root("OneDrive!S-1-5-21-1111111111-2222222222-3333333333-1001!Business2", stopped, "OneDrive - Fabrikam")
+            .File(Path.Combine(stopped, "idle.docx"), onDisk: 500);
+        _cloud.Stop(stopped);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        var steps = plan.Steps.Cast<ReleaseLocalCopiesStep>().ToList();
+        Assert.Equal([_root, work], steps.Select(step => step.SyncRoot));
+        Assert.Equal([At("goes.txt")], steps[0].Files.Select(f => f.Path));
+        Assert.Equal([Path.Combine(work, "budget.xlsx")], steps[1].Files.Select(f => f.Path));
+        Assert.Collection(
+            plan.Notes,
+            note => Assert.Contains("Elsewhere Drive is kept in step by ElsewhereDrive", note.Message, StringComparison.Ordinal),
+            note => Assert.Contains("in OneDrive - Contoso you chose to always keep", note.Message, StringComparison.Ordinal),
+            note => Assert.Contains("from OneDrive - Fabrikam. Start it", note.Message, StringComparison.Ordinal));
+        Assert.All([_root, other, work, stopped], root => Assert.Contains(plan.ProtectedPaths, p => p.Path == root));
+    }
+
     [Fact]
     public async Task IsNotPresentWhereOnlyAnUnrecognisedSyncAppHasARoot()
     {

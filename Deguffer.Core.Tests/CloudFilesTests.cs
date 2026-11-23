@@ -360,7 +360,7 @@ public sealed class CloudFilesTests : IDisposable
 
         Assert.Equal(PinState.Unspecified, _cloud.Read(_root.At("Kept", "inside.bin")).Placeholder!.Pin);
 
-        var selection = PlaceholderWalk.Of(_cloud, _root.Path, MinimumAge.Off, WalkTuning.Default.Threads, CancellationToken.None);
+        var selection = Assert.Single(PlaceholderWalk.Of(_cloud, [_root.Path], MinimumAge.Off, WalkTuning.Default.Threads, CancellationToken.None));
 
         Assert.Equal([goes], selection.Files.Select(f => f.Path), StringComparer.OrdinalIgnoreCase);
         Assert.Equal(1, selection.HeldFor(HeldBack.Pinned).Files);
