@@ -10,7 +10,8 @@ namespace Deguffer.Core.Tests;
 /// </summary>
 internal sealed class DeclaringRow(
     Func<IReadOnlyList<ToolRoot>> roots,
-    Func<CancellationToken, Task<IReadOnlyList<ToolRoot>>>? discover = null)
+    Func<CancellationToken, Task<IReadOnlyList<ToolRoot>>>? discover = null,
+    ToolRootScope? scope = null)
     : ICleanupProvider
 {
     public Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
@@ -45,6 +46,9 @@ internal sealed class DeclaringRow(
     public bool IsAwaitingSourceFolders => false;
 
     public IReadOnlyList<ToolRoot> ToolRoots => roots();
+
+    /// <summary>Anywhere unless a test narrows it, so a test that states only roots has them read for every question.</summary>
+    public ToolRootScope ToolRootScope { get; } = scope ?? ToolRootScope.Anywhere;
 
     public Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
         discover?.Invoke(ct) ?? Task.FromResult<IReadOnlyList<ToolRoot>>([]);

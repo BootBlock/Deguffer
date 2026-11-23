@@ -44,42 +44,6 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 public sealed class PoetryCacheProvider : CleanupProviderBase
 {
-    /// <summary>
-    /// The only children of Poetry's cache directory this provider recognises. Anything else is
-    /// Tier 4 by construction — see <see cref="DisposableChildSet"/>.
-    ///
-    /// <para><c>virtualenvs</c> is declared rather than omitted. An unrecognised child is already
-    /// left alone, but it is left alone under a sentence saying Deguffer did not know what it was,
-    /// and this is the one child whose contents the user most needs named.</para>
-    ///
-    /// <para><c>cache</c> is Tier 4 for a different reason, and it is not a claim that its contents
-    /// are precious. §5.1 leaves Poetry's own command in charge of what is inside it, and that
-    /// command empties the caches rather than removing the folder — so the folder is one this
-    /// provider's §5.6 list asserts survived every run. §7.1 reads this same table, so classifying
-    /// it as disposable here would let Explore remove a path the Storage page had just certified
-    /// must survive, and the two routes would disagree about one directory.</para>
-    /// </summary>
-    public static readonly DisposableChildSet DisposableChildren = new(
-    [
-        new ChildClassification(
-            "artifacts",
-            SafetyTier.RegenerableCache,
-            "Package archives Poetry downloaded, and the wheels it built from source distributions. "
-            + "The next install fetches or rebuilds them."),
-        new ChildClassification(
-            "cache",
-            SafetyTier.DoNotTouch,
-            "The folder holding the package metadata Poetry caches per repository. The caches inside "
-            + "it are emptied by Poetry's own command rather than by removing the folder."),
-        new ChildClassification(
-            "virtualenvs",
-            SafetyTier.DoNotTouch,
-            "Every virtual environment Poetry has created, for every project on this machine. Each "
-            + "one is a full dependency install rather than a cache, so none of them is ever removed."),
-    ]);
-
-    private static readonly IReadOnlyList<CacheLevel> Levels = [new CacheLevel(string.Empty, DisposableChildren)];
-
     /// <summary>No paths measured, for the routes that produce no command step at all.</summary>
     private static readonly ScanBatch NothingMeasured = new([], FallbackReason.None, [], [], [], [], []);
 
@@ -172,11 +136,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
     [
-        ToolRoot.Of(
-            DefaultCacheRoot,
-            "This is Poetry's cache folder. Deguffer clears the caches inside it and nothing else, "
-            + "because every virtual environment Poetry has created sits in here beside them.",
-            DisposableChildren),
+        PoetryCacheLayout.CacheRoot(DefaultCacheRoot),
 
         new ToolRoot(
             LocalRoot,
@@ -190,6 +150,12 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
             + "repositories. Deguffer never removes it.",
             static _ => false),
     ];
+
+    /// <summary>
+    /// Poetry's two profile folders, which hold every default root above. A relocated cache is
+    /// declared only by <see cref="DiscoverToolRootsAsync"/>, which this scope does not bound.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(LocalRoot, RoamingRoot);
 
     /// <summary>
     /// The two directories Poetry reports. <c>cache-dir</c> and <c>virtualenvs.path</c> are both
@@ -215,11 +181,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
 
         return
         [
-            ToolRoot.Of(
-                cacheRoot.Path,
-                "This is Poetry's cache folder. Deguffer clears the caches inside it and nothing "
-                + "else, because every virtual environment Poetry has created sits in here beside them.",
-                DisposableChildren),
+            PoetryCacheLayout.CacheRoot(cacheRoot.Path),
 
             new ToolRoot(
                 environments.Path,
@@ -247,7 +209,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
 
         return
         [
-            .. roots.Distinct(StringComparer.OrdinalIgnoreCase).SelectMany(root => DisposableChildren.DisposableNames
+            .. roots.Distinct(StringComparer.OrdinalIgnoreCase).SelectMany(root => PoetryCacheLayout.Children.DisposableNames
                 .Select(child => CleanedPlace.Whole(Path.Combine(root, child)))
                 .Append(CleanedPlace.Whole(Path.Combine(root, "cache", "repositories")))),
         ];
@@ -450,7 +412,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
         IReadOnlyList<PlanNote> Warnings)
         CollectTargets(string cacheRoot, string environments, CancellationToken ct)
     {
-        var walk = CacheLevelWalk.Under(Levels, cacheRoot, ct);
+        var walk = CacheLevelWalk.Under(PoetryCacheLayout.Levels, cacheRoot, ct);
         var targets = new List<DeletionTarget>();
         var withheld = new List<(string Path, string Reason)>();
         var warnings = new List<PlanNote>();

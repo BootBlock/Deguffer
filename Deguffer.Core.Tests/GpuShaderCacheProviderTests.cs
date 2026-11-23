@@ -296,9 +296,9 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
     {
         var provider = CreateProvider();
 
-        foreach (var children in GpuShaderCacheProvider.Roots
+        foreach (var children in GpuShaderCacheLayout.Roots
                      .Select(root => root.Children)
-                     .Append(GpuShaderCacheProvider.PackagedNvidia.Children))
+                     .Append(GpuShaderCacheLayout.PackagedNvidia.Children))
         {
             foreach (var name in children.DisposableNames)
             {
@@ -317,7 +317,7 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
         CreateCache(Path.Combine("NVIDIA", "DXCache"));
         var sibling = CreateCache(Path.Combine("NVIDIA", "Telemetry"));
 
-        var nvidia = GpuShaderCacheProvider.Roots
+        var nvidia = GpuShaderCacheLayout.Roots
             .Single(r => r.DirectoryName == "NVIDIA" && r.Area == ProfileArea.LocalAppData);
         Assert.Equal(SafetyTier.DoNotTouch, nvidia.Children.Classify("Telemetry").Tier);
 
@@ -377,7 +377,7 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
         var amdGlCache = CreateCache(Path.Combine("AMD", "GLCache"));
         CreateCache(Path.Combine("AMD", "DxCache"));
 
-        var amd = GpuShaderCacheProvider.Roots.Single(r => r.DirectoryName == "AMD");
+        var amd = GpuShaderCacheLayout.Roots.Single(r => r.DirectoryName == "AMD");
         Assert.Equal(SafetyTier.DoNotTouch, amd.Children.Classify("GLCache").Tier);
 
         var plan = await CreateProvider().PlanAsync();
@@ -397,7 +397,7 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
         var cache = CreateCache(Path.Combine("AMD", name));
         var sibling = CreateCache(Path.Combine("AMD", "Radeon"));
 
-        var amd = GpuShaderCacheProvider.Roots.Single(r => r.DirectoryName == "AMD");
+        var amd = GpuShaderCacheLayout.Roots.Single(r => r.DirectoryName == "AMD");
         Assert.Equal(SafetyTier.DoNotTouch, amd.Children.Classify("Radeon").Tier);
 
         var provider = CreateProvider();
@@ -623,7 +623,7 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
         CreateLocalLowCache(Path.Combine("NVIDIA", "DXCache"));
         var sibling = CreateLocalLowCache(Path.Combine("NVIDIA", "Telemetry"));
 
-        var root = GpuShaderCacheProvider.Roots
+        var root = GpuShaderCacheLayout.Roots
             .Single(r => r.DirectoryName == "NVIDIA" && r.Area == ProfileArea.LocalLowAppData);
         Assert.Equal(SafetyTier.DoNotTouch, root.Children.Classify("Telemetry").Tier);
 
@@ -683,7 +683,7 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
         var glCache = CreateLocalLowCache(Path.Combine("NVIDIA", "GLCache"));
         CreateLocalLowCache(Path.Combine("NVIDIA", "DXCache"));
 
-        var root = GpuShaderCacheProvider.Roots
+        var root = GpuShaderCacheLayout.Roots
             .Single(r => r.DirectoryName == "NVIDIA" && r.Area == ProfileArea.LocalLowAppData);
         Assert.Equal(SafetyTier.DoNotTouch, root.Children.Classify("GLCache").Tier);
 
@@ -807,7 +807,7 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
         Assert.Equal(
             new[] { terminal, game }.Order(StringComparer.OrdinalIgnoreCase),
             plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
-        Assert.All(plan.Steps, step => Assert.Equal(GpuShaderCacheProvider.PackagedGroup, step.Group));
+        Assert.All(plan.Steps, step => Assert.Equal(GpuShaderCacheLayout.PackagedGroup, step.Group));
 
         foreach (var survivor in new[] { Container(GamePackage), Path.Combine(Container(GamePackage), "NVIDIA") })
         {
@@ -845,7 +845,7 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         Assert.Equal([glCache], plan.TargetedPaths);
-        Assert.All(plan.Steps, step => Assert.Equal(GpuShaderCacheProvider.PackagedGroup, step.Group));
+        Assert.All(plan.Steps, step => Assert.Equal(GpuShaderCacheLayout.PackagedGroup, step.Group));
 
         foreach (var survivor in new[] { Container(GamePackage), nvidia, sibling })
         {
@@ -871,7 +871,7 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
         CreatePackagedCache(TerminalPackage, "DXCache");
         var sibling = CreatePackagedCache(TerminalPackage, name);
 
-        Assert.Equal(SafetyTier.DoNotTouch, GpuShaderCacheProvider.PackagedNvidia.Children.Classify(name).Tier);
+        Assert.Equal(SafetyTier.DoNotTouch, GpuShaderCacheLayout.PackagedNvidia.Children.Classify(name).Tier);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();

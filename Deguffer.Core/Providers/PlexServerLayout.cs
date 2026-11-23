@@ -66,6 +66,15 @@ public static class PlexServerLayout
         "This is Plex Media Server's own folder. Its transcoder's leftovers are removed from the "
         + "Storage page, which leaves a film playing now alone, and nothing else here is a cache.";
 
+    /// <summary>
+    /// The data folder, the folder the transcoder setting names and the downloads folder, which hold
+    /// every root <see cref="Find"/> declares. Each is read from the registry, so none needs the disk.
+    /// </summary>
+    public static ToolRootScope Scope(IUserEnvironment environment) => ToolRootScope.Under(
+        DataFolder(LongPath.Configured(Recorded(environment, DataFolderValue)), environment),
+        Recorded(environment, TranscoderValue),
+        Recorded(environment, DownloadsValue));
+
     /// <param name="volumes">
     /// Asked every other path a folder and the downloads folder are reachable at, because a setting may
     /// name either through a letter <c>subst</c> made, or another mount of its volume.
@@ -75,7 +84,7 @@ public static class PlexServerLayout
         var notes = new List<PlanNote>();
         var withheld = false;
 
-        var data = Path.Combine(Setting(DataFolderValue, "its data").Folder ?? environment.LocalAppData, FolderName);
+        var data = DataFolder(Setting(DataFolderValue, "its data").Folder, environment);
         var transcoder = Setting(TranscoderValue, "its transcoder");
         var downloads = Setting(DownloadsValue, "preparing downloads");
         var downloadFolder = downloads.Folder is { } named ? ReachedFolder.At(named, volumes) : null;
@@ -169,7 +178,7 @@ public static class PlexServerLayout
         // may be using a folder nobody here can name.
         (string? Folder, bool Unplaced) Setting(string value, string purpose)
         {
-            var recorded = environment.UserHive.ReadValue(RegistryKey, value);
+            var recorded = Recorded(environment, value);
 
             if (string.IsNullOrWhiteSpace(recorded))
             {
@@ -190,4 +199,11 @@ public static class PlexServerLayout
             return (null, true);
         }
     }
+
+    /// <summary>Plex's own folder, in the folder its settings name or in the local application data.</summary>
+    private static string DataFolder(string? named, IUserEnvironment environment) =>
+        Path.Combine(named ?? environment.LocalAppData, FolderName);
+
+    private static string? Recorded(IUserEnvironment environment, string value) =>
+        environment.UserHive.ReadValue(RegistryKey, value);
 }

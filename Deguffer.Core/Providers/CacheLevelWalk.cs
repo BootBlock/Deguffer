@@ -199,7 +199,7 @@ public readonly record struct LevelWalk(
     /// the walk exists and awaits it only after it has measured.
     ///
     /// <para>Asked while the plan is built, never during the walk. A row may declare what its own
-    /// walk found, as Claude Code's leftovers row does, so reading every row's declarations from
+    /// walk found, as Claude Code's leftovers row does, so reading the rows' declarations from
     /// inside a walk would ask that row for a declaration it is still building.</para>
     /// </summary>
     public Task<IReadOnlyList<(string Path, string Reason)>> SurvivorsAsync(RowDeclarations declarations, CancellationToken ct)

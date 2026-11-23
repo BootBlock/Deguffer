@@ -123,6 +123,13 @@ public sealed partial class ElectronCacheProvider : CleanupProviderBase
             : [];
 
     /// <summary>
+    /// The default cache and whatever <see cref="CacheVariable"/> names, taken as it stands: the checks
+    /// that decline a folder read the disk, and covering a declined one is only wider.
+    /// </summary>
+    public override ToolRootScope ToolRootScope =>
+        ToolRootScope.Under(Environment.GetEnvironmentVariable(CacheVariable), DefaultRoot);
+
+    /// <summary>
     /// The cache the variable names and the default one, because the variable can be unset again after
     /// a duplicate search has read it. Each whole: a download is any folder with a 64-character name,
     /// which no narrower place can name.

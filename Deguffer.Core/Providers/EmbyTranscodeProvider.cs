@@ -54,4 +54,10 @@ public sealed class EmbyTranscodeProvider : MediaServerTranscodeProvider
     protected override IReadOnlyList<string> ConflictingProcessNames => EmbyServerLayout.ProcessNames;
 
     protected override MediaServerLayout FindLayout() => EmbyServerLayout.Find(Environment, Volumes);
+
+    /// <summary>
+    /// Anywhere, because a transcoder folder Emby's own <c>encoding.xml</c> moves may be on any drive,
+    /// and only reading that file says where.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Anywhere;
 }

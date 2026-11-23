@@ -560,13 +560,13 @@ path. In the clean, plans run strictly in turn, each after the last one's verifi
 | #1066, #1067, #1068, #1071 | The hard-link scanner without the index, PlatformIO's plan-time walk, Poetry's two measurements in turn, and cloud sync roots walked in turn. |
 | #1073, #1069, #1075 | A second DISM analysis with both component-store rows, synchronous registered-storage readers, and the registered read and the residue probe in turn. #1069 and #1075 are `safety`. |
 | #1070 | Hyper-V's WMI calls in series. Measured before it is built. |
+| #1058 | A question about one folder waited for every row's declaration, so Gradle waited on Claude Code's conversations and the Chromium discovery. `safety`. Done: each row states, without touching the disk, the folders its roots can lie under (`ToolRootScope`), and `RowDeclarations` reads a row only for a question its scope covers, once per pass, no more rows at once than a pass plans. `ToolRootScopeTests` holds every shipped row's roots inside its scope on a bare, a populated and a moved profile, and with each moving variable set alone. In `Deguffer.Benchmark plan --runs 6` on a busy machine, the first pass's Gradle row ended at 0.71 s against 79.4 s before, beside the Chromium and Claude Code rows, and its later runs took a median of 0.27 s against 1.03 s. Coursier, Ivy, Kopia, Restic, Poetry, Pipenv and Dart ended by 1.4 s, before any Chromium row. The pass totals differ by more than the machine's noise between the two sessions, so they are not compared. |
 | #1074 | A Disk Cleanup look beside `GetSpaceUsed` (`safety`). Measured elevated over an uncached 4 GB `Windows.old`: the look took 2.2-4.4 s and the handler's measurement 22.6-63.5 s alone, and the two at once took 25.8-44.0 s against 36.7-66.6 s in turn in five pairs of six, and 32.9 s against 24.8 s in the sixth. Warm, one pair took 19.3 s against 19.7 s and the other 26.5 s against 21.8 s, on a loaded machine. Done: the handler measures while the look runs and purges only once the look has passed. A refused look lets it go without purging and waits for it to return, which can take the rest of its measurement: told to stop 3 s in, it returned 22.2 s after it started. |
 
 ### Waiting on a decision
 
 | Issue | The decision |
 | --- | --- |
-| #1058 | Let each row state where its declarations can lie, so a question waits only for those rows. Changes which rows decide what §5.6 asserts survived. `safety`. |
 | #1072 | Overlap a clean's removal plans and verify each after every overlapping plan has ended. Some verdicts change from "Survived" to "MISSING". `safety`. |
 
 ### Added to open issues

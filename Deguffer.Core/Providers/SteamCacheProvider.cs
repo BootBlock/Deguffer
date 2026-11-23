@@ -133,6 +133,12 @@ public sealed class SteamCacheProvider : CleanupProviderBase
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots.Get(DeclareToolRoots);
 
+    /// <summary>
+    /// Every root above is Steam's folder in the profile or inside the folder Windows records Steam
+    /// as installed in, whether or not Steam turns out to be there.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(_discovery.LocalRoot, _discovery.RecordedRoot);
+
     public override void InvalidateCaches()
     {
         _discovery.Invalidate();

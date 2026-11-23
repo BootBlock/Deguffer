@@ -220,6 +220,12 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
         ]);
 
     /// <summary>
+    /// Every root above is an editor's folder, or below one, and the discovery finds those folders
+    /// only directly under the one application-data root it lists.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(_discovery.Root);
+
+    /// <summary>
     /// Each cache this row recognises in the folder of every editor the discovery finds, whether or not
     /// one is there today, and the web cache in every webview partition, named by its own name because
     /// a partition is numbered and a new one appears with each webview. The settings, workspace state
@@ -287,7 +293,7 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
         }
 
         // Every editor is walked, and its survivors asked, before either is awaited: the measurement needs
-        // only the targets, and the first survivors question in a pass reads every row's declarations.
+        // only the targets, and a survivors question reads every row that can declare its folder.
         List<(LevelWalk Walk, Task<IReadOnlyList<(string Path, string Reason)>> Sparing)> walks = [];
 
         foreach (var editor in editors)

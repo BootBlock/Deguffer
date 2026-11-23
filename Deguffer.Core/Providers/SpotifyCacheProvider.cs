@@ -126,6 +126,12 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
     public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots.Get(DeclareToolRoots);
 
     /// <summary>
+    /// Anywhere, because a moved storage location is declared wherever Spotify's settings file
+    /// points, on any drive, and only reading that file says where.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Anywhere;
+
+    /// <summary>
     /// The settings files are read once per planning pass (G4). Presence, planning and the §5.2
     /// declarations all ask the same question of them.
     /// </summary>

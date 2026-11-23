@@ -83,9 +83,18 @@ public sealed class ScoopCacheProvider : CleanupProviderBase
     /// <summary>Scoop's root where nothing has moved it.</summary>
     private string DefaultRoot => Path.Combine(Environment.UserProfile, "scoop");
 
+    /// <summary>Scoop's settings file where nothing has moved it.</summary>
+    private string DefaultConfigFile => Path.Combine(Environment.UserProfile, ".config", "scoop", "config.json");
+
     /// <summary>§5.2 as §7.1 needs it read from outside, at the default locations.</summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
-        ScoopToolRoots.Of(DefaultRoot, Path.Combine(DefaultRoot, "cache"), [Path.Combine(Environment.UserProfile, ".config", "scoop", "config.json")]);
+        ScoopToolRoots.Of(DefaultRoot, Path.Combine(DefaultRoot, "cache"), [DefaultConfigFile]);
+
+    /// <summary>
+    /// The default root, which holds the cache, and the default settings file. The folders a moved Scoop
+    /// uses are declared only by <see cref="DiscoverToolRootsAsync"/>, which this scope does not bound.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(DefaultRoot, DefaultConfigFile);
 
     /// <summary>The same declaration at the folders the running Scoop uses.</summary>
     public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>

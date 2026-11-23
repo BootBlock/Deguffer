@@ -193,6 +193,12 @@ public sealed class FileHistoryProvider : CleanupProviderBase
     }
 
     /// <summary>
+    /// Anywhere, because the targets are named only in the configuration's XML, and a target may be
+    /// any drive or share, lettered or not. No folder can bound them without reading that file.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Anywhere;
+
+    /// <summary>
     /// Presence is File History being set up for this account, never <c>FhManagew.exe</c> existing:
     /// the command ships with Windows whether or not the feature was ever used, so reading it as a
     /// hit would report a source on every machine and plan nothing on almost all of them.

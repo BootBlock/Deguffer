@@ -1,4 +1,3 @@
-using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -15,10 +14,10 @@ namespace Deguffer.Core.Providers;
 /// it holding none.</para>
 ///
 /// <para><b>Several rows are read at once.</b> Many rows build theirs from a walk or a survey, and
-/// read one after another those ran in series, before Explore's first verdict and
-/// before the first plan of a pass could ask what other rows offer. Each row's memo is shared by
-/// every thread that asks it (<see cref="PassMemo{T}"/>), so two rows reading one discovery at once
-/// walk it once.</para>
+/// read one after another those ran in series, before Explore's first verdict and before a plan's
+/// question about what other rows offer was answered. So Explore and <see cref="RowDeclarations"/>
+/// each read their rows side by side. Each row's memo is shared by every thread that asks it
+/// (<see cref="PassMemo{T}"/>), so two rows reading one discovery at once walk it once.</para>
 /// </summary>
 internal static class DeclaredRoots
 {
@@ -31,7 +30,7 @@ internal static class DeclaredRoots
     /// </summary>
     public static bool IsBeingRead => Reading.Value;
 
-    /// <summary>The roots <paramref name="row"/> declares.</summary>
+    /// <summary>The roots <paramref name="row"/> declares, read on a thread of the walk's own.</summary>
     /// <param name="ct">
     /// Checked before the row is read. A row's declaration is a property, and cannot be stopped
     /// part-way. From a <see cref="Parallel.ForAsync{T}(T, T, ParallelOptions, Func{T, CancellationToken, ValueTask})"/>
@@ -47,25 +46,4 @@ internal static class DeclaredRoots
                 return row.ToolRoots;
             },
             ct);
-
-    /// <summary>
-    /// The roots every one of <paramref name="rows"/> declares, in their order, read as many at once
-    /// as a pass plans (G4): each read holds a thread of its own for as long as its row walks.
-    /// </summary>
-    /// <param name="ct">
-    /// Checked before each row is read. A row already being read is waited for.
-    /// </param>
-    public static async Task<IReadOnlyList<ToolRoot>> ReadAsync(IReadOnlyList<ICleanupProvider> rows, CancellationToken ct)
-    {
-        var declared = new IReadOnlyList<ToolRoot>[rows.Count];
-
-        await Parallel.ForAsync(
-            0,
-            rows.Count,
-            new ParallelOptions { MaxDegreeOfParallelism = CleanupPlanner.ProvidersAtOnce, CancellationToken = ct },
-            async (index, _) => declared[index] = await ReadAsync(rows[index], ct).ConfigureAwait(false))
-            .ConfigureAwait(false);
-
-        return [.. declared.SelectMany(roots => roots)];
-    }
 }
