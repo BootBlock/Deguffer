@@ -77,8 +77,8 @@
             <!--
                 The spacing scale: one resource per role, each a multiple of Fluent's 4 px grid, so
                 edges and baselines line up from page to page and a role is changed in one place.
-                A page takes the role's resource; a literal is for a one-off, and still sits on the
-                grid. DesignSpacingTests holds every value, here and on the pages, to the grid.
+                Markup that sets one of these roles takes its resource, and any literal, a role's or
+                a one-off's, still sits on the grid. DesignSpacingTests holds every value, here and on the pages, to the grid.
 
                 Label gap: between a line and the line that qualifies it (a name and its path, a
                 title and its description, a figure and its label). Control gap: between neighbours

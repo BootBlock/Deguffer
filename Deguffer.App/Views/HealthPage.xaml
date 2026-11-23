@@ -127,7 +127,7 @@
                                ItemTemplate="{StaticResource FactTemplate}">
                     <ItemsRepeater.Layout>
                         <UniformGridLayout ItemsStretch="Fill" MinItemWidth="200" MinItemHeight="44"
-                                           MinColumnSpacing="16" MinRowSpacing="6" />
+                                           MinColumnSpacing="16" MinRowSpacing="8" />
                     </ItemsRepeater.Layout>
                 </ItemsRepeater>
 

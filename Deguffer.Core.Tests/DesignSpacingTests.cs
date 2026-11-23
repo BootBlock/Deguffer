@@ -17,7 +17,7 @@ namespace Deguffer.Core.Tests;
 /// </summary>
 public sealed class DesignSpacingTests
 {
-    private static readonly string[] Properties = ["Margin", "Padding", "Spacing", "RowSpacing", "ColumnSpacing"];
+    private static readonly string[] Properties = ["Margin", "Padding", "Spacing", "RowSpacing", "ColumnSpacing", "MinRowSpacing", "MinColumnSpacing"];
 
     private static readonly XName Key = XName.Get("Key", "http://schemas.microsoft.com/winfx/2006/xaml");
 
@@ -69,6 +69,17 @@ public sealed class DesignSpacingTests
         var declared = ApplicationResources().Keys.ToHashSet(StringComparer.Ordinal);
 
         Assert.All(OpticalCorrections.Keys, key => Assert.True(declared.Contains(key), $"{key} is listed as an optical correction but App.xaml declares no spacing resource by that name."));
+    }
+
+    /// <summary>A correction moved onto the grid is a role value like any other, so it leaves the list.</summary>
+    [Fact]
+    public void EveryListedOpticalCorrectionIsOffTheGrid()
+    {
+        var declared = ApplicationResources();
+
+        Assert.All(
+            OpticalCorrections.Keys.Where(declared.ContainsKey),
+            key => Assert.False(OnTheGrid(declared[key]), $"{key} is {declared[key]}, on the 4 px grid: remove it from the optical corrections."));
     }
 
     [Fact]
