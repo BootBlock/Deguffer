@@ -45,7 +45,7 @@ public class PreferenceStoreTests
             MinimumTemporaryFileAgeDays: 2,
             BackUpInstalledAppEntries: false,
             WhenCleanComplete: CompletionAction.Hibernate,
-            NavigationCollapsed: true,
+            Rail: RailChoice.Collapsed,
             SpotlightCleanedRow: false,
             MemoryLiveUpdate: false)
         {
@@ -108,7 +108,7 @@ public class PreferenceStoreTests
         // Not the default, on the same reasoning.
         Assert.True(loaded.ExploreOverviewHidden);
         Assert.True(loaded.MemoryOverviewHidden);
-        Assert.True(loaded.NavigationCollapsed);
+        Assert.Equal(RailChoice.Collapsed, loaded.Rail);
 
         // False, because true is the default and a missing key reads as true.
         Assert.False(loaded.SpotlightCleanedRow);

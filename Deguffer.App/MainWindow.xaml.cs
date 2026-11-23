@@ -22,7 +22,7 @@ public sealed partial class MainWindow : Window
     private readonly CloseGuard _closeGuard = new(App.Running);
     private readonly TaskbarButton _taskbarButton;
     private readonly ToolWindowOpener _mapAppearance;
-    private readonly DrawnSetting<bool> _navigationCollapsed;
+    private readonly RailFolding _rail;
 
     /// <summary>
     /// The page each rail item opens. Keyed by the item rather than by a string written on it, so an
@@ -111,17 +111,13 @@ public sealed partial class MainWindow : Window
         ApplyTheme();
         App.Preferences.Changed += OnPreferencesChanged;
 
-        // Before the first page, so the window opens with the rail as the reader left it rather than
-        // collapsing it in front of them. The pane raises its events for this assignment too, and the
-        // write they make is of the value just read, which the preferences treat as no change.
-        _navigationCollapsed = new DrawnSetting<bool>(
-            App.Preferences,
-            current => current.NavigationCollapsed,
-            (current, collapsed) => current with { NavigationCollapsed = collapsed },
-            collapsed => Navigation.IsPaneOpen = !collapsed);
-        Navigation.IsPaneOpen = !_navigationCollapsed.Stored;
-        Navigation.PaneOpened += (_, _) => _navigationCollapsed.Choose(false);
-        Navigation.PaneClosed += (_, _) => _navigationCollapsed.Choose(true);
+        // The property rather than PaneOpened and PaneClosed, because its callback runs inside the
+        // assignment, so the rail is reported as it is now and never as it was some way into a move.
+        _rail = new RailFolding(App.Preferences, open => Navigation.IsPaneOpen = open);
+        Navigation.RegisterPropertyChangedCallback(
+            NavigationView.IsPaneOpenProperty,
+            (_, _) => _rail.Changed(Navigation.IsPaneOpen));
+        Navigation.SizeChanged += (_, e) => _rail.Fit(e.NewSize.Width);
 
         OpenWhereTheLaunchAsked();
 
@@ -129,6 +125,10 @@ public sealed partial class MainWindow : Window
         // and the first page all have to be in place before anything is on screen. Sizing alone
         // does not show it, so only that one path was ever exposed to this.
         _sizing.Apply();
+
+        // From the placement just applied, before the first frame, so the window opens with the rail
+        // already as wide as it will be rather than folding it in front of the reader.
+        _rail.Fit(_sizing.ClientWidth);
     }
 
     /// <summary>

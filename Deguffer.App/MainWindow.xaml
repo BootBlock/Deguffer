@@ -39,10 +39,12 @@
         </Border>
 
         <!--
-            A rail with its labels showing by default, so nothing has to be opened to find out what
-            is here. Its toggle collapses it to its icons, each named by its tooltip, for a reader who
-            wants the width for a map, and it never overlays the page: the closed rail in Left mode is
-            the compact strip, not a hidden pane. The window remembers which the reader left it as.
+            A rail with its labels showing on a wide window, so nothing has to be opened to find out
+            what is here, and folded to its icons, each named by its tooltip, on a narrow one, so the
+            page keeps the width. Its toggle overrides the fold for a reader who wants the labels or
+            the width at every size, and the window remembers that choice (RailFolding). Left mode at
+            every width, so it never overlays the page: the closed rail in Left mode is the compact
+            strip, not a hidden pane.
         -->
         <NavigationView x:Name="Navigation"
                         Grid.Row="1"
