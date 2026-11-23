@@ -244,6 +244,9 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner, IWal
         var results = new ScanResult[asked.Count][];
         var directories = new List<int>(asked.Count);
 
+        // The paths answered whole here, reported together once the loop ends rather than one at a time.
+        var finished = new List<int>(asked.Count);
+
         // Each directory's own time, from the read that found it, which dates it with its listing.
         var owns = new long[asked.Count];
 
@@ -262,7 +265,7 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner, IWal
                     results[i] = MeasureFile(asked[i].Path, reading, keeps);
 
                     // A file is read whole, so its reading is final, and it counts before any walk starts.
-                    running.Report(i, results[i][0].Size);
+                    finished.Add(i);
                     break;
 
                 case PathPresence.Refused:
@@ -272,10 +275,12 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner, IWal
                 // An absent path measures zero, and that is a complete answer.
                 default:
                     results[i] = [.. Each(keeps, new Walked(ScanSize.Zero, false, [], RootReach.Reached)).Select(Slow)];
-                    running.Report(i, results[i][0].Size);
+                    finished.Add(i);
                     break;
             }
         }
+
+        running.Report(finished, i => results[i][0].Size);
 
         return (results, owns, DirectoryWalks.Plan(asked, directories, _tuner));
     }

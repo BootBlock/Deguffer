@@ -39,7 +39,8 @@ public class DirectoryScannerTests
     /// <summary>
     /// The table answers each path in a lookup of its own, and a list's running figure adds every
     /// answer up rather than reporting each path's figure in turn, which would read as a count that
-    /// went down.
+    /// went down. The answers one volume's table gives go on as one figure, rather than one for each
+    /// path.
     /// </summary>
     [Fact]
     public async Task AListAnsweredByTheTableReportsTheSumOfEveryPath()
@@ -63,7 +64,7 @@ public class DirectoryScannerTests
             ],
             progress: progress);
 
-        Assert.Equal([8000L, 11000L, 12000L], progress.Reports.Select(size => size.Logical));
+        Assert.Equal([12000L], progress.Reports.Select(size => size.Logical));
     }
 
     /// <summary>

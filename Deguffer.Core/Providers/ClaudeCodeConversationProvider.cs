@@ -320,7 +320,7 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
         {
             yield return new PlanNote(
                 PlanNoteSeverity.Information,
-                $"Left {ClaudeCodeClassificationBuilder.Count(recent, "item", "items")} alone that Claude Code "
+                $"Left {Counted.Of(recent, "item", "items")} alone that Claude Code "
                 + $"wrote to in the last {ClaudeCodeSessionRegistry.RecentWindow.TotalDays:0} days. A session can run for "
                 + "days, so a recent conversation is not offered even when nothing lists it as running.");
         }

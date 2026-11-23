@@ -231,8 +231,8 @@ public sealed class VsCodeLogProvider : CleanupProviderBase
             {
                 notes.Add(new PlanNote(
                     PlanNoteSeverity.Information,
-                    $"In '{editor.Name}', {spares.Count} other "
-                    + $"{(spares.Count == 1 ? "item is" : "items are")} left alone beside the logs. "
+                    $"In '{editor.Name}', {spares.Count:N0} other "
+                    + $"{Counted.Form(spares.Count, "item is", "items are")} left alone beside the logs. "
                     + "The editor's caches are offered separately, and your settings, workspace state "
                     + "and local file history are never offered at all."));
             }

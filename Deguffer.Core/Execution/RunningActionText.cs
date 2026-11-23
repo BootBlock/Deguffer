@@ -16,7 +16,7 @@ public static class RunningActionText
 
     /// <summary>"it" for one action and "they" for more, with the verb that agrees with it.</summary>
     public static (string It, string Finishes) Agreement(IReadOnlyList<RunningAction> running) =>
-        running.Count == 1 ? ("it", "finishes") : ("they", "finish");
+        (Counted.Form(running.Count, "it", "they"), Counted.Form(running.Count, "finishes", "finish"));
 
     private static string Name(RunningAction action) => action switch
     {

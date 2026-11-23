@@ -731,7 +731,7 @@ public sealed partial class ExplorePage : Page
     {
         if (_guard.Admits(restore: ShowSelectedRows))
         {
-            ViewModel.Selection.Select([.. RowsList.SelectedItems.OfType<IExploreListed>().Select(r => r.Node)]);
+            ViewModel.Selection.Select((int[])[.. RowsList.SelectedItems.OfType<IExploreListed>().Select(r => r.Node)]);
         }
     }
 

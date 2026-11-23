@@ -5,6 +5,7 @@ using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Media;
 using Deguffer.Core.Scanning.Mft;
+using Deguffer.Core.Text;
 
 // The result goes to standard output and nothing else does, so it can be redirected to a file and
 // pasted as it stands. Progress and errors go to standard error, and name no path either.
@@ -57,9 +58,10 @@ else if (request.Route.Builds())
 }
 else if (request.Folders.Any(folder => LongPath.ProbeDirectory(folder) is not PathPresence.Present))
 {
-    Console.Error.WriteLine(request.Folders.Count == 1
-        ? "The folder does not exist, or it cannot be read."
-        : "A folder does not exist, or it cannot be read.");
+    Console.Error.WriteLine(Counted.Form(
+        request.Folders.Count,
+        "The folder does not exist, or it cannot be read.",
+        "A folder does not exist, or it cannot be read."));
     return 2;
 }
 
@@ -115,6 +117,9 @@ static async Task<int> BenchmarkAsync(BenchmarkRequest request, ScanTuner tuner,
 
     var runs = new List<RunSample>(request.Runs);
 
+    // A new set for each run, so each run reports only the snapshots it assembled.
+    TimedSnapshots? Snapshots() => request.Snapshots ? new TimedSnapshots(TimeProvider.System) : null;
+
     try
     {
         // Inside the try, because the duplicates route asks this machine's protections before its
@@ -123,7 +128,7 @@ static async Task<int> BenchmarkAsync(BenchmarkRequest request, ScanTuner tuner,
         {
             Route.Walk => RouteRun.Blocking(ct => WalkRoute.Run(request.Path, request.Walk, ct)),
             Route.Measure => RouteRun.Blocking(ct => MeasureRoute.Run(request.Path, request.Walk, ct)),
-            Route.ExploreWalk => RouteRun.Blocking(ct => ExploreWalkRoute.Run(request.Path, request.Walk, request.Snapshots, ct)),
+            Route.ExploreWalk => RouteRun.Blocking(ct => ExploreWalkRoute.Run(request.Path, request.Walk, Snapshots(), ct)),
             Route.Sources => RouteRun.Blocking(ct => SourcesRoute.Run(request.Path, request.Walk, ct)),
             Route.Links => RouteRun.Blocking(ct => LinksRoute.Run(request.Path, request.ReadBy, ct)),
             Route.Folders => RouteRun.Blocking(ct => FoldersRoute.Run(VolumeMftSourceFactory.Default, request.Folders, ct)),
@@ -146,7 +151,7 @@ static async Task<int> BenchmarkAsync(BenchmarkRequest request, ScanTuner tuner,
             Route.Scan => AutoScanRoute.On(VolumeMftSourceFactory.Default, request.Path, tuner),
             Route.Plan => new PlanRoute(CleanupPlanner.CreateDefault(tuning: tuner)).Timed,
             _ => RouteRun.Blocking(ct => TableRoutes.Run(
-                request.Route, VolumeMftSourceFactory.Default, request.Path, request.Table, opened: null, ct)),
+                request.Route, VolumeMftSourceFactory.Default, request.Path, request.Table, Snapshots(), opened: null, ct)),
         };
 
         for (var i = 1; i <= request.Runs; i++)

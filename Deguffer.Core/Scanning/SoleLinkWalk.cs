@@ -82,6 +82,9 @@ internal sealed class SoleLinkWalk(ScanTuner tuner, FileInformation files) : IWa
         var results = new ScanResult[asked.Count][];
         var directories = new List<int>(asked.Count);
 
+        // The files read whole here, reported together once the loop ends rather than one at a time.
+        var finished = new List<int>(asked.Count);
+
         // Each entry's own time, from the read that found it: a directory's dates it with its listing,
         // and a file's is the time the guard judges it by.
         var owns = new long[asked.Count];
@@ -104,7 +107,7 @@ internal sealed class SoleLinkWalk(ScanTuner tuner, FileInformation files) : IWa
                 results[i] = MeasureFile(path, owns[i], keeps, files);
 
                 // A file is read whole, so its reading is final, and it counts before any walk starts.
-                running.Report(i, results[i][0].Size);
+                finished.Add(i);
                 continue;
             }
 
@@ -115,6 +118,8 @@ internal sealed class SoleLinkWalk(ScanTuner tuner, FileInformation files) : IWa
 
             results[i] = [.. keeps.Select(_ => nothing)];
         }
+
+        running.Report(finished, i => results[i][0].Size);
 
         return (results, owns, DirectoryWalks.Plan(asked, directories, tuner));
     }

@@ -212,8 +212,8 @@ public sealed class PulumiPluginProvider : CleanupProviderBase
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
-                $"Leaving {recent.Count} {(recent.Count == 1 ? "plugin" : "plugins")} alone: a plugin goes whole or not at all, "
-                + $"and something in {(recent.Count == 1 ? "it" : "each")} {keep.DescribeChange()}."));
+                $"Leaving {Counted.Of(recent.Count, "plugin", "plugins")} alone: a plugin goes whole or not at all, "
+                + $"and something in {Counted.Form(recent.Count, "it", "each")} {keep.DescribeChange()}."));
         }
 
         if (cache.Installed.Count == 0 && cache.Installing.Count == 0)

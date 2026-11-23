@@ -150,8 +150,8 @@ internal static class RestorePointRun
         long? freed)
     {
         var what = removed == due
-            ? $"System Restore removed {Count(removed)}."
-            : $"System Restore removed {removed} of {Count(due)}.";
+            ? $"System Restore removed {Counted.Of(removed, "restore point", "restore points")}."
+            : $"System Restore removed {removed} of {Counted.Of(due, "restore point", "restore points")}.";
 
         if (failures.Count > 0)
         {
@@ -189,6 +189,4 @@ internal static class RestorePointRun
 
     private static StepOutcome NotRun(RemoveRestorePointsStep step, string why) =>
         new(step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, $"Nothing was removed: {why}");
-
-    private static string Count(int count) => count == 1 ? "1 restore point" : $"{count} restore points";
 }

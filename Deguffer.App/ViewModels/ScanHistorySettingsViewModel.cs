@@ -71,7 +71,7 @@ public sealed partial class ScanHistorySettingsViewModel(ScanHistory history) : 
 
     private void Show(IReadOnlyList<KeptSummary> all)
     {
-        LiveList.Show(Kept, [.. all.Select(summary => new KeptScanRow(summary))], row => row.Summary);
+        LiveList.Show(Kept, (KeptScanRow[])[.. all.Select(summary => new KeptScanRow(summary))], row => row.Summary);
 
         OnPropertyChanged(nameof(HasNoKept));
         OnPropertyChanged(nameof(HasKept));

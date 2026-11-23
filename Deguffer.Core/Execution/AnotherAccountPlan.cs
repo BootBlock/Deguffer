@@ -148,15 +148,14 @@ public sealed class AnotherAccountPlan
 
     private string WhyWithheld(int count)
     {
-        var (items, them, they) = count == 1
-            ? ("One item here belongs", "it", "it is")
-            : ($"{count} items here belong", "them", "they are");
+        var items = Counted.Form(count, "One item here belongs", $"{count:N0} items here belong");
         var whose = _account.Standing == AccountStanding.AnotherAccount
             ? $"not to {_account.SignedIn?.Name}, who is signed in to Windows"
             : "and Windows would not say whether that is the account signed in to it";
 
         return $"{items} to {_account.Name}, the account Deguffer is running as, {whose}. Deguffer leaves "
-            + $"{them} alone, and every clean checks that {they} still there. Open Deguffer as yourself, "
+            + $"{Counted.Form(count, "it", "them")} alone, and every clean checks that {Counted.Form(count, "it is", "they are")} "
+            + "still there. Open Deguffer as yourself, "
             + "without administrator rights, to clean your own.";
     }
 }

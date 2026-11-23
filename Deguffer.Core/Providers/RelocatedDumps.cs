@@ -206,11 +206,12 @@ internal static class RelocatedDumps
         if (unconfirmed > 0)
         {
             scan.LeftUnexamined = true;
-            listed += unconfirmed == 1
-                ? " It could not read one file named as a dump there to confirm that it is one, so it "
-                    + "leaves that file alone."
-                : $" It could not read {unconfirmed} files named as dumps there to confirm that they "
-                    + "are dumps, so it leaves them alone.";
+            listed += Counted.Form(
+                unconfirmed,
+                " It could not read one file named as a dump there to confirm that it is one, so it "
+                    + "leaves that file alone.",
+                $" It could not read {unconfirmed:N0} files named as dumps there to confirm that they "
+                    + "are dumps, so it leaves them alone.");
         }
 
         scan.Notes.Add(new PlanNote(PlanNoteSeverity.Information, listed));

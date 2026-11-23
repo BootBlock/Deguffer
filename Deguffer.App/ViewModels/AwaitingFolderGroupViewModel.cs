@@ -23,7 +23,7 @@ public sealed partial class AwaitingFolderGroupViewModel : ObservableObject
     /// the reader that something is folded away, and how much.
     /// </summary>
     public string Summary =>
-        $"{Counted.Of((uint)Rows.Count, "location", "locations")} with nothing to search until you add a source folder in Settings.";
+        $"{Counted.Of(Rows.Count, "location", "locations")} with nothing to search until you add a source folder in Settings.";
 
     /// <summary>
     /// Bring <see cref="Rows"/> up to <paramref name="arriving"/> in place, so an open group keeps

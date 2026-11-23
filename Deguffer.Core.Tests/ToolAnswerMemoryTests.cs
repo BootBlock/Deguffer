@@ -333,7 +333,14 @@ public sealed class ToolAnswerMemoryTests : IDisposable
     {
         await AskAsync();
 
-        var question = Question(Inputs(), isAnswer: true, during: () => File.WriteAllText(_config, "cache=two"));
+        // Stamped with the test's clock, which runs a minute ahead of the machine's, so the write is
+        // after the tool started. The machine's own stamp could land in the same tick of the file-time
+        // clock as the fixture's first write, and the two contents are the same length.
+        var question = Question(Inputs(), isAnswer: true, during: () =>
+        {
+            File.WriteAllText(_config, "cache=two");
+            File.SetLastWriteTimeUtc(_config, _clock.GetUtcNow().UtcDateTime);
+        });
 
         await _memory.AskAsync(question, CancellationToken.None);
 

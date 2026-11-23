@@ -405,7 +405,7 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
                 notes.Add(new PlanNote(
                     PlanNoteSeverity.Information,
                     $"In '{application.Name}', {(application.ProfilesIncomplete ? "at least " : string.Empty)}"
-                    + $"{spared} other {(spared == 1 ? "item is" : "items are")} left alone "
+                    + $"{Counted.Of(spared, "other item is", "other items are")} left alone "
                     + $"beside {WhatIsRemoved}. Sign-in state, saved passwords and the application's other "
                     + "data all live in that folder, so only the directories Deguffer recognises are removed."
                     + (emptiedAContainer ? " " + ContainerSentence : string.Empty)));

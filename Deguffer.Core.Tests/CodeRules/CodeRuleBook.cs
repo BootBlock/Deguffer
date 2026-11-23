@@ -191,7 +191,7 @@ internal static class CodeRuleBook
             Pattern(@"[!=]=\s*1\s*\?\s*\$?@?"""),
             SourceView.CodeAndLiterals,
             Product,
-            "Use the one counted-noun formatter, so every count reads the same way. If it does not exist yet, create it in this change, or ask.",
+            "Write the count through Counted.Of, or pick the agreeing word through Counted.Form, so every count reads the same way.",
             "count == 1 ? \"file\" : \"files\""),
         new(
             "parallel-options-are-bounded",

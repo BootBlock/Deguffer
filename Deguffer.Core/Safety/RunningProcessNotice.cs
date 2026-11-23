@@ -19,7 +19,7 @@ public static class RunningProcessNotice
 
         return new PlanNote(
             PlanNoteSeverity.Warning,
-            $"{string.Join(", ", running)} {(running.Count == 1 ? "is" : "are")} running. " +
+            $"{string.Join(", ", running)} {Counted.Form(running.Count, "is", "are")} running. " +
             "Anything held open will be left in place rather than removed.");
     }
 }

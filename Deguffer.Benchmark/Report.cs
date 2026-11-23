@@ -3,6 +3,7 @@ using System.Text;
 using Deguffer.Core.Duplicates;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Scanning.Mft;
+using Deguffer.Core.Text;
 
 namespace Deguffer.Benchmark;
 
@@ -48,7 +49,7 @@ internal static class Report
         // The plan route names no place: each provider looks where it looks.
         if (places.Count > 0)
         {
-            Field(text, places.Count == 1 ? "place" : "places", string.Join(", ", places));
+            Field(text, Counted.Form(places.Count, "place", "places"), string.Join(", ", places));
         }
 
         Field(text, "tuning", tuning);
@@ -122,6 +123,8 @@ internal static class Report
         {
             Row(text, "folders at once", Count(first.Tally.PeakListings), Over(later, r => r.Tally.PeakListings, Count));
         }
+
+        SnapshotRows(text, first, later);
 
         // Over a race's whole round these would count its untimed walks and the collections it forces
         // between parts, so the race reports them for each walk instead (RaceRows).
@@ -220,6 +223,33 @@ internal static class Report
             Row(text, "links placed", Count(stages.LinksPlaced), Over(later, r => StagesOf(r).LinksPlaced, Count));
         }
     }
+
+    /// <summary>
+    /// How many snapshots an Explore run assembled, and the time they took, summed. None for a run
+    /// that took none. Below the stages and apart from them: the snapshots are assembled on other
+    /// threads beside the read or walk, so the stages add up to the elapsed time without them.
+    /// </summary>
+    private static void SnapshotRows(StringBuilder text, RunSample first, RunSample[] later)
+    {
+        if (first.Tally.Snapshots is not { } snapshots)
+        {
+            return;
+        }
+
+        Row(text, "snapshots", Count(snapshots.Count), Over(later, r => SnapshotsOf(r).Count, Count));
+        Row(
+            text,
+            "  assembling took",
+            Duration(snapshots.Assembling.TotalSeconds),
+            Over(later, r => SnapshotsOf(r).Assembling.TotalSeconds, Duration));
+    }
+
+    /// <summary>
+    /// A run's snapshots. Every run of a route is asked the same way, so a run without them was not
+    /// measured as the first was, and no median of them holds.
+    /// </summary>
+    private static SnapshotTimes SnapshotsOf(RunSample run) =>
+        run.Tally.Snapshots ?? throw new InvalidOperationException("Every run asked for snapshots carries their times.");
 
     /// <summary>
     /// Each step of the open, in the order the first run ran them, and under each step that read the

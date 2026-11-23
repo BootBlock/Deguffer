@@ -40,7 +40,7 @@ internal sealed record TopazModelsUse(
     {
         if (Processes.FindRunning(TopazLayout.ProcessNames) is { Count: > 0 } running)
         {
-            return $"{string.Join(", ", running)} {(running.Count == 1 ? "is" : "are")} running now";
+            return $"{string.Join(", ", running)} {Counted.Form(running.Count, "is", "are")} running now";
         }
 
         if (ProgramFolders.Count == 0)

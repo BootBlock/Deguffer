@@ -167,6 +167,12 @@ internal static class RouteFacts
     public static bool ReportsTableReads(this Route route) => route.ReadsTable() && route is not (Route.Race or Route.Scan);
 
     /// <summary>
+    /// Whether the route builds an Explore tree, so it can assemble the snapshots of the tree so far
+    /// that Explore draws while it scans, as <c>--snapshots</c> switches.
+    /// </summary>
+    public static bool TakesSnapshots(this Route route) => route is Route.Explore or Route.ExploreFolder or Route.ExploreWalk;
+
+    /// <summary>
     /// Whether the route builds what a scan keeps on screen, so what it holds once built is part of
     /// its cost. See <see cref="RunSample.KeptBytes"/>.
     /// </summary>

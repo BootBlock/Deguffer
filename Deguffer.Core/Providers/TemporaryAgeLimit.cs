@@ -28,5 +28,5 @@ internal static class TemporaryAgeLimit
     /// answers for a window that is on; this one is asked before there is a window, and about a
     /// value that may be zero.
     /// </summary>
-    public static string Describe(int days) => days == 1 ? "a day" : $"{days} days";
+    public static string Describe(int days) => Counted.Form(days, "a day", Counted.Of(days, "day", "days"));
 }

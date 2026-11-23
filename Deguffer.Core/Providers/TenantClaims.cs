@@ -1,5 +1,6 @@
 using Deguffer.Core.Execution;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.Text;
 
 namespace Deguffer.Core.Providers;
 
@@ -74,9 +75,9 @@ internal sealed record TenantClaims(IReadOnlySet<string> Paths, IReadOnlyList<st
         ? null
         : new PlanNote(
             PlanNoteSeverity.Information,
-            (Paths.Count == 1
-                ? "One entry in these folders is offered on the row of the tool that wrote it"
-                : $"{Paths.Count} entries in these folders are offered on the rows of the tools that wrote them")
-            + $", so this row leaves {(Paths.Count == 1 ? "it" : "them")} out: "
+            Counted.Form(Paths.Count,
+                "One entry in these folders is offered on the row of the tool that wrote it",
+                $"{Paths.Count:N0} entries in these folders are offered on the rows of the tools that wrote them")
+            + $", so this row leaves {Counted.Form(Paths.Count, "it", "them")} out: "
             + $"{string.Join(", ", Rows)}.");
 }
