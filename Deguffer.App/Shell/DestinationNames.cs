@@ -30,4 +30,16 @@ public static class DestinationNames
     /// words that say which page is open. The title bar the window draws keeps the bare name.
     /// </summary>
     public static string WindowTitle(Destination destination) => $"{Application} - {Of(destination)}";
+
+    /// <summary>
+    /// The tooltip of <paramref name="destination"/>'s rail item: its name, then the question the page
+    /// answers (<paramref name="help"/>, the item's help text) as the rest of one sentence. With the
+    /// rail collapsed to its icons the tooltip is the only name an item shows, so it leads with it.
+    /// </summary>
+    public static string RailTooltip(Destination destination, string help)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(help);
+
+        return $"{Of(destination)}: {char.ToLowerInvariant(help[0])}{help[1..]}";
+    }
 }

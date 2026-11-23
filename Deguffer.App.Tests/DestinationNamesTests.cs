@@ -27,6 +27,13 @@ public sealed class DestinationNamesTests
     public void EachPagesWindowTitleNamesThePage(Destination destination, string title) =>
         Assert.Equal(title, DestinationNames.WindowTitle(destination));
 
+    /// <summary>A collapsed rail item's tooltip is its only name, so it leads with the page's name.</summary>
+    [Fact]
+    public void ARailTooltipLeadsWithThePageNameThenItsQuestion() =>
+        Assert.Equal(
+            "Installed apps: remove entries for programs that are gone, or uninstall one",
+            DestinationNames.RailTooltip(Destination.InstalledApps, "Remove entries for programs that are gone, or uninstall one"));
+
     [Fact]
     public void EveryDestinationHasATitleOfItsOwn()
     {

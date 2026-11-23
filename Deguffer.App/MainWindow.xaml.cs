@@ -8,6 +8,7 @@ using Deguffer.Core.Startup;
 using Deguffer.Core.Working;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Animation;
 
@@ -64,10 +65,12 @@ public sealed partial class MainWindow : Window
         };
         _destinations = _items.ToDictionary(pair => pair.Value, pair => pair.Key);
 
-        // Each item's words come from the name the page's own header and the window title read.
+        // Each item's words come from the name the page's own header and the window title read, and
+        // its tooltip leads with that name before the help text the markup gives it.
         foreach (var (destination, item) in _items)
         {
             item.Content = DestinationNames.Of(destination);
+            ToolTipService.SetToolTip(item, DestinationNames.RailTooltip(destination, AutomationProperties.GetHelpText(item)));
         }
 
         ExtendsContentIntoTitleBar = true;
