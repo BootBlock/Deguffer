@@ -393,7 +393,10 @@ If [smartmontools](https://www.smartmontools.org/) is installed, Health also rea
 database from that installation, for a SATA drive's attributes that no document above and no
 reading common to every drive covers. Such a reading is shown with the name and layout the database
 gives it and a "smartmontools" mark, and it is judged by nothing but the drive's own threshold. The
-drive's details name the database entry that matched, or say why none was used. Deguffer does not
+drive's details name the database entry that matched, or say why none was used. Where that entry
+carries a warning, such as a firmware fault and the update that fixes it, Health shows it under the
+details in the database's own words. It is the database's message about the drive's family, not a
+reading of the drive, so it does not change the verdict. Deguffer does not
 include the database: it reads the copy smartmontools installed, and a refresh after
 `update-smart-drivedb` reads the new one.
 
