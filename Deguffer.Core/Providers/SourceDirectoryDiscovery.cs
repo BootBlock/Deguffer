@@ -243,7 +243,7 @@ public sealed class SourceDirectoryDiscovery
         // and waits on them. A single folder has nothing to search beside it.
         IReadOnlyList<IReadOnlyList<int>> lanes = searchable.Count < 2
             ? [[.. Enumerable.Range(0, searchable.Count)]]
-            : await WorkerThreads.Shared.RunAsync(() => SourceSearchLanes.Of(searchable, _tuning.StorageOf), ct).ConfigureAwait(false);
+            : await WorkerThreads.Shared.RunAsync(() => SourceSearchLanes.Of(searchable, _tuning.ForOneMeasurement().Of), ct).ConfigureAwait(false);
 
         // Parallel.ForEachAsync stops every lane once one throws, and throws the failure ahead of
         // the cancellations it caused, because it records the failure before it stops the others.

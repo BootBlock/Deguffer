@@ -307,8 +307,10 @@ public interface IVolumeInventory
     /// letter standing for <c>C:\Users\testuser</c> reaches that profile's application data, and
     /// Windows names no volume for such a letter, so no mount point leads back to it.</para>
     ///
-    /// <para>Not remembered, unlike <see cref="MountPointsOf"/>: one <c>QueryDosDevice</c> costs about
-    /// two microseconds, so remembering it would save almost nothing (#513).</para>
+    /// <para>Live for the owners that remember <see cref="MountPointsOf"/>, because they live for a
+    /// pass or longer and <c>subst</c> changes a letter without a signal. Remembered only for one
+    /// measurement, through <see cref="RememberedSubstitutes"/>, which asks it of every path it places
+    /// before it walks (#1065).</para>
     /// </summary>
     /// <param name="driveRoot">The root of a path, as <see cref="Path.GetPathRoot(string)"/> answers it.</param>
     string? SubstituteOf(string driveRoot);

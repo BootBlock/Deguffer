@@ -49,17 +49,18 @@ public sealed class ScanTuner
     /// The values a scan of <paramref name="path"/> runs with. Asks the device the first time a
     /// volume is met, so never call it on the UI thread.
     /// </summary>
-    public VolumeTuning For(string path) => VolumeTuning.Resolve(_preferences.Current.Scanning, MediaOf(path));
+    public VolumeTuning For(string path) => For(StorageOf(path));
+
+    /// <summary>
+    /// The values a scan of a path on <paramref name="storage"/> runs with, for a caller that has
+    /// already asked what the path is on (<see cref="StorageOf"/>, <see cref="PathStorages"/>), so the
+    /// question is not asked twice. Unknown storage gets the conservative values.
+    /// </summary>
+    internal VolumeTuning For(VolumeMedia? storage) =>
+        VolumeTuning.Resolve(_preferences.Current.Scanning, storage?.Class ?? StorageMedia.Unknown);
 
     /// <summary>The values a read of the file table on <paramref name="driveLetter"/> runs with.</summary>
     public VolumeTuning ForVolume(char driveLetter) => For($@"{char.ToUpperInvariant(driveLetter)}:\");
-
-    /// <summary>
-    /// The kind of storage <paramref name="path"/> is on. A share is <see cref="StorageMedia.Network"/>
-    /// without asking anything. A path on no volume the inventory lists is
-    /// <see cref="StorageMedia.Unknown"/>, which gets the conservative values.
-    /// </summary>
-    public StorageMedia MediaOf(string path) => StorageOf(path)?.Class ?? StorageMedia.Unknown;
 
     /// <summary>
     /// Whether <paramref name="path"/> is on a share or on a drive letter Windows maps to one
@@ -82,9 +83,23 @@ public sealed class ScanTuner
     /// by its root, so two paths can be told apart as of one volume or of two on the same disk. Asks
     /// the device the first time a volume is met, so never call it on the UI thread.
     /// </summary>
-    public PathStorage? PathStorageOf(string path)
+    public PathStorage? PathStorageOf(string path) => PathStorageThrough(_volumes, path);
+
+    /// <summary>
+    /// What every path of one measurement is on, with each drive letter asked about once for the
+    /// measurement (<see cref="PathStorages"/>). Made at the start of a measurement, or of the planning
+    /// of one scan or search of several folders, and never kept past its end, so the next asks again.
+    /// </summary>
+    internal PathStorages ForOneMeasurement() =>
+        new(this, _volumes is null ? null : new RememberedSubstitutes(_volumes));
+
+    /// <summary>
+    /// What <see cref="PathStorageOf"/> answers, asked through <paramref name="volumes"/>: this tuner's
+    /// own, or those of one measurement (<see cref="ForOneMeasurement"/>).
+    /// </summary>
+    internal PathStorage? PathStorageThrough(IVolumeInventory? volumes, string path)
     {
-        if (_media is null || _volumes is null)
+        if (_media is null || volumes is null)
         {
             return null;
         }
@@ -94,7 +109,7 @@ public sealed class ScanTuner
             return new PathStorage(null, new VolumeMedia(StorageMedia.Network, []));
         }
 
-        return HostVolume.For(_volumes, path) is { } volume ? new PathStorage(volume.RootPath, _media.Of(volume)) : null;
+        return HostVolume.For(volumes, path) is { } volume ? new PathStorage(volume.RootPath, _media.Of(volume)) : null;
     }
 
     /// <summary>

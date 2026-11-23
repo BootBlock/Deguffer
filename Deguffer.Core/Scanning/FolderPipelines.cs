@@ -47,7 +47,7 @@ internal static class FolderPipelines
     /// </summary>
     internal const int Network = -1;
 
-    /// <param name="storageOf">What a path is on, or null where that is not known (<see cref="ScanTuner.StorageOf"/>).</param>
+    /// <param name="storageOf">What a path is on, or null where that is not known (<see cref="PathStorages.Of"/>).</param>
     /// <returns>
     /// Each pipeline's volumes. Pipelines and the volumes in each come in the order their first folder
     /// was asked for.
@@ -77,7 +77,7 @@ internal static class FolderPipelines
 
         return
         [
-            .. ByDisks(volumes, volume => volume.Paths, storageOf)
+            .. ByDisks(volumes, volume => volume.Paths.Select(storageOf))
                 .Select(set => (IReadOnlyList<VolumeFolders>)[.. set.Select(volume => new VolumeFolders(volume.DriveLetter, volume.Folders))]),
         ];
     }
@@ -88,9 +88,13 @@ internal static class FolderPipelines
     /// apart, and everything on the network in one set. A walk, which reads only the volume of the
     /// directory it is given, is placed by that directory alone (<see cref="DirectoryWalks"/>).
     /// </summary>
+    /// <param name="storagesOf">
+    /// What each of an item's paths is on, or null where that is not known, read only as far as the
+    /// first path whose disks are not known.
+    /// </param>
     /// <returns>Each set in the order of its first item, and the items in each in that order too.</returns>
     public static IReadOnlyList<IReadOnlyList<T>> ByDisks<T>(
-        IReadOnlyList<T> items, Func<T, IEnumerable<string>> pathsOf, Func<string, VolumeMedia?> storageOf)
+        IReadOnlyList<T> items, Func<T, IEnumerable<VolumeMedia?>> storagesOf)
     {
         // One item is one set whatever it is on, so no device is opened to learn its disks.
         if (items.Count <= 1)
@@ -102,7 +106,7 @@ internal static class FolderPipelines
 
         for (var i = 0; i < items.Count; i++)
         {
-            if (DisksUnder(pathsOf(items[i]), storageOf) is not { } under)
+            if (DisksUnder(storagesOf(items[i])) is not { } under)
             {
                 return [items];
             }
@@ -118,18 +122,18 @@ internal static class FolderPipelines
     }
 
     /// <summary>
-    /// Every disk under any of <paramref name="paths"/>, <see cref="Network"/> for those on the
+    /// Every disk under any of <paramref name="storages"/>, <see cref="Network"/> for those on the
     /// network, or null where one of them might be on any disk. Empty for an optical drive.
     /// </summary>
-    private static IReadOnlyList<int>? DisksUnder(IEnumerable<string> paths, Func<string, VolumeMedia?> storageOf)
+    private static IReadOnlyList<int>? DisksUnder(IEnumerable<VolumeMedia?> storages)
     {
         SortedSet<int> under = [];
 
-        foreach (var path in paths)
+        foreach (var storage in storages)
         {
             // Empty disks with no reason is a share or an optical drive, which are not asked. Empty
             // with a reason is a volume that did not say.
-            if (storageOf(path) is not { } media || media is { PhysicalDisks.Count: 0, Reason: not MediaUnknownReason.None })
+            if (storage is not { } media || media is { PhysicalDisks.Count: 0, Reason: not MediaUnknownReason.None })
             {
                 return null;
             }

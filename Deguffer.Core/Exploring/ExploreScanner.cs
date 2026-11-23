@@ -164,7 +164,7 @@ public sealed class ExploreScanner(
             () =>
             {
                 _tuning.Invalidate();
-                return FolderPipelines.Of(folders, _tuning.StorageOf);
+                return FolderPipelines.Of(folders, _tuning.ForOneMeasurement().Of);
             },
             ct).ConfigureAwait(false);
 

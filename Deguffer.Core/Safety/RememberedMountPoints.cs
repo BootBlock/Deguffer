@@ -37,9 +37,10 @@ namespace Deguffer.Core.Safety;
 /// a removal asks the machine. A clean runs long after the pass that planned it, so its §5.6
 /// verifications remember for that clean alone, never from the pass.</para>
 ///
-/// <para><b><see cref="IVolumeInventory.SubstituteOf"/> stays live.</b> It is one
-/// <c>QueryDosDevice</c> of about two microseconds, so remembering it would save almost nothing, and
-/// <c>subst</c> changes a letter without any signal the mount manager would see.</para>
+/// <para><b><see cref="IVolumeInventory.SubstituteOf"/> stays live.</b> <c>subst</c> changes a letter
+/// without any signal the mount manager would see, and these owners live for a pass or longer. Only
+/// one measurement remembers it, for the length of the measurement
+/// (<see cref="RememberedSubstitutes"/>).</para>
 ///
 /// <para>Never the <see cref="VolumeInventory.Current"/> singleton itself, which lives as long as the
 /// app and would make a remembered answer as old as the session.</para>

@@ -169,8 +169,8 @@ public sealed class ScanTuningTests
         var queries = new FakeStorageQueries();
         var tuner = Tuner(new FakePreferences(AppPreferences.Default), queries, new FakeVolumeInventory());
 
-        Assert.Equal(StorageMedia.Network, tuner.MediaOf(@"\\server.test\share\cache"));
-        Assert.Equal(StorageMedia.Network, tuner.MediaOf(@"\\?\UNC\server.test\share\cache"));
+        Assert.Equal(StorageMedia.Network, tuner.StorageOf(@"\\server.test\share\cache")?.Class);
+        Assert.Equal(StorageMedia.Network, tuner.StorageOf(@"\\?\UNC\server.test\share\cache")?.Class);
         Assert.Equal(0, queries.ExtentsAsked);
     }
 
@@ -255,7 +255,7 @@ public sealed class ScanTuningTests
     [Fact]
     public void TheShippedTunerAsksNoDeviceAndUsesTheShippedValues()
     {
-        Assert.Equal(StorageMedia.Unknown, ScanTuner.Shipped.MediaOf(@"C:\Windows"));
+        Assert.Null(ScanTuner.Shipped.StorageOf(@"C:\Windows"));
         Assert.False(ScanTuner.Shipped.WalkOnly);
         Assert.Empty(ScanTuner.Shipped.Drives(CancellationToken.None));
     }

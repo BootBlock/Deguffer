@@ -195,19 +195,21 @@ public sealed class DirectoryScanner : IDirectoryScanner
         ScanRequest.ThrowIfAnyPathIsBlank(asked);
 
         using var remembering = _estimates?.Hold() ?? PassHold.Nothing;
-        using var walking = _volumes.Walking([.. asked.Select(request => request.Path)]);
+        // One set of answers for the walk's registration and its plan, so each drive is asked about once.
+        var storages = _tuner.ForOneMeasurement();
+        using var walking = _volumes.Walking([.. asked.Select(request => request.Path)], storages);
 
         var results = await _fallback
             .Because(FallbackReason.FreshReadingRequired)
-            .MeasureManyAsync(asked, MinimumAge.Off, ct: ct)
+            .MeasureEachAsync(asked, [MinimumAge.Off], RunningPaths.None, storages, ct)
             .ConfigureAwait(false);
 
         for (var i = 0; i < asked.Count; i++)
         {
-            Remember(asked[i], MinimumAge.Off, results[i]);
+            Remember(asked[i], MinimumAge.Off, results[i][0]);
         }
 
-        return results;
+        return [.. results.Select(readings => readings[0])];
     }
 
     /// <summary>

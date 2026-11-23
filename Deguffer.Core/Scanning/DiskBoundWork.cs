@@ -50,20 +50,23 @@ internal static class DiskBoundWork
         ListingBudget budget,
         Func<string, T> work,
         CancellationToken ct) =>
-        Each(paths, path => path, tuning, budget, work, ct);
+        Each(paths, path => path, tuning.For, budget, work, ct);
 
     /// <summary>
     /// <paramref name="work"/> applied to each of <paramref name="items"/> on this thread and its helpers,
     /// in their order, each counted against the volume of the path <paramref name="pathOf"/> names for
     /// it. For a list whose items are more than their paths, where two items may name one path.
     /// </summary>
-    /// <param name="tuning">What the walks of each volume run with. See <see cref="IDirectoryScanner.Tuning"/>.</param>
+    /// <param name="tuningOf">
+    /// What the walks of the volume holding a path run with, asked once for each drive root:
+    /// <see cref="ScanTuner.For(string)"/>, or <see cref="PathStorages.For"/> within a measurement.
+    /// </param>
     /// <param name="budget">The budget every item takes its slot in: the seam a test holds a volume's slots through.</param>
     /// <exception cref="OperationCanceledException"><paramref name="ct"/> was cancelled.</exception>
     internal static TResult[] Each<TItem, TResult>(
         IReadOnlyList<TItem> items,
         Func<TItem, string> pathOf,
-        ScanTuner tuning,
+        Func<string, VolumeTuning> tuningOf,
         ListingBudget budget,
         Func<TItem, TResult> work,
         CancellationToken ct)
@@ -84,7 +87,7 @@ internal static class DiskBoundWork
 
             if (!byVolume.TryGetValue(root, out var limit))
             {
-                limit = tuning.For(path).Walk.Threads;
+                limit = tuningOf(path).Walk.Threads;
                 byVolume[root] = limit;
             }
 
