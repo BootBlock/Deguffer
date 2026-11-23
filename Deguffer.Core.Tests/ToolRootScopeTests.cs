@@ -66,7 +66,20 @@ public sealed class ToolRootScopeTests : IDisposable
     /// </summary>
     [Fact]
     public async Task EveryRootOnAMovedProfileLiesInsideItsRowsScope() =>
-        Assert.Empty(await OutsideTheirScope(Moved()));
+        Assert.Empty(await OutsideTheirScope(MovedEverywhere()));
+
+    /// <summary>
+    /// Every root each row declares lies inside its scope where one variable alone moves a tool's
+    /// folder. A row that reads a variable only when a stronger one is unset, as Deno, pre-commit and
+    /// Hugging Face read <c>XDG_CACHE_HOME</c>, takes that path only on a profile where the stronger
+    /// one is unset, which the profile moving every variable at once never is.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(EachMovingVariable))]
+    public async Task EveryRootWhereOneVariableMovesItsFolderLiesInsideItsRowsScope(string variable) =>
+        Assert.Empty(await OutsideTheirScope(Moved([variable])));
+
+    public static TheoryData<string> EachMovingVariable => new(MovingVariables);
 
     /// <summary>
     /// The profiles above make every row that declares roots declare some, so the sweeps are not
@@ -77,7 +90,7 @@ public sealed class ToolRootScopeTests : IDisposable
     {
         HashSet<string> declared = new(StringComparer.Ordinal);
 
-        foreach (var environment in new[] { Populated(), Moved() })
+        foreach (var environment in new[] { Populated(), MovedEverywhere() })
         {
             foreach (var row in CleanupPlanner.CreateDefault(environment: environment).Providers)
             {
@@ -163,20 +176,10 @@ public sealed class ToolRootScopeTests : IDisposable
     /// A profile where every variable that moves a tool's folder names a folder of its own, a started
     /// tool is told yet another, and Plex's registry values move its folders too.
     /// </summary>
-    private FakeUserEnvironment Moved()
+    private FakeUserEnvironment MovedEverywhere()
     {
-        var environment = new FakeUserEnvironment(Path.Combine(_temp.Path, "moved"));
+        var environment = Moved(MovingVariables);
         var elsewhere = Path.Combine(_temp.Path, "elsewhere");
-
-        foreach (var variable in MovingVariables)
-        {
-            var current = Directory.CreateDirectory(Path.Combine(elsewhere, "current", variable)).FullName;
-            var tool = Directory.CreateDirectory(Path.Combine(elsewhere, "tool", variable)).FullName;
-            environment.WithEnvironmentVariable(variable, current).WithToolEnvironmentVariable(variable, tool);
-        }
-
-        PopulateClaudeCode(Path.Combine(elsewhere, "current", "CLAUDE_CONFIG_DIR"));
-        PopulateCodeExtensions(Path.Combine(elsewhere, "current", "VSCODE_EXTENSIONS"));
 
         foreach (var (value, folder) in new[]
         {
@@ -194,6 +197,35 @@ public sealed class ToolRootScopeTests : IDisposable
         return environment;
     }
 
+    /// <summary>
+    /// A profile where each of <paramref name="variables"/> names a folder of its own and a started
+    /// tool is told yet another.
+    /// </summary>
+    private FakeUserEnvironment Moved(IReadOnlyList<string> variables)
+    {
+        var environment = new FakeUserEnvironment(Path.Combine(_temp.Path, "moved"));
+        var elsewhere = Path.Combine(_temp.Path, "elsewhere");
+
+        foreach (var variable in variables)
+        {
+            var current = Directory.CreateDirectory(Path.Combine(elsewhere, "current", variable)).FullName;
+            var tool = Directory.CreateDirectory(Path.Combine(elsewhere, "tool", variable)).FullName;
+            environment.WithEnvironmentVariable(variable, current).WithToolEnvironmentVariable(variable, tool);
+        }
+
+        if (variables.Contains("CLAUDE_CONFIG_DIR"))
+        {
+            PopulateClaudeCode(Path.Combine(elsewhere, "current", "CLAUDE_CONFIG_DIR"));
+        }
+
+        if (variables.Contains("VSCODE_EXTENSIONS"))
+        {
+            PopulateCodeExtensions(Path.Combine(elsewhere, "current", "VSCODE_EXTENSIONS"));
+        }
+
+        return environment;
+    }
+
     private static void PopulateClaudeCode(string home)
     {
         new ClaudeCodeFixture(home).Conversation(ClaudeCodeFixture.SessionA, age: ClaudeCodeFixture.Old);
@@ -207,6 +239,7 @@ public sealed class ToolRootScopeTests : IDisposable
             Path.Combine(folder, "extensions.json"),
             """[{"identifier":{"id":"a.b"},"location":{"path":"/x/a.b-1.0.0"}}]""");
     }
+
     private static async Task<IReadOnlyList<string>> OutsideTheirScope(FakeUserEnvironment environment)
     {
         var planner = CleanupPlanner.CreateDefault(environment: environment);
