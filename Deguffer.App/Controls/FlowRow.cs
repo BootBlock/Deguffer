@@ -12,7 +12,8 @@ namespace Deguffer.App.Controls;
 /// <para>For a row whose controls are peers, such as the check boxes saying what makes a duplicate
 /// or a toolbar: a horizontal <c>StackPanel</c> lets the last of them run off the edge of a narrow
 /// window, half drawn, which reads as a defect rather than as a shortage of room. Each control keeps
-/// its own width, and the controls on one line are centred on that line's tallest.</para>
+/// its own width, and each is given the height of its line's tallest and placed in it by its own
+/// <c>VerticalAlignment</c>, as in a Grid cell.</para>
 /// </summary>
 public sealed partial class FlowRow : Panel
 {
@@ -95,7 +96,7 @@ public sealed partial class FlowRow : Panel
                 {
                     var size = Children[i].DesiredSize;
                     left += left > 0 && size.Width > 0 ? gap : 0;
-                    Children[i].Arrange(new Rect(left, top + ((height - size.Height) / 2), size.Width, size.Height));
+                    Children[i].Arrange(new Rect(left, top, size.Width, height));
                     left += size.Width;
                 }
             }

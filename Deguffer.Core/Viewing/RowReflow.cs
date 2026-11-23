@@ -5,10 +5,10 @@ namespace Deguffer.Core.Viewing;
 /// that may trim, and the chips and figures. The name never gives way, because it is what says which
 /// row this is, so when it and the chips cannot share a line the chips move under it.
 ///
-/// <para>The secondary part is left out of that decision: it gives way rather than move anything,
-/// as a sentence the row repeats elsewhere in full, or a control that fits beside a short name. It
-/// stays on the name's line either way, and has what lies between the name and the chips, or beside
-/// the name once the chips have moved under it.</para>
+/// <para>The secondary part counts in that decision only at the narrowest it may be: nothing for a
+/// sentence the row repeats elsewhere in full, which trims, and its whole width for a button, which
+/// must not. On one line it has what lies between the name and the chips. Once the chips have moved,
+/// it has what lies beside whichever of the two it goes with (<see cref="WrappedMiddle"/>).</para>
 ///
 /// <para>A part with no width is not on screen, and takes no gap beside it.</para>
 /// </summary>
@@ -16,13 +16,14 @@ public static class RowReflow
 {
     /// <summary>
     /// Whether the chips go to a line of their own under the name, in a row
-    /// <paramref name="available"/> pixels wide. An unbounded row never wraps.
+    /// <paramref name="available"/> pixels wide, with a middle part that may be no narrower than
+    /// <paramref name="middle"/>. An unbounded row never wraps.
     /// </summary>
-    public static bool Wraps(double lead, double tail, double gap, double available) =>
-        Beside(lead, tail, gap) > available;
+    public static bool Wraps(double lead, double middle, double tail, double gap, double available) =>
+        Beside(Beside(lead, middle, gap), tail, gap) > available;
 
-    /// <summary>The width the secondary part has beside the name.</summary>
-    public static double SlackWidth(bool wraps, double lead, double tail, double gap, double available)
+    /// <summary>The width the secondary part has, on whichever line <paramref name="middle"/> puts it.</summary>
+    public static double SlackWidth(bool wraps, WrappedMiddle middle, double lead, double tail, double gap, double available)
     {
         if (double.IsInfinity(available))
         {
@@ -30,7 +31,10 @@ public static class RowReflow
         }
 
         var name = lead + Gap(lead, gap);
-        var taken = wraps ? name : name + tail + Gap(tail, gap);
+        var chips = tail + Gap(tail, gap);
+        var taken = !wraps ? name + chips
+            : middle == WrappedMiddle.WithTail ? chips
+            : name;
 
         return Math.Max(0, available - taken);
     }

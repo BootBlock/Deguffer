@@ -307,7 +307,9 @@
                 <StackPanel Visibility="{x:Bind ViewModel.IsSetupOpen, Mode=OneWay}">
                     <Border Style="{StaticResource Divider}" />
 
-                    <Grid Padding="16" ColumnSpacing="32" ColumnDefinitions="*,*">
+                    <!-- Side by side where each half has room for its controls, and one above the
+                         other where it does not, so neither half runs its controls off its edge. -->
+                    <controls:SplitColumns Margin="16" ColumnSpacing="32" RowSpacing="{StaticResource RegionGap}" MinimumColumnWidth="360">
                         <!-- Held while a rule or a removal runs: a location or role changed then would
                              change what the marks mean under a removal the user has already confirmed. -->
                         <ContentControl IsTabStop="False" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
@@ -315,28 +317,28 @@
                             <StackPanel Spacing="8">
                                 <TextBlock Text="Where to search" Style="{StaticResource BodyStrongTextBlockStyle}" />
 
-                                <Grid ColumnSpacing="8" ColumnDefinitions="Auto,Auto,Auto">
+                                <controls:FlowRow ColumnSpacing="8" RowSpacing="8">
                                     <ComboBox MinWidth="88"
                                               ItemsSource="{x:Bind ViewModel.Locations.Drives}"
                                               SelectedItem="{x:Bind ViewModel.Locations.SelectedDrive, Mode=TwoWay}"
                                               ItemTemplateSelector="{StaticResource DriveEntry}"
                                               DropDownOpened="OnDriveListOpened"
                                               AutomationProperties.Name="Drive to add" />
-                                    <Button Grid.Column="1" Command="{x:Bind ViewModel.Locations.AddDriveCommand}"
+                                    <Button Command="{x:Bind ViewModel.Locations.AddDriveCommand}"
                                             AutomationProperties.Name="Add drive">
                                         <StackPanel Orientation="Horizontal" Spacing="8">
                                             <FontIcon Glyph="&#xEDA2;" FontSize="{StaticResource GlyphSizeBody}" />
                                             <TextBlock Text="Add drive" />
                                         </StackPanel>
                                     </Button>
-                                    <Button Grid.Column="2" Click="OnAddFolder"
+                                    <Button Click="OnAddFolder"
                                             AutomationProperties.Name="Choose a folder to add">
                                         <StackPanel Orientation="Horizontal" Spacing="8">
                                             <FontIcon Glyph="&#xE8F4;" FontSize="{StaticResource GlyphSizeBody}" />
                                             <TextBlock Text="Add folder…" />
                                         </StackPanel>
                                     </Button>
-                                </Grid>
+                                </controls:FlowRow>
 
                                 <TextBlock Text="{x:Bind ViewModel.Locations.Note, Mode=OneWay}" TextWrapping="Wrap"
                                            Foreground="{ThemeResource SystemFillColorCautionBrush}" />
@@ -371,15 +373,15 @@
                             </StackPanel>
                         </ContentControl>
 
-                        <StackPanel Grid.Column="1" Spacing="8">
+                        <StackPanel Spacing="8">
                             <TextBlock Text="What makes a match" Style="{StaticResource BodyStrongTextBlockStyle}" />
 
-                            <StackPanel Orientation="Horizontal" Spacing="16">
+                            <controls:FlowRow ColumnSpacing="16" RowSpacing="{StaticResource LabelGap}">
                                 <CheckBox Content="Name" MinWidth="0" IsChecked="{x:Bind ViewModel.Filters.MatchName, Mode=TwoWay}" />
                                 <CheckBox Content="Size" MinWidth="0" IsChecked="{x:Bind ViewModel.Filters.MatchSize, Mode=TwoWay}" />
                                 <CheckBox Content="Last modified" MinWidth="0" IsChecked="{x:Bind ViewModel.Filters.MatchModified, Mode=TwoWay}" />
                                 <CheckBox Content="Content" MinWidth="0" IsChecked="{x:Bind ViewModel.Filters.MatchContent, Mode=TwoWay}" />
-                            </StackPanel>
+                            </controls:FlowRow>
 
                             <Grid ColumnSpacing="12" RowSpacing="8" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto">
                                 <TextBlock Text="Checksum" VerticalAlignment="Center" />
@@ -391,7 +393,7 @@
                                           ToolTipService.ToolTip="What a content match groups by. Every copy is compared byte for byte before it is removed, whichever this is." />
 
                                 <TextBlock Grid.Row="1" Text="Sizes" VerticalAlignment="Center" />
-                                <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
+                                <controls:FlowRow Grid.Row="1" Grid.Column="1" ColumnSpacing="{StaticResource ControlGap}" RowSpacing="{StaticResource ControlGap}">
                                     <NumberBox Width="96" PlaceholderText="Smallest" Minimum="0"
                                                Value="{x:Bind ViewModel.Filters.SmallestAmount, Mode=TwoWay}"
                                                AutomationProperties.Name="Smallest size" />
@@ -405,10 +407,10 @@
                                     <ComboBox ItemsSource="{x:Bind ViewModel.Filters.UnitNames}"
                                               SelectedIndex="{x:Bind ViewModel.Filters.LargestUnitIndex, Mode=TwoWay}"
                                               AutomationProperties.Name="Unit of the largest size" />
-                                </StackPanel>
+                                </controls:FlowRow>
 
                                 <TextBlock Grid.Row="2" Text="Extensions" VerticalAlignment="Center" />
-                                <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
+                                <controls:FlowRow Grid.Row="2" Grid.Column="1" ColumnSpacing="{StaticResource ControlGap}" RowSpacing="{StaticResource ControlGap}">
                                     <ComboBox ItemsSource="{x:Bind ViewModel.Filters.ExtensionModeNames}"
                                               SelectedIndex="{x:Bind ViewModel.Filters.ExtensionModeIndex, Mode=TwoWay}"
                                               AutomationProperties.Name="Which extensions to search" />
@@ -416,22 +418,22 @@
                                              Text="{x:Bind ViewModel.Filters.Extensions, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                              IsEnabled="{x:Bind ViewModel.Filters.ReadsExtensions, Mode=OneWay}"
                                              AutomationProperties.Name="Extensions" />
-                                </StackPanel>
+                                </controls:FlowRow>
 
-                                <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="16">
+                                <controls:FlowRow Grid.Row="3" Grid.ColumnSpan="2" ColumnSpacing="16" RowSpacing="{StaticResource LabelGap}">
                                     <CheckBox Content="Hidden files" MinWidth="0" IsChecked="{x:Bind ViewModel.Filters.SearchHidden, Mode=TwoWay}" />
                                     <CheckBox Content="System files" MinWidth="0" IsChecked="{x:Bind ViewModel.Filters.SearchSystem, Mode=TwoWay}" />
                                     <CheckBox Content="Program and Windows folders" MinWidth="0"
                                               IsChecked="{x:Bind ViewModel.Filters.SearchPassedOverPlaces, Mode=TwoWay}"
                                               ToolTipService.ToolTip="Search the places passed over by default: Windows, program folders, other accounts and every Recycle Bin. A copy found there is matched, and never removed." />
-                                </StackPanel>
+                                </controls:FlowRow>
                             </Grid>
 
                             <TextBlock Text="Your choices could not be saved, so they will not be remembered next time."
                                        Foreground="{ThemeResource SystemFillColorCautionBrush}" TextWrapping="Wrap"
                                        Visibility="{x:Bind ViewModel.Filters.SaveFailed, Mode=OneWay}" />
                         </StackPanel>
-                    </Grid>
+                    </controls:SplitColumns>
                 </StackPanel>
             </StackPanel>
         </Border>

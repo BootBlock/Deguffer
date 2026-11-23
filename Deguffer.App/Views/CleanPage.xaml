@@ -667,10 +667,16 @@
         </Border>
 
         <!-- §7: the primary button scans and removes nothing. Deleting is a separate, deliberate
-             second step, so Scan carries the accent and Clean does not. -->
-        <Grid Grid.Row="4" ColumnSpacing="12" Padding="0,4,0,0" ColumnDefinitions="Auto,*,Auto">
+             second step, so Scan carries the accent and Clean does not.
 
-            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+             On a window too narrow for one line, Clean, Scan and the choice of what follows a clean
+             move to a line of their own, right-aligned as they were, and the offer to elevate stays
+             beside the total (ReflowRow). Nothing the reader needs to start a scan or a clean is
+             drawn off the edge. -->
+        <controls:ReflowRow Grid.Row="4" ColumnSpacing="12" RowSpacing="{StaticResource ControlGap}" Margin="0,4,0,0"
+                            MiddleStaysWhole="True">
+
+            <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
                 <ProgressRing IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
                               Width="18" Height="18" VerticalAlignment="Center" />
                 <StackPanel VerticalAlignment="Center">
@@ -680,7 +686,7 @@
                 </StackPanel>
             </StackPanel>
 
-            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">
                 <!-- §5.5's remedy for a slow scan, and a way to scan, so it sits with Scan. Offered
                      from the start, so an elevated preview is not reachable only through the
                      unelevated one it replaces, and hidden once a preview has shown that elevating
@@ -695,13 +701,15 @@
                         Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
                         Command="{x:Bind ViewModel.CancelCommand}"
                         AutomationProperties.AutomationId="CancelButton" />
+            </StackPanel>
+
+            <controls:FlowRow ColumnSpacing="8" RowSpacing="{StaticResource ControlGap}" VerticalAlignment="Center">
                 <!-- Beside Clean, because it is part of starting one: what Deguffer does once the clean
                      it is about to start has finished. Read when the clean ends, so it can be changed
                      while one runs. -->
                 <TextBlock x:Name="WhenCompleteLabel"
                            Text="When complete"
-                           VerticalAlignment="Center"
-                           Margin="8,0,0,0" />
+                           VerticalAlignment="Center" />
                 <ComboBox MinWidth="140"
                           VerticalAlignment="Center"
                           ItemsSource="{x:Bind ViewModel.WhenComplete.Labels}"
@@ -775,7 +783,7 @@
                         <Flyout x:Name="ScanChoiceFlyout" Placement="TopEdgeAlignedRight" />
                     </controls:EnabledAwareSplitButton.Flyout>
                 </controls:EnabledAwareSplitButton>
-            </StackPanel>
-        </Grid>
+            </controls:FlowRow>
+        </controls:ReflowRow>
     </Grid>
 </Page>

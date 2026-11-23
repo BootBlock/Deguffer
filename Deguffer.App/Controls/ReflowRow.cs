@@ -13,7 +13,12 @@ namespace Deguffer.App.Controls;
 /// between them, where there is one, a part that gives way, such as a status that trims. On one line
 /// the last child is right-aligned and the middle one fills the space between. On two, the last
 /// child is right-aligned under the name, so the chips stay in one column with the rows that did not
-/// wrap, and the middle one fills the space beside the name.</para>
+/// wrap, and the middle one fills the space beside the name or beside the last child, as
+/// <see cref="Middle"/> says.</para>
+///
+/// <para>Each child is given the whole height of its line and places itself in it by its own
+/// <c>VerticalAlignment</c>, as it would in a Grid cell: a button beside a box with a header above it
+/// asks to sit at the bottom, level with the box.</para>
 ///
 /// <para>A <c>Grid</c> cannot do this: a column cannot move to a row of its own, and a visual state
 /// set from the window's width would wrap rows that fit and leave rows that do not, because each
@@ -22,10 +27,16 @@ namespace Deguffer.App.Controls;
 public sealed partial class ReflowRow : Panel
 {
     public static readonly DependencyProperty ColumnSpacingProperty = DependencyProperty.Register(
-        nameof(ColumnSpacing), typeof(double), typeof(ReflowRow), new PropertyMetadata(0.0, OnSpacingChanged));
+        nameof(ColumnSpacing), typeof(double), typeof(ReflowRow), new PropertyMetadata(0.0, OnLayoutChanged));
 
     public static readonly DependencyProperty RowSpacingProperty = DependencyProperty.Register(
-        nameof(RowSpacing), typeof(double), typeof(ReflowRow), new PropertyMetadata(0.0, OnSpacingChanged));
+        nameof(RowSpacing), typeof(double), typeof(ReflowRow), new PropertyMetadata(0.0, OnLayoutChanged));
+
+    public static readonly DependencyProperty MiddleProperty = DependencyProperty.Register(
+        nameof(Middle), typeof(WrappedMiddle), typeof(ReflowRow), new PropertyMetadata(WrappedMiddle.WithLead, OnLayoutChanged));
+
+    public static readonly DependencyProperty MiddleStaysWholeProperty = DependencyProperty.Register(
+        nameof(MiddleStaysWhole), typeof(bool), typeof(ReflowRow), new PropertyMetadata(false, OnLayoutChanged));
 
     private bool _wraps;
 
@@ -43,6 +54,23 @@ public sealed partial class ReflowRow : Panel
         set => SetValue(RowSpacingProperty, value);
     }
 
+    /// <summary>Which line the middle child stays on once the row wraps.</summary>
+    public WrappedMiddle Middle
+    {
+        get => (WrappedMiddle)GetValue(MiddleProperty);
+        set => SetValue(MiddleProperty, value);
+    }
+
+    /// <summary>
+    /// Whether the middle child is drawn whole, as a button must be, so the row wraps rather than
+    /// squeeze it. Otherwise it may shrink to its <c>MinWidth</c>, as a status that trims may.
+    /// </summary>
+    public bool MiddleStaysWhole
+    {
+        get => (bool)GetValue(MiddleStaysWholeProperty);
+        set => SetValue(MiddleStaysWholeProperty, value);
+    }
+
     protected override Size MeasureOverride(Size availableSize)
     {
         var lead = Children[0];
@@ -55,21 +83,30 @@ public sealed partial class ReflowRow : Panel
 
         var gap = ColumnSpacing;
         var width = availableSize.Width;
-        _wraps = RowReflow.Wraps(lead.DesiredSize.Width, tail.DesiredSize.Width, gap, width);
+        var middle = slack is FrameworkElement part ? Narrowest(part, unbounded) : 0;
+        _wraps = RowReflow.Wraps(lead.DesiredSize.Width, middle, tail.DesiredSize.Width, gap, width);
 
-        var slackWidth = RowReflow.SlackWidth(_wraps, lead.DesiredSize.Width, tail.DesiredSize.Width, gap, width);
+        var withTail = Middle == WrappedMiddle.WithTail;
+        var slackWidth = RowReflow.SlackWidth(_wraps, Middle, lead.DesiredSize.Width, tail.DesiredSize.Width, gap, width);
         slack?.Measure(new Size(slackWidth, availableSize.Height));
 
         var slackSize = slack?.DesiredSize ?? default;
 
         if (_wraps)
         {
-            // The name on a line of its own trims only where it is wider than the whole row.
+            // On a line of its own, each part is held to the row: the name trims only where it is
+            // wider than the whole row, and a last part that wraps its own controls, such as a
+            // FlowRow, wraps them rather than run off the edge.
             lead.Measure(availableSize);
+            tail.Measure(availableSize);
+
+            var withSlack = slackSize.Width + Gap(slack, gap);
+            var first = withTail ? lead.DesiredSize.Width : lead.DesiredSize.Width + withSlack;
+            var second = withTail ? tail.DesiredSize.Width + withSlack : tail.DesiredSize.Width;
 
             return new Size(
-                Math.Min(width, Math.Max(lead.DesiredSize.Width + slackSize.Width + Gap(slack, gap), tail.DesiredSize.Width)),
-                FirstLine(lead, slack) + RowSpacing + tail.DesiredSize.Height);
+                Math.Min(width, Math.Max(first, second)),
+                Line(lead, withTail ? null : slack) + RowSpacing + Line(tail, withTail ? slack : null));
         }
 
         var line = Math.Max(lead.DesiredSize.Height, Math.Max(slackSize.Height, tail.DesiredSize.Height));
@@ -85,21 +122,27 @@ public sealed partial class ReflowRow : Panel
         var slack = Children.Count > 2 ? Children[1] : null;
         var gap = ColumnSpacing;
         var leadWidth = Math.Min(lead.DesiredSize.Width, finalSize.Width);
-        var tailWidth = tail.DesiredSize.Width;
+        var tailWidth = Math.Min(tail.DesiredSize.Width, finalSize.Width);
 
         if (_wraps)
         {
-            var first = FirstLine(lead, slack);
+            var withTail = Middle == WrappedMiddle.WithTail;
+            var first = Line(lead, withTail ? null : slack);
             var top = first + RowSpacing;
             var second = Math.Max(0, finalSize.Height - top);
+            var tailLeftWrapped = Math.Max(0, finalSize.Width - tailWidth);
 
-            lead.Arrange(Centred(0, 0, leadWidth, first, lead));
-            tail.Arrange(Centred(Math.Max(0, finalSize.Width - tailWidth), top, tailWidth, second, tail));
+            lead.Arrange(new Rect(0, 0, leadWidth, first));
+            tail.Arrange(new Rect(tailLeftWrapped, top, tailWidth, second));
 
-            if (slack is not null)
+            if (slack is not null && withTail)
+            {
+                slack.Arrange(new Rect(0, top, Math.Max(0, tailLeftWrapped - Gap(tail, gap)), second));
+            }
+            else if (slack is not null)
             {
                 var left = leadWidth + Gap(lead, gap);
-                slack.Arrange(Centred(left, 0, Math.Max(0, finalSize.Width - left), first, slack));
+                slack.Arrange(new Rect(left, 0, Math.Max(0, finalSize.Width - left), first));
             }
 
             return finalSize;
@@ -108,28 +151,34 @@ public sealed partial class ReflowRow : Panel
         var height = finalSize.Height;
         var tailLeft = Math.Max(0, finalSize.Width - tailWidth);
 
-        lead.Arrange(Centred(0, 0, leadWidth, height, lead));
-        tail.Arrange(Centred(tailLeft, 0, tailWidth, height, tail));
+        lead.Arrange(new Rect(0, 0, leadWidth, height));
+        tail.Arrange(new Rect(tailLeft, 0, tailWidth, height));
 
         if (slack is not null)
         {
             var left = leadWidth + Gap(lead, gap);
-            slack.Arrange(Centred(left, 0, Math.Max(0, tailLeft - Gap(tail, gap) - left), height, slack));
+            slack.Arrange(new Rect(left, 0, Math.Max(0, tailLeft - Gap(tail, gap) - left), height));
         }
 
         return finalSize;
     }
 
-    /// <summary>A slot <paramref name="height"/> tall with <paramref name="child"/> in the middle of it, as a Grid cell centres it.</summary>
-    private static Rect Centred(double left, double top, double width, double height, UIElement child)
+    /// <summary>The narrowest <paramref name="part"/> may be drawn, measuring it whole where it has to stay whole.</summary>
+    private double Narrowest(FrameworkElement part, Size unbounded)
     {
-        var own = Math.Min(child.DesiredSize.Height, height);
+        if (!MiddleStaysWhole)
+        {
+            return part.Visibility == Visibility.Visible ? part.MinWidth : 0;
+        }
 
-        return new Rect(left, top + ((height - own) / 2), width, own);
+        part.Measure(unbounded);
+
+        return part.DesiredSize.Width;
     }
 
-    private static double FirstLine(UIElement lead, UIElement? slack) =>
-        Math.Max(lead.DesiredSize.Height, slack?.DesiredSize.Height ?? 0);
+    /// <summary>The height of a wrapped line holding <paramref name="part"/> and, where it is on that line, the middle.</summary>
+    private static double Line(UIElement part, UIElement? slack) =>
+        Math.Max(part.DesiredSize.Height, slack?.DesiredSize.Height ?? 0);
 
     private static double Gap(UIElement? part, double gap) => part is { DesiredSize.Width: > 0 } ? gap : 0;
 
@@ -142,6 +191,6 @@ public sealed partial class ReflowRow : Panel
         return Math.Max(0, shown - 1);
     }
 
-    private static void OnSpacingChanged(DependencyObject row, DependencyPropertyChangedEventArgs args) =>
+    private static void OnLayoutChanged(DependencyObject row, DependencyPropertyChangedEventArgs args) =>
         ((ReflowRow)row).InvalidateMeasure();
 }
