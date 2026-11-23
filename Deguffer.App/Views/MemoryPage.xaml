@@ -139,10 +139,8 @@
         </ItemsControl>
 
         <Border Grid.Row="3"
-                Background="{ThemeResource LayerFillColorDefaultBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                CornerRadius="6">
+                Style="{StaticResource CardStyle}"
+                Padding="0">
             <Grid>
                 <!--
                     The picture. Its own name and description, rather than the map's defaults, which
@@ -435,11 +433,7 @@
             §7.2.1's three ends.
         -->
         <Border Grid.Row="6"
-                Padding="12"
-                Background="{ThemeResource LayerFillColorDefaultBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                CornerRadius="6"
+                Style="{StaticResource CardStyle}"
                 Visibility="{x:Bind ViewModel.Selection.Report.HasReport, Mode=OneWay}"
                 AutomationProperties.Name="What the close did">
 
