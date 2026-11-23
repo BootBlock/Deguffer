@@ -11,7 +11,9 @@ namespace Deguffer.Core.Tests;
 ///
 /// <para>Each rail item is routed to its page by the item itself, so every item is named for the
 /// window's table and none carries a <c>Tag</c>: a string there is a second name that can drift from
-/// the first, and a page lookup on it needs a fallback that opens the wrong page in silence.</para>
+/// the first, and a page lookup on it needs a fallback that opens the wrong page in silence. For the
+/// same reason no item writes its own words: the window gives it its destination's name, the one the
+/// page's header and the window title read.</para>
 /// </summary>
 public sealed class DesignRailTests
 {
@@ -21,7 +23,7 @@ public sealed class DesignRailTests
     [
         "Storage", "Explore", "Duplicates", "Health",
         Separator,
-        "Installed apps", "Startup", "Memory",
+        "InstalledApps", "Startup", "Memory",
     ];
 
     private static readonly string[] FooterOrder = ["Settings", "About"];
@@ -43,6 +45,7 @@ public sealed class DesignRailTests
         {
             Assert.NotNull(item.Attributes().SingleOrDefault(attribute => attribute.Name.LocalName == "Name"));
             Assert.Null(item.Attribute("Tag"));
+            Assert.Null(item.Attribute("Content"));
         });
     }
 
@@ -52,7 +55,8 @@ public sealed class DesignRailTests
             .Elements()
             .Select(entry => entry.Name.LocalName switch
             {
-                "NavigationViewItem" => entry.Attribute("Content")?.Value ?? "(unnamed)",
+                "NavigationViewItem" => entry.Attributes().SingleOrDefault(attribute => attribute.Name.LocalName == "Name")?.Value is { } name
+                    && name.EndsWith("Item", StringComparison.Ordinal) ? name[..^"Item".Length] : "(unnamed)",
                 "NavigationViewItemSeparator" => Separator,
                 var other => other,
             });

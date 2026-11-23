@@ -18,34 +18,35 @@
 
     <!-- The header is a row of its own, outside the scroller, so the starfield in the row below is
          never behind its words, and every other word on the page is on a card. -->
-    <Grid RowDefinitions="Auto,*">
+    <Grid Padding="{StaticResource PagePadding}" RowSpacing="{StaticResource RegionGap}" RowDefinitions="Auto,*">
 
-        <!-- First, so it is read first, and drawn above the row below so the mark passes over the cards
-             as it flies in out of the stars behind them. -->
-        <StackPanel Grid.Row="0" Canvas.ZIndex="1" Orientation="Horizontal" Spacing="12" Margin="28,8,28,16">
-            <!-- Decoded at the size it settles at, in the reader's own pixels: the source is the
-                 256px master. -->
-            <Image x:Name="Mark" Width="32" Height="32" VerticalAlignment="Center"
-                   AutomationProperties.AccessibilityView="Raw">
-                <Image.Source>
-                    <BitmapImage UriSource="ms-appx:///Assets/Deguffer-256.png"
-                                 DecodePixelType="Logical" DecodePixelWidth="32" DecodePixelHeight="32" />
-                </Image.Source>
-            </Image>
-            <TextBlock Text="About" Style="{StaticResource PageTitle}" VerticalAlignment="Center" />
-        </StackPanel>
+        <controls:PageHeader Destination="About" />
 
-        <controls:Starfield x:Name="Field" Grid.Row="1" />
+        <!-- To the page's edges, under the padding the cards keep. -->
+        <controls:Starfield x:Name="Field" Grid.Row="1" Margin="{StaticResource PageBleed}" />
 
-        <ScrollViewer Grid.Row="1" Padding="28,0,28,28">
+        <ScrollViewer Grid.Row="1">
             <StackPanel Spacing="{StaticResource RegionGap}" MaxWidth="720" HorizontalAlignment="Left">
 
-                <Border Style="{StaticResource SolidCardStyle}">
+                <!-- Drawn above the cards after it, so the mark passes over them as it flies in out
+                     of the stars behind them. -->
+                <Border Canvas.ZIndex="1" Style="{StaticResource SolidCardStyle}">
                     <StackPanel Spacing="{StaticResource ControlGap}">
                         <!-- The version belongs with the build date and the architecture in the card
                              below, not beside the name as well; the same number twice, two lines
                              apart, only invites the reader to check whether it is the same number. -->
-                        <TextBlock Text="Deguffer" Style="{StaticResource SectionHeading}" />
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <!-- Decoded at the size it settles at, in the reader's own pixels: the
+                                 source is the 256px master. -->
+                            <Image x:Name="Mark" Width="32" Height="32" VerticalAlignment="Center"
+                                   AutomationProperties.AccessibilityView="Raw">
+                                <Image.Source>
+                                    <BitmapImage UriSource="ms-appx:///Assets/Deguffer-256.png"
+                                                 DecodePixelType="Logical" DecodePixelWidth="32" DecodePixelHeight="32" />
+                                </Image.Source>
+                            </Image>
+                            <TextBlock Text="Deguffer" Style="{StaticResource SectionHeading}" VerticalAlignment="Center" />
+                        </StackPanel>
 
                         <TextBlock Style="{StaticResource SecondaryText}"
                                    Text="Reclaims disk space by recognising what specific locations on your disk actually are, and telling you what each one costs to lose before you agree to lose it." />

@@ -87,28 +87,29 @@
         </Style>
     </Page.Resources>
 
-    <Grid Padding="20,12,20,16" RowSpacing="{StaticResource RegionGap}" RowDefinitions="Auto,Auto,Auto,*">
+    <Grid Padding="{StaticResource PagePadding}" RowSpacing="{StaticResource RegionGap}" RowDefinitions="Auto,Auto,Auto,Auto,*">
 
-        <Grid Grid.Row="0" ColumnSpacing="12" ColumnDefinitions="*,Auto,Auto,Auto">
-            <StackPanel Spacing="4">
-                <TextBlock Text="Installed apps" Style="{StaticResource SubtitleTextBlockStyle}" />
-                <TextBlock Text="{x:Bind ViewModel.Headline, Mode=OneWay}" TextWrapping="Wrap"
-                           Style="{StaticResource SecondaryText}" />
-            </StackPanel>
+        <controls:PageHeader Destination="InstalledApps">
+            <controls:PageHeader.Actions>
+                <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
+                    <ProgressRing IsActive="{x:Bind ViewModel.IsReading, Mode=OneWay}"
+                                  Width="20" Height="20" VerticalAlignment="Center" />
 
-            <ProgressRing Grid.Column="1" IsActive="{x:Bind ViewModel.IsReading, Mode=OneWay}"
-                          Width="20" Height="20" VerticalAlignment="Center" />
+                    <Button Content="Reopen as administrator" VerticalAlignment="Center" Style="{StaticResource ElevateButtonStyle}"
+                            Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
+                            Command="{x:Bind ViewModel.ElevateCommand}"
+                            ToolTipService.ToolTip="Entries for all users can be removed or restored only with administrator rights." />
 
-            <Button Grid.Column="2" Content="Reopen as administrator" VerticalAlignment="Center" Style="{StaticResource ElevateButtonStyle}"
-                    Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
-                    Command="{x:Bind ViewModel.ElevateCommand}"
-                    ToolTipService.ToolTip="Entries for all users can be removed or restored only with administrator rights." />
+                    <Button Content="Refresh" VerticalAlignment="Center"
+                            Command="{x:Bind ViewModel.RefreshCommand}" />
+                </StackPanel>
+            </controls:PageHeader.Actions>
+        </controls:PageHeader>
 
-            <Button Grid.Column="3" Content="Refresh" VerticalAlignment="Center"
-                    Command="{x:Bind ViewModel.RefreshCommand}" />
-        </Grid>
+        <TextBlock Grid.Row="1" Text="{x:Bind ViewModel.Headline, Mode=OneWay}" TextWrapping="Wrap"
+                   Style="{StaticResource BodyStrongTextBlockStyle}" />
 
-        <Grid Grid.Row="1" ColumnSpacing="16" ColumnDefinitions="*,Auto,Auto">
+        <Grid Grid.Row="2" ColumnSpacing="16" ColumnDefinitions="*,Auto,Auto">
             <TextBox PlaceholderText="Filter by name, publisher or command"
                      AutomationProperties.Name="Filter the lists"
                      Text="{x:Bind ViewModel.Filter, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
@@ -121,7 +122,7 @@
                       ToolTipService.ToolTip="{x:Bind ViewModel.Actions.BackupFolder}" />
         </Grid>
 
-        <InfoBar Grid.Row="2"
+        <InfoBar Grid.Row="3"
                  IsOpen="{x:Bind ViewModel.Actions.HasReport, Mode=OneWay}"
                  Severity="{x:Bind ViewModel.Actions.ReportSeverity, Mode=OneWay}"
                  Message="{x:Bind ViewModel.Actions.Report, Mode=OneWay}"
@@ -134,7 +135,7 @@
             </InfoBar.ActionButton>
         </InfoBar>
 
-        <Pivot Grid.Row="3">
+        <Pivot Grid.Row="4">
             <PivotItem Header="Stale entries">
                 <Grid RowSpacing="8" RowDefinitions="Auto,*,Auto">
                     <TextBlock TextWrapping="Wrap" Style="{StaticResource SecondaryText}"

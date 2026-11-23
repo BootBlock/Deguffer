@@ -8,7 +8,49 @@
     xmlns:vm="using:Deguffer.App.ViewModels"
     Background="Transparent">
 
-    <Grid Padding="20,12,20,16" RowSpacing="{StaticResource RegionGap}" RowDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto">
+    <Grid Padding="{StaticResource PagePadding}" RowSpacing="{StaticResource RegionGap}" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto,Auto">
+
+        <!-- The reading controls stand before the first reading too, so a reader can turn live update
+             off before it lands. -->
+        <controls:PageHeader Destination="Memory">
+            <controls:PageHeader.Actions>
+                <StackPanel Orientation="Horizontal" Spacing="16">
+                    <CheckBox x:Name="LiveToggle"
+                              MinWidth="0"
+                              VerticalAlignment="Center"
+                              Content="Live update"
+                              ToolTipService.ToolTip="Read where memory is every two seconds. Turned off, the figures change only when you press Refresh."
+                              AutomationProperties.HelpText="Read where memory is every two seconds. Turned off, the figures change only when you press Refresh." />
+
+                    <Button x:Name="RefreshButton"
+                            VerticalAlignment="Center"
+                            Content="Refresh"
+                            Command="{x:Bind ViewModel.Updates.RefreshCommand}"
+                            ToolTipService.ToolTip="Read where memory is now" />
+
+                    <!-- Indexed against ExploreView, so the order here is that enum's order. There is
+                         no colour picker: a memory picture has no dates to band, so its colours say
+                         which part a shape belongs to and nothing else. -->
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <!-- Raw for assistive technology: the combo box has its own name. -->
+                        <TextBlock Text="View"
+                                   Style="{StaticResource FieldLabel}"
+                                   VerticalAlignment="Center"
+                                   AutomationProperties.AccessibilityView="Raw" />
+                        <ComboBox x:Name="ViewSelector"
+                                  MinWidth="120"
+                                  SelectionChanged="OnViewSelectionChanged"
+                                  AutomationProperties.Name="How to draw where memory is">
+                            <ComboBoxItem Content="Treemap" />
+                            <ComboBoxItem Content="Icicle" />
+                            <ComboBoxItem Content="Sunburst" />
+                            <ComboBoxItem Content="List" />
+                            <ComboBoxItem Content="Tree" />
+                        </ComboBox>
+                    </StackPanel>
+                </StackPanel>
+            </controls:PageHeader.Actions>
+        </controls:PageHeader>
 
         <!--
             The headline. §7.2 leads with commit charge against the commit limit, because that is the
@@ -16,7 +58,7 @@
             Available memory sits beside it rather than above it, because low available memory is
             Windows working as designed and leading with it would present a cache as a problem.
         -->
-        <Grid Grid.Row="0" ColumnSpacing="20" ColumnDefinitions="*,Auto,Auto">
+        <Grid Grid.Row="1" ColumnSpacing="20" ColumnDefinitions="*,Auto">
             <StackPanel Grid.Column="0" Spacing="4">
                 <TextBlock Text="{x:Bind ViewModel.Commit, Mode=OneWay}"
                            Style="{StaticResource SubtitleTextBlockStyle}" />
@@ -36,27 +78,10 @@
                        Text="{x:Bind ViewModel.Available, Mode=OneWay}"
                        VerticalAlignment="Top"
                        Style="{StaticResource SubtitleTextBlockStyle}" />
-
-            <!-- Indexed against ExploreView, so the order here is that enum's order. There is no
-                 colour picker: a memory picture has no dates to band, so its colours say which part
-                 a shape belongs to and nothing else. -->
-            <ComboBox x:Name="ViewSelector"
-                      Grid.Column="2"
-                      MinWidth="120"
-                      Header="View"
-                      SelectionChanged="OnViewSelectionChanged"
-                      AutomationProperties.Name="How to draw where memory is">
-                <ComboBoxItem Content="Treemap" />
-                <ComboBoxItem Content="Icicle" />
-                <ComboBoxItem Content="Sunburst" />
-                <ComboBoxItem Content="List" />
-                <ComboBoxItem Content="Tree" />
-            </ComboBox>
         </Grid>
 
-        <!-- Where you are and the way back out, then when the figures are read. The reading controls
-             stand before the first reading too, so a reader can turn live update off before it lands. -->
-        <Grid Grid.Row="1" ColumnSpacing="8" ColumnDefinitions="Auto,*,Auto,Auto,Auto">
+        <!-- Where you are and the way back out, then when the figures were read. -->
+        <Grid Grid.Row="2" ColumnSpacing="8" ColumnDefinitions="Auto,*,Auto">
             <Button Grid.Column="0"
                     Padding="8,4"
                     Visibility="{x:Bind ViewModel.HasTree, Mode=OneWay}"
@@ -108,27 +133,12 @@
                        VerticalAlignment="Center"
                        TextWrapping="NoWrap"
                        Style="{StaticResource SecondaryText}" />
-
-            <CheckBox x:Name="LiveToggle"
-                      Grid.Column="3"
-                      MinWidth="0"
-                      VerticalAlignment="Center"
-                      Content="Live update"
-                      ToolTipService.ToolTip="Read where memory is every two seconds. Turned off, the figures change only when you press Refresh."
-                      AutomationProperties.HelpText="Read where memory is every two seconds. Turned off, the figures change only when you press Refresh." />
-
-            <Button x:Name="RefreshButton"
-                    Grid.Column="4"
-                    VerticalAlignment="Center"
-                    Content="Refresh"
-                    Command="{x:Bind ViewModel.Updates.RefreshCommand}"
-                    ToolTipService.ToolTip="Read where memory is now" />
         </Grid>
 
         <!-- What this read could not measure, and that every figure is a lower bound (§7.2). Above
              the picture rather than over it: they change only when the machine's answers change, so
              they never resize the card while it is being read. -->
-        <ItemsControl Grid.Row="2"
+        <ItemsControl Grid.Row="3"
                       ItemsSource="{x:Bind ViewModel.Notes}"
                       AutomationProperties.Name="What these figures are, and what this reading could not measure">
             <ItemsControl.ItemTemplate>
@@ -138,7 +148,7 @@
             </ItemsControl.ItemTemplate>
         </ItemsControl>
 
-        <Border Grid.Row="3"
+        <Border Grid.Row="4"
                 Background="{ThemeResource LayerFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1"
@@ -338,7 +348,7 @@
             </Grid>
         </Border>
 
-        <StackPanel Grid.Row="4" Spacing="{StaticResource ControlGap}">
+        <StackPanel Grid.Row="5" Spacing="{StaticResource ControlGap}">
             <!-- What the pointer is over: what it is called, and what it holds. Both are one line
                  that never wraps, so naming a new shape cannot change the height of anything above
                  it. What the thing under the pointer *is* wraps, so it is the tooltip on the
@@ -374,7 +384,7 @@
             while a close is being watched, which is the action being in progress rather than a
             verdict about anything.
         -->
-        <Grid Grid.Row="5"
+        <Grid Grid.Row="6"
               ColumnSpacing="12"
               RowSpacing="4"
               ColumnDefinitions="*,Auto,Auto"
@@ -434,7 +444,7 @@
             It stands until the user takes it down, and taking it down ends the watch, which is one of
             §7.2.1's three ends.
         -->
-        <Border Grid.Row="6"
+        <Border Grid.Row="7"
                 Padding="12"
                 Background="{ThemeResource LayerFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"

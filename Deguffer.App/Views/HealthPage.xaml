@@ -4,6 +4,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:vm="using:Deguffer.App.ViewModels"
+    xmlns:controls="using:Deguffer.App.Controls"
     xmlns:health="using:Deguffer.Core.Health"
     Background="Transparent">
 
@@ -62,30 +63,32 @@
         </Style>
     </Page.Resources>
 
-    <Grid Padding="20,12,20,16" RowSpacing="{StaticResource RegionGap}" RowDefinitions="Auto,Auto,Auto,*">
+    <Grid Padding="{StaticResource PagePadding}" RowSpacing="{StaticResource RegionGap}" RowDefinitions="Auto,Auto,Auto,*">
 
-        <Grid ColumnSpacing="12" ColumnDefinitions="*,Auto,Auto,Auto">
-            <StackPanel Spacing="4">
-                <TextBlock Text="Health" Style="{StaticResource SubtitleTextBlockStyle}" />
-                <TextBlock Text="{x:Bind ViewModel.Headline, Mode=OneWay}" TextWrapping="Wrap"
-                           Style="{StaticResource SecondaryText}" AutomationProperties.LiveSetting="Polite" />
-            </StackPanel>
+        <controls:PageHeader Destination="Health">
+            <controls:PageHeader.Actions>
+                <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
+                    <ProgressRing IsActive="{x:Bind ViewModel.IsReading, Mode=OneWay}"
+                                  Width="20" Height="20" VerticalAlignment="Center" />
 
-            <ProgressRing Grid.Column="1" IsActive="{x:Bind ViewModel.IsReading, Mode=OneWay}"
-                          Width="20" Height="20" VerticalAlignment="Center" />
+                    <Button Content="Reopen as administrator" VerticalAlignment="Center" Style="{StaticResource ElevateButtonStyle}"
+                            Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
+                            Command="{x:Bind ViewModel.ElevateCommand}"
+                            ToolTipService.ToolTip="A SATA drive's failure limits, link speed, latest self-test and error count can be read only with administrator rights." />
 
-            <Button Grid.Column="2" Content="Reopen as administrator" VerticalAlignment="Center" Style="{StaticResource ElevateButtonStyle}"
-                    Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
-                    Command="{x:Bind ViewModel.ElevateCommand}"
-                    ToolTipService.ToolTip="A SATA drive's failure limits, link speed, latest self-test and error count can be read only with administrator rights." />
+                    <Button Content="Refresh" VerticalAlignment="Center"
+                            Command="{x:Bind ViewModel.RefreshCommand}"
+                            ToolTipService.ToolTip="Read every drive again. This can wake a sleeping disk." />
+                </StackPanel>
+            </controls:PageHeader.Actions>
+        </controls:PageHeader>
 
-            <Button Grid.Column="3" Content="Refresh" VerticalAlignment="Center"
-                    Command="{x:Bind ViewModel.RefreshCommand}"
-                    ToolTipService.ToolTip="Read every drive again. This can wake a sleeping disk." />
-        </Grid>
-
-        <TextBlock Grid.Row="1" TextWrapping="Wrap" Style="{StaticResource SecondaryText}"
-                   Text="What each drive reports about its own condition, in plain words. Deguffer only reads this and changes nothing on the drive. Drives can fail without any warning, so keep backups whatever this page says." />
+        <StackPanel Grid.Row="1" Spacing="{StaticResource LabelGap}">
+            <TextBlock Text="{x:Bind ViewModel.Headline, Mode=OneWay}" TextWrapping="Wrap"
+                       Style="{StaticResource BodyStrongTextBlockStyle}" AutomationProperties.LiveSetting="Polite" />
+            <TextBlock TextWrapping="Wrap" Style="{StaticResource SecondaryText}"
+                       Text="What each drive reports about its own condition, in plain words. Deguffer only reads this and changes nothing on the drive. Drives can fail without any warning, so keep backups whatever this page says." />
+        </StackPanel>
 
         <!-- Not closable: closing it would hide the only reason the button is there, and a read of
              the drives would have no way to bring it back. -->

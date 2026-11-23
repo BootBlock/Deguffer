@@ -24,30 +24,52 @@ public sealed partial class MainWindow : Window
     private readonly ToolWindowOpener _mapAppearance;
     private readonly DrawnSetting<bool> _navigationCollapsed;
 
+    /// <summary>The page each destination shows.</summary>
+    private static readonly Dictionary<Destination, Type> Pages = new()
+    {
+        [Destination.Storage] = typeof(CleanPage),
+        [Destination.Explore] = typeof(ExplorePage),
+        [Destination.Duplicates] = typeof(DuplicatesPage),
+        [Destination.Health] = typeof(HealthPage),
+        [Destination.InstalledApps] = typeof(InstalledAppsPage),
+        [Destination.Startup] = typeof(StartupPage),
+        [Destination.Memory] = typeof(MemoryPage),
+        [Destination.Settings] = typeof(SettingsPage),
+        [Destination.About] = typeof(AboutPage),
+    };
+
     /// <summary>
-    /// The page each rail item opens. Keyed by the item rather than by a string written on it, so an
-    /// item with no page, or a page named wrong, cannot open Storage in silence as a fallback would.
+    /// The rail item for each destination, and the destination each item opens. Keyed by the item
+    /// rather than by a string written on it, so an item with no page, or a page named wrong, cannot
+    /// open Storage in silence as a fallback would.
     /// </summary>
-    private readonly Dictionary<NavigationViewItem, Type> _destinations;
+    private readonly Dictionary<Destination, NavigationViewItem> _items;
+    private readonly Dictionary<NavigationViewItem, Destination> _destinations;
 
     public MainWindow()
     {
         InitializeComponent();
 
-        _destinations = new Dictionary<NavigationViewItem, Type>
+        _items = new Dictionary<Destination, NavigationViewItem>
         {
-            [StorageItem] = typeof(CleanPage),
-            [ExploreItem] = typeof(ExplorePage),
-            [DuplicatesItem] = typeof(DuplicatesPage),
-            [HealthItem] = typeof(HealthPage),
-            [InstalledAppsItem] = typeof(InstalledAppsPage),
-            [StartupItem] = typeof(StartupPage),
-            [MemoryItem] = typeof(MemoryPage),
-            [SettingsItem] = typeof(SettingsPage),
-            [AboutItem] = typeof(AboutPage),
+            [Destination.Storage] = StorageItem,
+            [Destination.Explore] = ExploreItem,
+            [Destination.Duplicates] = DuplicatesItem,
+            [Destination.Health] = HealthItem,
+            [Destination.InstalledApps] = InstalledAppsItem,
+            [Destination.Startup] = StartupItem,
+            [Destination.Memory] = MemoryItem,
+            [Destination.Settings] = SettingsItem,
+            [Destination.About] = AboutItem,
         };
+        _destinations = _items.ToDictionary(pair => pair.Value, pair => pair.Key);
 
-        Title = "Deguffer";
+        // Each item's words come from the name the page's own header and the window title read.
+        foreach (var (destination, item) in _items)
+        {
+            item.Content = DestinationNames.Of(destination);
+        }
+
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBar);
         WindowIcon.Apply(this);
@@ -181,23 +203,23 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private void OpenWhereTheLaunchAsked()
     {
-        var item = ElevatedRelaunch.Requested switch
+        var destination = ElevatedRelaunch.Requested switch
         {
-            ExploreRequest => ExploreItem,
-            DuplicatesRequest => DuplicatesItem,
-            InstalledAppsRequest => InstalledAppsItem,
-            HealthRequest => HealthItem,
-            StartupRequest => StartupItem,
-            _ => StorageItem,
+            ExploreRequest => Destination.Explore,
+            DuplicatesRequest => Destination.Duplicates,
+            InstalledAppsRequest => Destination.InstalledApps,
+            HealthRequest => Destination.Health,
+            StartupRequest => Destination.Startup,
+            _ => Destination.Storage,
         };
 
-        Go(_destinations[item]);
+        Go(destination);
 
         // The rail second. Assigning it raises OnDestinationChanged, which finds the frame already
         // where it is going and does nothing further. The selection is what the user reads as "where
         // am I", and a frame showing Explore under a rail highlighting Storage is worse than either
         // of them alone.
-        Navigation.SelectedItem = item;
+        Navigation.SelectedItem = _items[destination];
     }
 
     /// <summary>
@@ -235,17 +257,20 @@ public sealed partial class MainWindow : Window
     /// </summary>
     public void ShowStartupEntry(StartupKey entry)
     {
-        Go(_destinations[StartupItem], entry);
+        Go(Destination.Startup, entry);
         Navigation.SelectedItem = StartupItem;
     }
 
     /// <summary>
-    /// Show <paramref name="page"/> with the entrance <see cref="PageArrival"/> plays, in place of the
-    /// frame's own transition, which would slide the page in under it. A cached page is handed
-    /// <paramref name="parameter"/> again on every arrival.
+    /// Show <paramref name="destination"/>'s page with the entrance <see cref="PageArrival"/> plays, in
+    /// place of the frame's own transition, which would slide the page in under it, and title the
+    /// window after it. A cached page is handed <paramref name="parameter"/> again on every arrival.
     /// </summary>
-    private void Go(Type page, object? parameter = null) =>
-        ContentFrame.Navigate(page, parameter, new SuppressNavigationTransitionInfo());
+    private void Go(Destination destination, object? parameter = null)
+    {
+        ContentFrame.Navigate(Pages[destination], parameter, new SuppressNavigationTransitionInfo());
+        Title = DestinationNames.WindowTitle(destination);
+    }
 
     private async void OnClosing(AppWindow sender, AppWindowClosingEventArgs args)
     {
@@ -284,13 +309,13 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        var page = _destinations[item];
+        var destination = _destinations[item];
 
         // Navigating to the page already shown would rebuild it, and CleanPage holds a scan the
         // user may be part-way through acting on.
-        if (ContentFrame.CurrentSourcePageType != page)
+        if (ContentFrame.CurrentSourcePageType != Pages[destination])
         {
-            Go(page);
+            Go(destination);
         }
     }
 }
