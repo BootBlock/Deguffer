@@ -95,19 +95,10 @@ public sealed class MftExploreLinkPlacementTests
 
         Assert.InRange(extra, 0, Files);
 
-        static long Least(IMftSource source)
-        {
-            // The first read also pays for warming the reader up, which only raises it, so one read
-            // more than Reads is taken.
-            var least = long.MaxValue;
-
-            for (var read = 0; read <= Reads; read++)
-            {
-                least = Math.Min(least, Allocated(source));
-            }
-
-            return least;
-        }
+        static long Least(IMftSource source) =>
+            ThreadAllocation.Least(
+                () => MftExploreReader.Read(source, Root, [], TableTuning.Default, progress: null, default),
+                Reads);
 
         static IMftSource Table(bool linked)
         {
@@ -131,16 +122,6 @@ public sealed class MftExploreLinkPlacementTests
             }
 
             return fixture.Build();
-        }
-
-        static long Allocated(IMftSource source)
-        {
-            var before = GC.GetAllocatedBytesForCurrentThread();
-            var tree = MftExploreReader.Read(source, Root, [], TableTuning.Default, progress: null, default).Tree!;
-            var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-
-            GC.KeepAlive(tree);
-            return allocated;
         }
     }
 

@@ -114,22 +114,8 @@ public sealed class RemovalWalkPathTests
     /// The least a gather of the tree allocated for each entry, over three gathers, on the one worker that
     /// is the calling thread, so what this thread allocated is what the walk did.
     /// </summary>
-    private static long LeastPerEntry(ListedTree tree, RemovalBounds bounds)
-    {
-        // Once first, so what is counted is the walk rather than the first call's compilation.
-        Gather(tree, bounds);
-
-        var least = long.MaxValue;
-
-        for (var gather = 0; gather < 3; gather++)
-        {
-            var before = GC.GetAllocatedBytesForCurrentThread();
-            Gather(tree, bounds);
-            least = Math.Min(least, (GC.GetAllocatedBytesForCurrentThread() - before) / (Folders * (FilesInEach + 1)));
-        }
-
-        return least;
-    }
+    private static long LeastPerEntry(ListedTree tree, RemovalBounds bounds) =>
+        ThreadAllocation.Least(() => Gather(tree, bounds), reads: 3) / (Folders * (FilesInEach + 1));
 
     private static RemovalWalk.Folder Gather(ListedTree tree, RemovalBounds bounds) =>
         RemovalWalk.Gather(LongPath.Extended(Root), MinimumAge.Off, bounds, tree.List, OneWorker, default);
