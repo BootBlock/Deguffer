@@ -30,8 +30,8 @@ internal enum MftHandOn
 /// </param>
 internal sealed class MftRecordHandOff(int count, MftBitmap? bitmap, MftRecordHandler onRecord, MftListReadAhead? lists)
 {
-    private readonly List<MftDeferredRecord> _deferred = [];
-    private readonly List<MftExtensionRecord> _extensions = [];
+    private readonly MftByRecord<MftDeferredRecord> _deferred = new();
+    private readonly MftByRecord<MftExtensionRecord> _extensions = new();
 
     private long _wanted;
 
@@ -39,21 +39,13 @@ internal sealed class MftRecordHandOff(int count, MftBitmap? bitmap, MftRecordHa
     public long Wanted => Interlocked.Read(ref _wanted);
 
     /// <summary>The records held back, in record order. Only once every parse has finished.</summary>
-    public IReadOnlyList<MftDeferredRecord> Deferred()
-    {
-        _deferred.Sort(static (a, b) => a.Self.Record.CompareTo(b.Self.Record));
-        return _deferred;
-    }
+    public IReadOnlyList<MftDeferredRecord> Deferred() => _deferred.InRecordOrder();
 
     /// <summary>
     /// The extension records the pass read that hold something the scan needs, in record order. Only
     /// once every parse has finished.
     /// </summary>
-    public IReadOnlyList<MftExtensionRecord> Extensions()
-    {
-        _extensions.Sort(static (a, b) => a.Number.CompareTo(b.Number));
-        return _extensions;
-    }
+    public MftByRecord<MftExtensionRecord>.Sorted Extensions() => _extensions.InRecordOrder();
 
     /// <param name="record">The record's bytes, exactly, which the parse fixes up in place.</param>
     public MftHandOn Take(long number, Span<byte> record)
@@ -72,7 +64,7 @@ internal sealed class MftRecordHandOff(int count, MftBitmap? bitmap, MftRecordHa
         {
             lock (_extensions)
             {
-                _extensions.Add(kept);
+                _extensions.Add(number, kept);
             }
         }
 
@@ -87,7 +79,7 @@ internal sealed class MftRecordHandOff(int count, MftBitmap? bitmap, MftRecordHa
 
             lock (_deferred)
             {
-                _deferred.Add(continued);
+                _deferred.Add(number, continued);
             }
 
             if (continued.PendingList is not null)
