@@ -6,16 +6,6 @@
     xmlns:controls="using:Deguffer.App.Controls"
     Background="Transparent">
 
-    <Page.Resources>
-        <!-- The page's cards stand over a starfield, so they take a solid fill rather than the
-             translucent layer fill every other page's cards take over the backdrop: a star behind a
-             line of text would show through the layer, and the text is what the page is for (§6.5).
-             The tertiary solid fill is the colour the layer fill comes to over the window's own. -->
-        <Style x:Key="SolidCardStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
-            <Setter Property="Background" Value="{ThemeResource SolidBackgroundFillColorTertiaryBrush}" />
-        </Style>
-    </Page.Resources>
-
     <!-- The header is a row of its own, outside the scroller, so the starfield in the row below is
          never behind its words, and every other word on the page is on a card. -->
     <Grid Padding="{StaticResource PagePadding}" RowSpacing="{StaticResource RegionGap}" RowDefinitions="Auto,*">

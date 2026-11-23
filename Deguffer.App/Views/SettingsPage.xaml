@@ -236,38 +236,36 @@
                 <ItemsRepeater x:Name="SourceRootsList" ItemsSource="{x:Bind ViewModel.SourceRoots, Mode=OneWay}" Margin="0,4,0,0">
                     <ItemsRepeater.ItemTemplate>
                         <DataTemplate x:DataType="configuration:SourceRoot">
-                            <Grid ColumnSpacing="{StaticResource ControlGap}" Padding="{StaticResource RowPadding}" Margin="0,0,0,4"
-                                  Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                  BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                  BorderThickness="1"
-                                  CornerRadius="4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
+                            <Border Style="{StaticResource ListCardStyle}" Margin="0,0,0,4">
+                                <Grid ColumnSpacing="{StaticResource ControlGap}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
 
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="{x:Bind Path}"
-                                               TextTrimming="CharacterEllipsis"
-                                               ToolTipService.ToolTip="{x:Bind Path}" />
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="{x:Bind Path}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   ToolTipService.ToolTip="{x:Bind Path}" />
 
-                                    <!-- A standing consent nobody can see is one nobody can withdraw. The
-                                         folder was approved for a drive whose contents are downloaded to
-                                         read them, so the row says so, and removing the folder is how the
-                                         answer is taken back. -->
-                                    <TextBlock Text="Cloud storage. You chose to let Deguffer search this, so reading it downloads the files in it."
-                                               Style="{StaticResource Caption}"
-                                               TextWrapping="Wrap"
-                                               Margin="0,4,0,0"
-                                               Visibility="{x:Bind RemoteStorageApproved}" />
-                                </StackPanel>
+                                        <!-- A standing consent nobody can see is one nobody can withdraw. The
+                                             folder was approved for a drive whose contents are downloaded to
+                                             read them, so the row says so, and removing the folder is how the
+                                             answer is taken back. -->
+                                        <TextBlock Text="Cloud storage. You chose to let Deguffer search this, so reading it downloads the files in it."
+                                                   Style="{StaticResource Caption}"
+                                                   TextWrapping="Wrap"
+                                                   Margin="0,4,0,0"
+                                                   Visibility="{x:Bind RemoteStorageApproved}" />
+                                    </StackPanel>
 
-                                <Button Grid.Column="1"
-                                        Content="Remove"
-                                        Tag="{x:Bind Path}"
-                                        Click="OnRemoveSourceRoot"
-                                        AutomationProperties.Name="Remove source folder" />
-                            </Grid>
+                                    <Button Grid.Column="1"
+                                            Content="Remove"
+                                            Tag="{x:Bind Path}"
+                                            Click="OnRemoveSourceRoot"
+                                            AutomationProperties.Name="Remove source folder" />
+                                </Grid>
+                            </Border>
                         </DataTemplate>
                     </ItemsRepeater.ItemTemplate>
                 </ItemsRepeater>
@@ -303,27 +301,25 @@
                 <ItemsRepeater x:Name="EmulatorFoldersList" ItemsSource="{x:Bind ViewModel.EmulatorFolders, Mode=OneWay}" Margin="0,4,0,0">
                     <ItemsRepeater.ItemTemplate>
                         <DataTemplate x:DataType="x:String">
-                            <Grid ColumnSpacing="{StaticResource ControlGap}" Padding="{StaticResource RowPadding}" Margin="0,0,0,4"
-                                  Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                  BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                  BorderThickness="1"
-                                  CornerRadius="4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
+                            <Border Style="{StaticResource ListCardStyle}" Margin="0,0,0,4">
+                                <Grid ColumnSpacing="{StaticResource ControlGap}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
 
-                                <TextBlock Text="{x:Bind}"
-                                           VerticalAlignment="Center"
-                                           TextTrimming="CharacterEllipsis"
-                                           ToolTipService.ToolTip="{x:Bind}" />
+                                    <TextBlock Text="{x:Bind}"
+                                               VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis"
+                                               ToolTipService.ToolTip="{x:Bind}" />
 
-                                <Button Grid.Column="1"
-                                        Content="Remove"
-                                        Tag="{x:Bind}"
-                                        Click="OnRemoveEmulatorFolder"
-                                        AutomationProperties.Name="Remove emulator folder" />
-                            </Grid>
+                                    <Button Grid.Column="1"
+                                            Content="Remove"
+                                            Tag="{x:Bind}"
+                                            Click="OnRemoveEmulatorFolder"
+                                            AutomationProperties.Name="Remove emulator folder" />
+                                </Grid>
+                            </Border>
                         </DataTemplate>
                     </ItemsRepeater.ItemTemplate>
                 </ItemsRepeater>
@@ -356,32 +352,30 @@
                 <ItemsRepeater x:Name="KeptItemsList" ItemsSource="{x:Bind ViewModel.KeptItems, Mode=OneWay}" Margin="0,4,0,0">
                     <ItemsRepeater.ItemTemplate>
                         <DataTemplate x:DataType="configuration:KeptItem">
-                            <Grid ColumnSpacing="{StaticResource ControlGap}" Padding="{StaticResource RowPadding}" Margin="0,0,0,4"
-                                  Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                  BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                  BorderThickness="1"
-                                  CornerRadius="4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
+                            <Border Style="{StaticResource ListCardStyle}" Margin="0,0,0,4">
+                                <Grid ColumnSpacing="{StaticResource ControlGap}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
 
-                                <StackPanel VerticalAlignment="Center" Spacing="1">
-                                    <TextBlock Text="{x:Bind Item.Name}"
-                                               TextTrimming="CharacterEllipsis"
-                                               ToolTipService.ToolTip="{x:Bind Item.Name}" />
-                                    <TextBlock Text="{x:Bind ProviderName}"
-                                               Style="{StaticResource Caption}"
-                                               TextTrimming="CharacterEllipsis" />
-                                </StackPanel>
+                                    <StackPanel VerticalAlignment="Center" Spacing="1">
+                                        <TextBlock Text="{x:Bind Item.Name}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   ToolTipService.ToolTip="{x:Bind Item.Name}" />
+                                        <TextBlock Text="{x:Bind ProviderName}"
+                                                   Style="{StaticResource Caption}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
 
-                                <Button Grid.Column="1"
-                                        Content="Stop keeping"
-                                        Tag="{x:Bind}"
-                                        Click="OnReleaseKeptItem"
-                                        AutomationProperties.Name="Stop keeping"
-                                        AutomationProperties.HelpText="{x:Bind Item.Name}" />
-                            </Grid>
+                                    <Button Grid.Column="1"
+                                            Content="Stop keeping"
+                                            Tag="{x:Bind}"
+                                            Click="OnReleaseKeptItem"
+                                            AutomationProperties.Name="Stop keeping"
+                                            AutomationProperties.HelpText="{x:Bind Item.Name}" />
+                                </Grid>
+                            </Border>
                         </DataTemplate>
                     </ItemsRepeater.ItemTemplate>
                 </ItemsRepeater>
@@ -417,30 +411,28 @@
                 <ItemsRepeater x:Name="KeptScansList" ItemsSource="{x:Bind History.Kept, Mode=OneWay}" Margin="0,4,0,0">
                     <ItemsRepeater.ItemTemplate>
                         <DataTemplate x:DataType="viewModels:KeptScanRow">
-                            <Grid ColumnSpacing="{StaticResource ControlGap}" Padding="{StaticResource RowPadding}" Margin="0,0,0,4"
-                                  Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                  BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                  BorderThickness="1"
-                                  CornerRadius="4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
+                            <Border Style="{StaticResource ListCardStyle}" Margin="0,0,0,4">
+                                <Grid ColumnSpacing="{StaticResource ControlGap}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
 
-                                <StackPanel VerticalAlignment="Center" Spacing="1">
-                                    <TextBlock Text="{x:Bind Title}" TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Text="{x:Bind Detail}"
-                                               Style="{StaticResource Caption}"
-                                               TextTrimming="CharacterEllipsis" />
-                                </StackPanel>
+                                    <StackPanel VerticalAlignment="Center" Spacing="1">
+                                        <TextBlock Text="{x:Bind Title}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{x:Bind Detail}"
+                                                   Style="{StaticResource Caption}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
 
-                                <Button Grid.Column="1"
-                                        Content="Remove"
-                                        Tag="{x:Bind}"
-                                        Click="OnRemoveScanSummary"
-                                        AutomationProperties.Name="Remove"
-                                        AutomationProperties.HelpText="{x:Bind Title}" />
-                            </Grid>
+                                    <Button Grid.Column="1"
+                                            Content="Remove"
+                                            Tag="{x:Bind}"
+                                            Click="OnRemoveScanSummary"
+                                            AutomationProperties.Name="Remove"
+                                            AutomationProperties.HelpText="{x:Bind Title}" />
+                                </Grid>
+                            </Border>
                         </DataTemplate>
                     </ItemsRepeater.ItemTemplate>
                 </ItemsRepeater>

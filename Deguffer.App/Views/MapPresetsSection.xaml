@@ -28,17 +28,12 @@
                 <Style TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
                     <Setter Property="Margin" Value="0,0,0,4" />
                     <Setter Property="Padding" Value="0" />
-                    <Setter Property="CornerRadius" Value="{StaticResource CardCorner}" />
                     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                 </Style>
             </ListView.ItemContainerStyle>
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="vm:MapPresetOption">
-                    <Border Padding="16,8,12,8"
-                            Background="{ThemeResource LayerFillColorDefaultBrush}"
-                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                            BorderThickness="1"
-                            CornerRadius="{StaticResource CardCorner}"
+                    <Border Style="{StaticResource ListCardStyle}"
                             AutomationProperties.Name="{x:Bind Spoken}">
                         <StackPanel Spacing="0">
                             <TextBlock Text="{x:Bind Name}" Style="{StaticResource BodyStrongTextBlockStyle}" />

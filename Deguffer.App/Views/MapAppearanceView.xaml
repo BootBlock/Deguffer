@@ -114,9 +114,7 @@
              section is open. -->
         <Border Grid.Row="4"
                 Padding="16,12"
-                Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="0,1,0,0">
+                Style="{StaticResource FooterStyle}">
             <Grid ColumnSpacing="16" ColumnDefinitions="*,Auto">
                 <TextBlock Text="Changes show on the map as you make them. Each picture keeps its own colours, and the Memory page's map uses this look too."
                            Style="{StaticResource CaptionTextBlockStyle}"
