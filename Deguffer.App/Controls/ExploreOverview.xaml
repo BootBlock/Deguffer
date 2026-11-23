@@ -15,10 +15,7 @@
 
     <Grid>
         <Border x:Name="Frame"
-                Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                CornerRadius="4"
+                Style="{StaticResource OverlayCardStyle}"
                 Padding="4">
             <Grid>
                 <!-- The picture and the rectangle are composition visuals hosted here, so the
@@ -51,8 +48,7 @@
         <Button x:Name="ShowButton"
                 Visibility="Collapsed"
                 Padding="8"
-                Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                Style="{StaticResource OverlayButtonStyle}"
                 Click="OnShowClicked"
                 ToolTipService.ToolTip="Show the overview of the whole picture"
                 AutomationProperties.Name="Show the overview">
