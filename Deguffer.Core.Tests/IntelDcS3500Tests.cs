@@ -5,13 +5,15 @@ namespace Deguffer.Core.Tests;
 
 /// <summary>
 /// §7.6: Intel's DC S3500 specification, 328860-008US table 18, is read on the DC S3500 and on nothing
-/// else. Each reading has a covered drive, and a DC S3510 just outside the key keeps the catalogue's
-/// reading. Every model name and every byte is invented.
+/// else. Each reading has a covered drive, and drives just outside the key keep the catalogue's reading:
+/// a DC S3500 with a system maker's firmware letter after its part number, and a DC S3510. Every byte is
+/// invented, as is every model name but the part numbers of those two.
 /// </summary>
 public sealed class IntelDcS3500Tests
 {
     private const string Covered = "INTEL SSDSC2BB999G4";
-    private const string Outside = "INTEL SSDSC2BB999G6";
+    private const string Outside = "INTEL SSDSC2BB240G4R";
+    private const string DcS3510 = "INTEL SSDSC2BB240G6";
 
     /// <summary>The largest raw value six bytes hold.</summary>
     private const ulong LargestRaw = 0xFFFF_FFFF_FFFF;
@@ -54,6 +56,14 @@ public sealed class IntelDcS3500Tests
     [InlineData(234, "Vendor-specific attribute 234")]
     public void AFamilyJustOutsideKeepsTheCataloguesReading(byte id, string name) =>
         Assert.Equal(name, Row(id, model: Outside).Name);
+
+    /// <summary>The DC S3510 reads its own specification, which states neither of these as 328860 does.</summary>
+    [Fact]
+    public void TheDcS3510DoesNotTakeTheDcS3500sCaseTemperatureOrWearPrecision()
+    {
+        Assert.Equal("Airflow temperature", Row(190, model: DcS3510).Name);
+        Assert.Equal("4.34%", Reading(226, 4_450, DcS3510));
+    }
 
     [Theory]
     [InlineData(225)]

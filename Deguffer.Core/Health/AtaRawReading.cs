@@ -1,3 +1,4 @@
+using System.Globalization;
 using Deguffer.Core.Health.Parsing;
 
 namespace Deguffer.Core.Health;
@@ -13,23 +14,31 @@ internal static class AtaRawReading
     private const int BitsPerByte = 8;
 
     /// <summary>
-    /// The value Intel 328860 section 5.4.2 resets E2h, E3h and E4h to, and holds E2h and E3h at until the
-    /// workload timer reaches 60 minutes.
+    /// The value Intel's DC specifications (328860, 332211 and 334826, section 5.4.2) reset E2h, E3h and E4h
+    /// to, and hold E2h and E3h at until the workload timer reaches 60 minutes.
     /// </summary>
     private const ulong NotYetMeasured = 0xFFFF;
 
-    /// <summary>What a two-byte field of the capacitor test holds at once it can count no higher (328860 table 18, AFh).</summary>
+    /// <summary>What a two-byte field of the capacitor test holds at once it can count no higher (328860, 332211 and 334826, AFh).</summary>
     private const ulong Saturated = 0xFFFF;
 
-    /// <summary>The lowest capacitor test result that is a time. Anything lower is an error code (328860 table 18, AFh).</summary>
+    /// <summary>The lowest capacitor test result that is a time. Anything lower is an error code (328860, 332211 and 334826, AFh).</summary>
     private const ulong LowestDischargeMicroseconds = 25;
 
+    /// <summary>
+    /// The highest throttling status that is a percentage. 332211 and 334826 call anything larger invalid,
+    /// and 328860 gives the status as a percentage, so nothing larger is one there either.
+    /// </summary>
+    private const ulong FullThrottle = 100;
+
     private const ulong RawPerPercent = 1024;
-    private const ulong ThousandthsPerUnit = 1000;
     private const ulong SectorsPer32MiB = 65_536;
 
     private const string NotReported = "Not reported";
     private const string NotMeasured = "Not measured yet";
+
+    /// <summary>Ten to the power of each count of decimal places a percentage is cut to, from none to three.</summary>
+    private static readonly ulong[] PartsPerUnit = [1, 10, 100, 1000];
 
     /// <summary>The count, hours or minutes in the raw value, as wide as the definition says the figure is.</summary>
     internal static ulong Figure(AtaAttribute attribute, AtaAttributeDefinition known) =>
@@ -59,7 +68,8 @@ internal static class AtaRawReading
             : $"{HealthText.Count(attribute.Raw)} sectors",
         SmartRawFormat.Units32MiB => HealthText.Size((UInt128)Figure(attribute, known) * SectorsPer32MiB * DriveRequests.SectorBytes),
         SmartRawFormat.Percent or SmartRawFormat.PercentInLowByte => HealthText.Percent(Percentage(attribute, known)),
-        SmartRawFormat.PercentPer1024 => Measured(Figure(attribute, known), Thousandths),
+        SmartRawFormat.PercentPer1024ToThousandths => Measured(Figure(attribute, known), static raw => Per1024(raw, places: 3)),
+        SmartRawFormat.PercentPer1024ToHundredths => Measured(Figure(attribute, known), static raw => Per1024(raw, places: 2)),
         SmartRawFormat.RawPercent => Measured(Figure(attribute, known), percent => $"{HealthText.Count(percent)}%"),
         SmartRawFormat.CapacitorTest => CapacitorTest(attribute),
         SmartRawFormat.ThrottleStatus => Throttle(attribute),
@@ -88,12 +98,17 @@ internal static class AtaRawReading
 
     private static string Measured(ulong figure, Func<ulong, string> state) => figure == NotYetMeasured ? NotMeasured : state(figure);
 
-    /// <summary>The raw value over 1024, cut to three decimal places as 328860 section 5.4.2 works its example.</summary>
-    private static string Thousandths(ulong raw)
+    /// <summary>
+    /// The raw value over 1024 as a percentage, cut to <paramref name="places"/> decimal places, as section
+    /// 5.4.2 of 328860 (three) and of 332211 and 334826 (two) work their examples.
+    /// </summary>
+    private static string Per1024(ulong raw, int places)
     {
-        var thousandths = (UInt128)raw * ThousandthsPerUnit / RawPerPercent;
+        var partsPerUnit = PartsPerUnit[places];
+        var parts = (UInt128)raw * partsPerUnit / RawPerPercent;
+        var fraction = ((ulong)(parts % partsPerUnit)).ToString(CultureInfo.InvariantCulture).PadLeft(places, '0');
 
-        return $"{HealthText.Count(thousandths / ThousandthsPerUnit)}.{(ulong)(thousandths % ThousandthsPerUnit):D3}%";
+        return $"{HealthText.Count(parts / partsPerUnit)}.{fraction}%";
     }
 
     private static string CapacitorTest(AtaAttribute attribute)
@@ -122,6 +137,7 @@ internal static class AtaRawReading
         {
             (0, 0) => "Never throttled",
             (0, _) => $"Not throttling, {Counted.Of(events, "time", "times")} in all",
+            (> FullThrottle, _) => $"Unknown throttling status {percent}, {Counted.Of(events, "time", "times")} in all",
             _ => $"Throttling {percent}%, {Counted.Of(events, "time", "times")} in all",
         };
     }
