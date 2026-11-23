@@ -83,7 +83,7 @@ public sealed class MftVolumeIndexGuardsTests
     {
         var index = Build(DeepTree());
 
-        var measured = index.TryMeasure(CachePath, [MinimumAge.Off, Guard], keepRoot, MftVolumeIndex.NothingLeftOut)!;
+        var measured = index.TryMeasure(CachePath, [MinimumAge.Off, Guard], keepRoot, MftVolumeIndex.NothingLeftOut, CancellationToken.None)!;
 
         // Off: three files and the folder link, and outer, middle, inner, touched and the cache itself
         // unless it is emptied in place.
@@ -111,8 +111,8 @@ public sealed class MftVolumeIndexGuardsTests
         var index = Build(DeepTree());
         var none = MftVolumeIndex.NothingLeftOut;
 
-        var offFirst = index.TryMeasure(CachePath, [MinimumAge.Off, Guard], keepRoot, none)!;
-        var guardFirst = index.TryMeasure(CachePath, [Guard, MinimumAge.Off], keepRoot, none)!;
+        var offFirst = index.TryMeasure(CachePath, [MinimumAge.Off, Guard], keepRoot, none, CancellationToken.None)!;
+        var guardFirst = index.TryMeasure(CachePath, [Guard, MinimumAge.Off], keepRoot, none, CancellationToken.None)!;
 
         Assert.Equal(Alone(index, MinimumAge.Off, keepRoot, none), offFirst.Readings[0]);
         Assert.Equal(Alone(index, Guard, keepRoot, none), offFirst.Readings[1]);
@@ -144,7 +144,7 @@ public sealed class MftVolumeIndexGuardsTests
 
         var week = MinimumAge.Within(TimeSpan.FromDays(7), Now);
 
-        var measured = index.TryMeasure(CachePath, [week, Guard, MinimumAge.Off], keepRoot: false, MftVolumeIndex.NothingLeftOut)!;
+        var measured = index.TryMeasure(CachePath, [week, Guard, MinimumAge.Off], keepRoot: false, MftVolumeIndex.NothingLeftOut, CancellationToken.None)!;
 
         // A week keeps both files, so every folder stays.
         Assert.Equal(new MftReading(new ScanSize(0, 0, Entries: 0), WithheldRecent: true), measured.Readings[0]);
@@ -184,7 +184,7 @@ public sealed class MftVolumeIndexGuardsTests
 
         var leftOut = index.TryPlace(CachePath, [["holding", "skipped"]], NoFileIsDescribed)!;
 
-        var measured = index.TryMeasure(CachePath, [MinimumAge.Off, Guard], keepRoot: false, leftOut)!;
+        var measured = index.TryMeasure(CachePath, [MinimumAge.Off, Guard], keepRoot: false, leftOut, CancellationToken.None)!;
 
         // Off: both files. Mail and the cache stay for the store, holding stays for skipped, and
         // skipped is never entered.
@@ -208,7 +208,7 @@ public sealed class MftVolumeIndexGuardsTests
     {
         var index = Build(DeepTree().AddFileDescribingOnlyALaterExtent(23, Middle, "split.tgz"));
 
-        Assert.Null(index.TryMeasure(CachePath, [MinimumAge.Off, Guard], keepRoot: false, MftVolumeIndex.NothingLeftOut));
+        Assert.Null(index.TryMeasure(CachePath, [MinimumAge.Off, Guard], keepRoot: false, MftVolumeIndex.NothingLeftOut, CancellationToken.None));
         Assert.Null(index.TryMeasure(CachePath, Guard, out _));
     }
 
@@ -218,7 +218,7 @@ public sealed class MftVolumeIndexGuardsTests
     {
         var index = Build(DeepTree());
 
-        Assert.Null(index.TryMeasure([.. CachePath, "linked"], [MinimumAge.Off, Guard], keepRoot: false, MftVolumeIndex.NothingLeftOut));
+        Assert.Null(index.TryMeasure([.. CachePath, "linked"], [MinimumAge.Off, Guard], keepRoot: false, MftVolumeIndex.NothingLeftOut, CancellationToken.None));
     }
 
     /// <summary>A question with no guard has no reading to give, and one with more guards than a folder's mask has bits cannot be tallied.</summary>
@@ -230,7 +230,7 @@ public sealed class MftVolumeIndexGuardsTests
         var index = Build(DeepTree());
 
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            index.TryMeasure(CachePath, [.. Enumerable.Repeat(Guard, guards)], keepRoot: false, MftVolumeIndex.NothingLeftOut));
+            index.TryMeasure(CachePath, [.. Enumerable.Repeat(Guard, guards)], keepRoot: false, MftVolumeIndex.NothingLeftOut, CancellationToken.None));
     }
 
     /// <summary>The largest question a folder's mask can mark is answered, every reading alike.</summary>
@@ -239,7 +239,7 @@ public sealed class MftVolumeIndexGuardsTests
     {
         var index = Build(DeepTree());
 
-        var measured = index.TryMeasure(CachePath, [.. Enumerable.Repeat(Guard, 32)], keepRoot: false, MftVolumeIndex.NothingLeftOut)!;
+        var measured = index.TryMeasure(CachePath, [.. Enumerable.Repeat(Guard, 32)], keepRoot: false, MftVolumeIndex.NothingLeftOut, CancellationToken.None)!;
 
         Assert.All(measured.Readings, reading => Assert.Equal(Alone(index, Guard, keepRoot: false, MftVolumeIndex.NothingLeftOut), reading));
     }

@@ -221,8 +221,8 @@ public class SoleLinkIndexTests
 
         Assert.True(MftVolumeIndexBuilder.TryBuild(source, TableTuning.Default, out var index));
 
-        var sole = index.TryMeasure(StorePath, [MinimumAge.Off], keepRoot: false, MftVolumeIndex.NothingLeftOut, LinkCounting.SoleName)!;
-        var each = index.TryMeasure(StorePath, [MinimumAge.Off], keepRoot: false, MftVolumeIndex.NothingLeftOut, LinkCounting.EachName)!;
+        var sole = index.TryMeasure(StorePath, [MinimumAge.Off], keepRoot: false, MftVolumeIndex.NothingLeftOut, CancellationToken.None, LinkCounting.SoleName)!;
+        var each = index.TryMeasure(StorePath, [MinimumAge.Off], keepRoot: false, MftVolumeIndex.NothingLeftOut, CancellationToken.None, LinkCounting.EachName)!;
 
         Assert.Equal(ScanSize.Approximate(4096 + 2048, 4096 + 2048), sole.Readings[0].Size);
         Assert.Equal(4096 + 8192 + 16384 + 2048, each.Readings[0].Size.Logical);
