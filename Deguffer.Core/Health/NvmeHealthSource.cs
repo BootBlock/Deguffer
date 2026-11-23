@@ -22,7 +22,7 @@ internal sealed class NvmeHealthSource : IDriveHealthSource
 
         if (answer.Bytes is not { } health || !NvmeHealthLog.TryRead(health, out log) || log is null)
         {
-            return new DriveReadout([], HasPrimarySignal: false, facts, TemperatureCelsius: null, MoreWhenElevated: answer.Win32Error == DeviceCalls.AccessDenied);
+            return new DriveReadout([], HasPrimarySignal: false, facts, DatabaseWarning: null, TemperatureCelsius: null, MoreWhenElevated: answer.Win32Error == DeviceCalls.AccessDenied);
         }
 
         var attributes = NvmeAttributeRows.Of(log, controller);
@@ -32,6 +32,6 @@ internal sealed class NvmeHealthSource : IDriveHealthSource
             attributes = [.. attributes, AtaAttributeRows.SelfTest(outcome)];
         }
 
-        return new DriveReadout(attributes, HasPrimarySignal: true, facts, HealthText.Celsius(log.TemperatureKelvin), MoreWhenElevated: false);
+        return new DriveReadout(attributes, HasPrimarySignal: true, facts, DatabaseWarning: null, HealthText.Celsius(log.TemperatureKelvin), MoreWhenElevated: false);
     }
 }

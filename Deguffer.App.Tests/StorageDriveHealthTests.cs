@@ -13,7 +13,7 @@ public sealed class StorageDriveHealthTests
 {
     private static readonly DriveDescription System = new(new DriveKey("a"), 0, "System SSD");
 
-    private static DriveHealth Report(DriveVerdict verdict) => new(System.Key, System.Name, verdict, "summary", null, [], [], [], false);
+    private static DriveHealth Report(DriveVerdict verdict) => new(System.Key, System.Name, verdict, "summary", null, [], [], null, [], false);
 
     [Fact]
     public void TheLineIsClosedUntilHealthFindsAConcern()

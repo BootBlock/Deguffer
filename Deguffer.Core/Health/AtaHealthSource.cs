@@ -28,7 +28,7 @@ internal sealed class AtaHealthSource : IDriveHealthSource
         var moreWhenElevated = thresholds.Win32Error == DeviceCalls.AccessDenied;
         AtaIdentify? identify = Sector(device, DriveQuestion.AtaIdentify) is { } identifySector && AtaIdentify.TryRead(identifySector, out var read) ? read : null;
         var facts = IdentifyFacts(identify);
-        var (family, databaseFact) = DriveDatabaseLookup.For(DriveDatabaseLookup.Identity(drive, identify), traits);
+        var (family, databaseFact, warning) = DriveDatabaseLookup.For(DriveDatabaseLookup.Identity(drive, identify), traits);
 
         if (databaseFact is not null)
         {
@@ -38,7 +38,7 @@ internal sealed class AtaHealthSource : IDriveHealthSource
         if (device.Ask(DriveQuestion.PredictFailure).Bytes is not { } prediction
             || !AtaAttributeTable.TryReadPrediction(prediction, out var predictsFailure, out var attributes))
         {
-            return new DriveReadout([], HasPrimarySignal: false, facts, TemperatureCelsius: null, moreWhenElevated);
+            return new DriveReadout([], HasPrimarySignal: false, facts, warning, TemperatureCelsius: null, moreWhenElevated);
         }
 
         if (thresholds.Bytes is { } answer
@@ -60,7 +60,7 @@ internal sealed class AtaHealthSource : IDriveHealthSource
             rows.Add(AtaAttributeRows.ErrorCount(count));
         }
 
-        return new DriveReadout(rows, HasPrimarySignal: true, facts, Temperature(attributes), moreWhenElevated);
+        return new DriveReadout(rows, HasPrimarySignal: true, facts, warning, Temperature(attributes), moreWhenElevated);
     }
 
     private static List<DriveFact> IdentifyFacts(AtaIdentify? read)

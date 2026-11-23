@@ -81,7 +81,7 @@ internal sealed class DriveDatabase
             var entry = _drives[i];
 
             return AttributePresets.Read(entry.Presets, EntryKind.Family) is { } presets
-                ? new DatabaseAnswer.Found(entry.Family, presets, _defaults)
+                ? new DatabaseAnswer.Found(entry.Family, entry.Warning, presets, _defaults)
                 : new DatabaseAnswer.EntryUnreadable(entry.Family);
         }
 

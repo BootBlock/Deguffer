@@ -96,6 +96,54 @@ public sealed class DriveDatabaseTests
     }
 
     [Fact]
+    public void AMatchedEntrysWarningIsGivenAsTheDatabaseWordsIt()
+    {
+        var database = InventedDriveDatabase.Database("""
+            { "Example Warned SSDs", "EXAMPLE SSD .*", "",
+              "A firmware fault can hang these drives.\n"
+              "Firmware EX02 fixes it.\n",
+              "-v 9,raw48" },
+            """);
+
+        var answer = Found(database.Find(InventedDriveDatabase.Model, "EX01"));
+
+        Assert.Equal(new DatabaseWarning("Example Warned SSDs", "A firmware fault can hang these drives.\nFirmware EX02 fixes it."), answer.Warning);
+        Assert.Equal("The smartmontools drive database warns about Example Warned SSDs", answer.Warning!.Heading);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" \n ")]
+    public void AnEntryWithNoMessageGivesNoWarning(string message)
+    {
+        var database = InventedDriveDatabase.Database($$"""{ "Example Quiet SSDs", "EXAMPLE SSD .*", "", "{{message.Replace("\n", "\\n", StringComparison.Ordinal)}}", "" },""");
+
+        Assert.Null(Found(database.Find(InventedDriveDatabase.Model, "1")).Warning);
+    }
+
+    [Fact]
+    public void AWarningOnAnEntryPinnedToFirmwareIsGivenOnlyToThatFirmware()
+    {
+        var database = InventedDriveDatabase.Database("""
+            { "Example Faulty Firmware SSDs", "EXAMPLE PINNED [0-9]+TB", "PIN00[0-9]", "Update the firmware.", "" },
+            """);
+
+        Assert.Equal("Update the firmware.", Found(database.Find(InventedDriveDatabase.PinnedModel, InventedDriveDatabase.PinnedFirmware)).Warning?.Message);
+        Assert.Null(Found(database.Find(InventedDriveDatabase.PinnedModel, "OTHER1")).Warning);
+    }
+
+    [Fact]
+    public void NoWarningIsGivenWhereNoEntryIsUsed()
+    {
+        var unreadable = InventedDriveDatabase.Database("""{ "Example broken family", "EXAMPLE SSD .*", "", "A warning.", "-v 9,notaformat" },""");
+        var undecided = InventedDriveDatabase.Database("""{ "Example class family", "EXAMPLE[[:digit:]]", "", "A warning.", "" },""");
+
+        Assert.Null(Assert.IsType<DatabaseAnswer.EntryUnreadable>(unreadable.Find(InventedDriveDatabase.Model, "1")).Warning);
+        Assert.Null(undecided.Find(InventedDriveDatabase.Model, "1").Warning);
+        Assert.Null(InventedDriveDatabase.Database().Find("OTHERCO DRIVE", "1").Warning);
+    }
+
+    [Fact]
     public void TheFirstDefaultEntryIsTheOneUsed()
     {
         var database = InventedDriveDatabase.Database("""{ "DEFAULT", "-", "-", "", "-v 168,raw48,Added_General_Name" },""");

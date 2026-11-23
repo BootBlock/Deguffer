@@ -78,7 +78,7 @@ public sealed class DriveHealthReader(IDriveProbe probe, IVolumeInventory invent
     }
 
     private static DriveHealth Empty(DriveDescription drive, DriveVerdict verdict, string summary) =>
-        new(drive.Key, drive.Name, verdict, summary, null, [], [], [], false);
+        new(drive.Key, drive.Name, verdict, summary, null, [], [], null, [], false);
 
     private static string Named(string model, int disk) => string.IsNullOrEmpty(model) ? $"Disk {disk}" : model;
 
@@ -177,6 +177,7 @@ public sealed class DriveHealthReader(IDriveProbe probe, IVolumeInventory invent
             readout.TemperatureCelsius is { } celsius ? HealthText.Temperature(celsius) : null,
             DriveAssessment.Findings(readout.Attributes),
             [.. facts, .. readout.Facts],
+            readout.DatabaseWarning,
             readout.Attributes,
             readout.MoreWhenElevated);
     }

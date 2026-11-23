@@ -27,13 +27,19 @@ internal abstract record DatabaseAnswer
     /// <summary>The entry's reading of the drive's attributes, where one is used.</summary>
     internal virtual DatabaseFamily? Family(DriveMedium medium) => null;
 
+    /// <summary>The entry's warning about the drive's family, where the entry is used and gives one.</summary>
+    internal virtual DatabaseWarning? Warning => null;
+
     /// <summary>An entry names the drive's family, and its options were read.</summary>
+    /// <param name="Message">The entry's warning text, which is empty for most families.</param>
     /// <param name="Defaults">The <c>DEFAULT</c> entry's options, which name an attribute the entry's option leaves unnamed.</param>
-    internal sealed record Found(string Name, EntryPresets Presets, EntryPresets? Defaults) : DatabaseAnswer
+    internal sealed record Found(string Name, string Message, EntryPresets Presets, EntryPresets? Defaults) : DatabaseAnswer
     {
         internal override string Detail => Name;
 
         internal override DatabaseFamily Family(DriveMedium medium) => new(Name, Presets, Defaults, medium);
+
+        internal override DatabaseWarning? Warning => DatabaseWarning.Of(Name, Message);
     }
 
     /// <summary>An entry names the drive, and its options could not be read, so none is used.</summary>

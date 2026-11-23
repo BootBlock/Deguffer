@@ -3,6 +3,7 @@ using Deguffer.App.Shell;
 using Deguffer.App.ViewModels;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Health;
+using Deguffer.Core.Health.Smartmontools;
 using Deguffer.Core.Working;
 
 namespace Deguffer.App.Tests;
@@ -60,7 +61,7 @@ public sealed class HealthViewModelTests
             return Task.CompletedTask;
         };
 
-    private static DriveHealth Health(DriveDescription drive, DriveVerdict verdict = DriveVerdict.Good, bool moreWhenElevated = false, string reading = "ok") =>
+    private static DriveHealth Health(DriveDescription drive, DriveVerdict verdict = DriveVerdict.Good, bool moreWhenElevated = false, string reading = "ok", DatabaseWarning? warning = null) =>
         new(
             drive.Key,
             drive.Name,
@@ -69,6 +70,7 @@ public sealed class HealthViewModelTests
             "40 °C",
             [],
             [new DriveFact("Model", drive.Name)],
+            warning,
             [new HealthAttribute("temperature", "Temperature", reading, "meaning", AttributeStanding.Normal, "raw")],
             moreWhenElevated);
 
@@ -135,6 +137,30 @@ public sealed class HealthViewModelTests
         Assert.Same(kept, page.Rows[1]);
         Assert.Empty(changes);
         Assert.Equal([NotifyCollectionChangedAction.Replace], attributeChanges);
+    });
+
+    [Fact]
+    public void ADatabaseWarningIsShownOnItsRowAndGoesWhenALaterReadingHasNone() => UiThread.Run(async () =>
+    {
+        var warning = new DatabaseWarning("Example Warned SSDs", "A firmware fault.\nUpdate to EX02.");
+        _reader = (drives, progress, _) =>
+        {
+            progress.Report(Health(drives[0], warning: warning));
+            return Task.CompletedTask;
+        };
+
+        var page = Page();
+        await page.RefreshAsync();
+        var row = page.Rows[0];
+        await Eventually.HoldsAsync(() => row.Report is not null, "the report");
+
+        Assert.Equal((true, warning.Heading, warning.Message), (row.HasDatabaseWarning, row.DatabaseWarningHeading, row.DatabaseWarningMessage));
+
+        _reader = ReportAll();
+        await page.RefreshAsync();
+        await Eventually.HoldsAsync(() => !row.HasDatabaseWarning, "the warning gone");
+
+        Assert.Equal((string.Empty, string.Empty), (row.DatabaseWarningHeading, row.DatabaseWarningMessage));
     });
 
     [Fact]

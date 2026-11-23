@@ -8,12 +8,14 @@ namespace Deguffer.Core.Health;
 /// <param name="Attributes">Its readings, the primary signal first where there is one.</param>
 /// <param name="HasPrimarySignal">Whether the drive gave its own overall judgement.</param>
 /// <param name="Facts">Details only this protocol can give.</param>
+/// <param name="DatabaseWarning">The installed drive database's warning about the drive's family, where it gives one.</param>
 /// <param name="TemperatureCelsius">The drive's temperature, or null where it did not say.</param>
 /// <param name="MoreWhenElevated">Whether a question was refused for want of administrator rights.</param>
 internal sealed record DriveReadout(
     IReadOnlyList<HealthAttribute> Attributes,
     bool HasPrimarySignal,
     IReadOnlyList<DriveFact> Facts,
+    DatabaseWarning? DatabaseWarning,
     int? TemperatureCelsius,
     bool MoreWhenElevated);
 
