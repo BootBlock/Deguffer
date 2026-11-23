@@ -8,8 +8,8 @@ public class CompositionThreadTests
 {
     /// <summary>
     /// A test that has already resumed once has no context to return to, so a commit heard inside the
-    /// compositor's callback carried it on there, and its next piece of work for the compositor waited
-    /// on the thread it was itself holding, which hung the whole run.
+    /// compositor's callback would carry it on there, where its next piece of work for the compositor
+    /// waits on the thread it is itself holding.
     ///
     /// <para>Each commit is awaited from a fresh thread-pool task with no context, and checked before
     /// anything else is handed to the compositor, so a test carried on inside the callback fails here
