@@ -9,10 +9,10 @@ namespace Deguffer.Core.Safety;
 /// <para><b>Why one measurement may remember what <see cref="RememberedMountPoints"/> asks live.</b>
 /// Before a measurement walks anything it asks what every path is on, to choose each walk's values
 /// and to keep the walks of one disk in turn, and it asks that of each path two to four times. One
-/// <c>QueryDosDevice</c> is cheap, but a measurement of a few thousand paths on one drive asked the
-/// same letter thousands of times for one answer (#1065). A measurement takes milliseconds to seconds,
-/// and every path of it is placed from the answers read at its start whether or not they are
-/// remembered, so a letter <c>subst</c> changes during it moves no path the measurement would
+/// <c>QueryDosDevice</c> is cheap, but asked live, a measurement of a few thousand paths on one drive
+/// asks the same letter thousands of times for one answer (#1065). A measurement takes milliseconds
+/// to seconds, and every path of it is placed from the answers read at its start whether or not they
+/// are remembered, so a letter <c>subst</c> changes during it moves no path the measurement would
 /// otherwise have placed differently.</para>
 ///
 /// <para>Never kept past the measurement that built it, so the next measurement asks each letter

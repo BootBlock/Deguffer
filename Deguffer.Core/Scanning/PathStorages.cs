@@ -12,7 +12,7 @@ namespace Deguffer.Core.Scanning;
 /// those questions goes through the one instance the measurement made at its start, so a few thousand
 /// paths on one drive ask that drive's letter once. A volume's kind is already remembered for the pass
 /// (<see cref="VolumeMediaCache"/>), and which volume holds a path is read from the remembered list,
-/// so the letter was the one question still asked of the machine for every path.</para>
+/// so the letter is the one question about a path that reaches the machine.</para>
 ///
 /// <para>Safe to ask from several threads at once: the pipelines of one measurement run at the same
 /// time, and an index build asks about the walks it may yield to from its own thread.</para>

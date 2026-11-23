@@ -63,13 +63,6 @@ public sealed class ScanTuner
     public VolumeTuning ForVolume(char driveLetter) => For($@"{char.ToUpperInvariant(driveLetter)}:\");
 
     /// <summary>
-    /// The kind of storage <paramref name="path"/> is on. A share is <see cref="StorageMedia.Network"/>
-    /// without asking anything. A path on no volume the inventory lists is
-    /// <see cref="StorageMedia.Unknown"/>, which gets the conservative values.
-    /// </summary>
-    public StorageMedia MediaOf(string path) => StorageOf(path)?.Class ?? StorageMedia.Unknown;
-
-    /// <summary>
     /// Whether <paramref name="path"/> is on a share or on a drive letter Windows maps to one
     /// (<see cref="HostVolume.Unopened"/>), read from the path and the remembered volume list without
     /// asking anything. A tuner built without the machine's volumes knows a share only by its name.

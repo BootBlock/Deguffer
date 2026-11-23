@@ -10,8 +10,8 @@ namespace Deguffer.Core.Tests;
 /// <summary>
 /// A measurement asks what its paths are on once for each drive, not once for each path (#1065).
 /// Before it walks, a measurement places its paths into pipelines by disk, registers its walks with
-/// the index builds that yield to them, and chooses each walk's values, and each of those asked the
-/// drive letter of every path again. The questions are counted where the machine answers them,
+/// the index builds that yield to them, and chooses each walk's values, and all of those read one set
+/// of answers. The questions are counted where the machine answers them,
 /// <see cref="IVolumeInventory.SubstituteOf"/>, which is one <c>QueryDosDevice</c> a question.
 /// </summary>
 public sealed class MeasurementStorageTests : IDisposable
@@ -38,10 +38,10 @@ public sealed class MeasurementStorageTests : IDisposable
     }
 
     /// <summary>
-    /// Elevated, the measurement chooses each path's route, registers the walks of the paths the table
-    /// does not answer, and plans them, all through the answers it made at its start. The volume's
-    /// table asks about its own drive once as it opens, which is per volume, so the count is compared
-    /// with a measurement of two paths rather than fixed.
+    /// Through the scanner that chooses each path's route, with a table that will not open: every path
+    /// is left to the walk, which is registered with the builds and planned through the answers the
+    /// measurement made at its start. Asking for the volume's table asks about its drive once, which is
+    /// per volume, so the count is compared with a measurement of two paths rather than fixed.
     /// </summary>
     [Fact]
     public async Task AMeasurementThatChoosesARouteAsksNoMoreForAThousandPathsThanForTwo()
@@ -61,9 +61,9 @@ public sealed class MeasurementStorageTests : IDisposable
     }
 
     /// <summary>
-    /// With a build of the drive's table in flight, the walk raced against it is registered with the
-    /// build too. The build asks about its own volume as it starts, which is per build, so the count is
-    /// compared with a measurement of two paths rather than fixed.
+    /// With a build of the drive's table held in flight, the walk raced against it answers first, and
+    /// is registered with the build. The build asks about its own volume as it starts, which is per
+    /// build, so the count is compared with a measurement of two paths rather than fixed.
     /// </summary>
     [Fact]
     public async Task AMeasurementRacingABuildAsksNoMoreForAThousandPathsThanForTwo()
@@ -141,8 +141,8 @@ public sealed class MeasurementStorageTests : IDisposable
 
             cache.Get(build);
 
+            // Low only through the walk's own disk, which the build had to ask about to yield to it.
             Assert.Equal([ReadPriority.Low], sources.Opened!.Priorities);
-            Assert.NotEqual(0, inventory.SubstituteQueries);
         }
         finally
         {
@@ -197,7 +197,11 @@ public sealed class MeasurementStorageTests : IDisposable
         {
             ScanRequest[] asked = [new(path), .. Enumerable.Range(1, paths - 1).Select(i => new ScanRequest(temp.CreateDirectory($"d{i}")))];
 
-            await scanner.MeasureManyAsync(asked).AsTask().WaitAsync(Bound);
+            var results = await scanner.MeasureManyAsync(asked).AsTask().WaitAsync(Bound);
+
+            // The race ran: the build was opened and held, and the walk answered every path first.
+            Assert.Equal(1, sources.OpenCount);
+            Assert.All(results, result => Assert.Equal(FallbackReason.WalkAnsweredFirst, result.Fallback));
 
             return inventory.SubstituteQueries;
         }

@@ -235,8 +235,8 @@ internal static partial class VolumeCalls
     ///
     /// <para>Read into a buffer on the stack, which holds a device name and a <c>subst</c> folder of
     /// ordinary length, and into one rented from the pool only where Windows says the answer is
-    /// longer. A buffer for the longest path is 64 KiB, and allocating one for every question cost
-    /// more than the question (#1065).</para>
+    /// longer. A buffer for the longest path is 64 KiB, which a question asked for every path of a
+    /// measurement must not allocate each time (#1065).</para>
     /// </summary>
     internal static string? DeviceOf(char letter)
     {
