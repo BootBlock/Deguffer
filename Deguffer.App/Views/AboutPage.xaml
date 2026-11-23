@@ -38,10 +38,10 @@
         <controls:Starfield x:Name="Field" Grid.Row="1" />
 
         <ScrollViewer Grid.Row="1" Padding="28,0,28,28">
-            <StackPanel Spacing="10" MaxWidth="720" HorizontalAlignment="Left">
+            <StackPanel Spacing="{StaticResource RegionGap}" MaxWidth="720" HorizontalAlignment="Left">
 
                 <Border Style="{StaticResource SolidCardStyle}">
-                    <StackPanel Spacing="6">
+                    <StackPanel Spacing="{StaticResource ControlGap}">
                         <!-- The version belongs with the build date and the architecture in the card
                              below, not beside the name as well; the same number twice, two lines
                              apart, only invites the reader to check whether it is the same number. -->
@@ -111,7 +111,7 @@
                                        TextWrapping="Wrap" />
                         </Grid>
 
-                        <StackPanel Orientation="Horizontal" Spacing="18">
+                        <StackPanel Orientation="Horizontal" Spacing="16">
                             <HyperlinkButton Content="GitHub repository"
                                              NavigateUri="https://github.com/BootBlock/Deguffer"
                                              Padding="0" />
@@ -136,8 +136,8 @@
                     </StackPanel>
                 </Border>
 
-                <Border Style="{StaticResource SolidCardStyle}" Margin="0,14,0,0">
-                    <StackPanel Spacing="14">
+                <Border Style="{StaticResource SolidCardStyle}">
+                    <StackPanel Spacing="{StaticResource RegionGap}">
                         <StackPanel Spacing="4">
                             <TextBlock Text="The safety tiers" Style="{StaticResource GroupHeading}" />
                             <TextBlock Style="{StaticResource SecondaryText}"
@@ -182,8 +182,8 @@
                     </StackPanel>
                 </Border>
 
-                <Border Style="{StaticResource SolidCardStyle}" Margin="0,14,0,0">
-                    <StackPanel Spacing="10">
+                <Border Style="{StaticResource SolidCardStyle}">
+                    <StackPanel Spacing="{StaticResource ControlGap}">
                         <TextBlock Text="What it will not do" Style="{StaticResource GroupHeading}" />
                         <TextBlock Style="{StaticResource SecondaryText}"
                                    Text="Nothing is removed until a scan has shown you what it is, and the exact steps are inspectable on every row before you agree to them." />
@@ -202,7 +202,7 @@
                     </StackPanel>
                 </Border>
 
-                <Border Style="{StaticResource SolidCardStyle}" Margin="0,14,0,0">
+                <Border Style="{StaticResource SolidCardStyle}">
                     <TextBlock Style="{StaticResource SecondaryText}"
                                Text="Open source under the MIT licence." />
                 </Border>

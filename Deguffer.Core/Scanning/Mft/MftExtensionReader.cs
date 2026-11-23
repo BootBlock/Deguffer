@@ -125,10 +125,9 @@ internal static class MftExtensionReader
             : null;
 
     /// <summary>Every extension record a record still able to be completed wants, in record order.</summary>
-    private static List<(MftDeferredRecord Owner, MftSegmentReference Segment, MftAttributeKinds Needs)> Wanted(
-        IReadOnlyList<MftDeferredRecord> deferred)
+    private static MftByRecord<Want>.Sorted Wanted(IReadOnlyList<MftDeferredRecord> deferred)
     {
-        var wanted = new List<(MftDeferredRecord Owner, MftSegmentReference Segment, MftAttributeKinds Needs)>();
+        var wanted = new MftByRecord<Want>();
 
         foreach (var record in deferred)
         {
@@ -139,12 +138,11 @@ internal static class MftExtensionReader
 
             foreach (var (segment, needs) in record.Segments)
             {
-                wanted.Add((record, segment, needs));
+                wanted.Add(segment.Record, new Want(record, segment, needs));
             }
         }
 
-        wanted.Sort(static (a, b) => a.Segment.Record.CompareTo(b.Segment.Record));
-        return wanted;
+        return wanted.InRecordOrder();
     }
 
     /// <summary>
@@ -152,25 +150,22 @@ internal static class MftExtensionReader
     /// nothing for was free, a base record, unreadable, or held nothing the scan needs, and the record
     /// wanting it fails. Returns where the wanted records the first pass never reached begin.
     /// </summary>
-    private static int Absorb(
-        List<(MftDeferredRecord Owner, MftSegmentReference Segment, MftAttributeKinds Needs)> wanted,
-        IReadOnlyList<MftExtensionRecord> extensions,
-        long reached)
+    private static int Absorb(MftByRecord<Want>.Sorted wanted, MftByRecord<MftExtensionRecord>.Sorted extensions, long reached)
     {
         var kept = 0;
         var next = 0;
 
-        for (; next < wanted.Count && wanted[next].Segment.Record < reached; next++)
+        for (; next < wanted.Count && wanted.Number(next) < reached; next++)
         {
             var (owner, segment, needs) = wanted[next];
 
-            while (kept < extensions.Count && extensions[kept].Number < segment.Record)
+            while (kept < extensions.Count && extensions.Number(kept) < segment.Record)
             {
                 kept++;
             }
 
             owner.Absorb(
-                kept < extensions.Count && extensions[kept].Number == segment.Record ? extensions[kept] : null,
+                kept < extensions.Count && extensions.Number(kept) == segment.Record ? extensions[kept] : null,
                 segment,
                 needs);
         }
@@ -184,7 +179,7 @@ internal static class MftExtensionReader
     /// </summary>
     private static void ReadUnreached(
         IMftSource source,
-        List<(MftDeferredRecord Owner, MftSegmentReference Segment, MftAttributeKinds Needs)> wanted,
+        MftByRecord<Want>.Sorted wanted,
         int next,
         Span<byte> batch,
         CancellationToken ct)
@@ -197,7 +192,7 @@ internal static class MftExtensionReader
         {
             ct.ThrowIfCancellationRequested();
 
-            var first = wanted[next].Segment.Record;
+            var first = wanted.Number(next);
 
             // One read from the first wanted record to the furthest the batch can reach, so records
             // close together cost one read rather than one each. Only while they are close: a run of
@@ -206,10 +201,10 @@ internal static class MftExtensionReader
             var last = first;
 
             for (var i = next;
-                 i < wanted.Count && wanted[i].Segment.Record - first < capacity && wanted[i].Segment.Record - last - 1 <= gap;
+                 i < wanted.Count && wanted.Number(i) - first < capacity && wanted.Number(i) - last - 1 <= gap;
                  i++)
             {
-                last = wanted[i].Segment.Record;
+                last = wanted.Number(i);
             }
 
             var read = source.ReadBatch(first, batch[..(int)((last - first + 1) * bytesPerRecord)]);
@@ -229,7 +224,7 @@ internal static class MftExtensionReader
             MftExtensionRecord? found = null;
             var foundAt = -1L;
 
-            while (next < wanted.Count && wanted[next].Segment.Record - first < read)
+            while (next < wanted.Count && wanted.Number(next) - first < read)
             {
                 var (owner, segment, needs) = wanted[next++];
 
@@ -244,4 +239,7 @@ internal static class MftExtensionReader
             }
         }
     }
+
+    /// <summary>One extension record a held-back record wants, and what it must supply.</summary>
+    private readonly record struct Want(MftDeferredRecord Owner, MftSegmentReference Segment, MftAttributeKinds Needs);
 }

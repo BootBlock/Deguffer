@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Xml.Linq;
+
 namespace Deguffer.Core.Tests;
 
 /// <summary>
@@ -6,33 +9,30 @@ namespace Deguffer.Core.Tests;
 /// the controls around them, and the same gap comes out as 10 on one page and 16 on the next. A value
 /// of 1 is a hairline, which the grid allows.
 ///
-/// <para>Fluent's spacing guidance: every margin, padding and gap is a
-/// multiple of 4.</para>
+/// <para>The scale in <c>App.xaml</c> names each role once (label gap, control gap, region gap, card
+/// and row padding), and the few values off the grid are optical corrections declared there by name,
+/// each listed below with its reason, so an odd pixel is never written on a page.</para>
+///
+/// <para>Fluent's spacing guidance: every margin, padding and gap is a multiple of 4.</para>
 /// </summary>
 public sealed class DesignSpacingTests
 {
-    private static readonly string[] Properties = ["Margin", "Padding", "Spacing", "RowSpacing", "ColumnSpacing"];
+    private static readonly string[] Properties = ["Margin", "Padding", "Spacing", "RowSpacing", "ColumnSpacing", "MinRowSpacing", "MinColumnSpacing"];
 
-    private static readonly Dictionary<string, int> Baseline = new(StringComparer.Ordinal)
+    private static readonly XName Key = XName.Get("Key", "http://schemas.microsoft.com/winfx/2006/xaml");
+
+    /// <summary>
+    /// The resources allowed off the grid, each an optical correction that sets what is inside an
+    /// on-grid box against a glyph, a line of text or a baseline.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string> OpticalCorrections = new Dictionary<string, string>(StringComparer.Ordinal)
     {
-        ["Deguffer.App/App.xaml"] = 1,
-        ["Deguffer.App/Controls/DriveTemplates.xaml"] = 4,
-        ["Deguffer.App/Controls/ExploreOverview.xaml"] = 4,
-        ["Deguffer.App/MainWindow.xaml"] = 1,
-        ["Deguffer.App/Views/AboutPage.xaml"] = 8,
-        ["Deguffer.App/Views/CleanConfirmationView.xaml"] = 2,
-        ["Deguffer.App/Views/CleanPage.xaml"] = 31,
-        ["Deguffer.App/Views/DuplicatesPage.xaml"] = 21,
-        ["Deguffer.App/Views/ExplorePage.xaml"] = 17,
-        ["Deguffer.App/Views/HealthPage.xaml"] = 4,
-        ["Deguffer.App/Views/InstalledAppsPage.xaml"] = 5,
-        ["Deguffer.App/Views/ItemListView.xaml"] = 9,
-        ["Deguffer.App/Views/MemoryPage.xaml"] = 5,
-        ["Deguffer.App/Views/NetworkBrowserDialog.xaml"] = 4,
-        ["Deguffer.App/Views/ProviderInfoView.xaml"] = 14,
-        ["Deguffer.App/Views/SettingsPage.xaml"] = 21,
-        ["Deguffer.App/Views/SettingsRow.xaml"] = 2,
-        ["Deguffer.App/Views/StartupPage.xaml"] = 4,
+        ["ChipPadding"] = "makes a 16 px Caption line a 20 px chip, Fluent's medium badge",
+        ["LinkPadding"] = "makes a 20 px line of link text a 24 px target (WCAG 2.5.8) without growing the row",
+        ["InlineLinkPadding"] = "the same target for a link whose words line up with the text around it",
+        ["FirstLineOffset"] = "sets a glyph or check box level with the first line of wrapping text",
+        ["HeroFigureBaselineOffset"] = "lifts Body text onto a HeroFigure's baseline",
+        ["FigureBaselineOffset"] = "lifts Body text onto a Figure's baseline",
     };
 
     [Fact]
@@ -40,11 +40,75 @@ public sealed class DesignSpacingTests
     {
         var found = ShellMarkup.Files.SelectMany(file => file.Elements.SelectMany(element => Properties
             .Select(property => (Property: property, Value: ShellMarkup.Literal(element, property) ?? ShellMarkup.SetterLiteral(element, property)))
-            .Where(set => set.Value is not null && ShellMarkup.Lengths(set.Value).Any(length => !OnTheGrid(length)))
+            .Where(set => set.Value is not null && !OnTheGrid(set.Value))
             .Select(set => file.At(element, $"{set.Property}=\"{set.Value}\" is off the 4 px grid"))));
 
-        RuleBaseline.Hold("margins, padding and spacing are multiples of 4 (or a 1 px hairline)", found, Baseline);
+        RuleBaseline.Hold("margins, padding and spacing are multiples of 4 (or a 1 px hairline)", found, new Dictionary<string, int>());
     }
 
-    private static bool OnTheGrid(double length) => length is 0 or 1 or -1 || Math.Abs(length % 4) == 0;
+    /// <summary>
+    /// A page that takes a role's resource is on the grid only if the resource is, so each spacing
+    /// resource is held to the grid too: every <c>Thickness</c>, and every <c>x:Double</c> named as a
+    /// gap. Only a listed optical correction, declared in <c>App.xaml</c>, may be off it.
+    /// </summary>
+    [Fact]
+    public void SpacingResourcesSitOnTheGridOrAreNamedOpticalCorrections()
+    {
+        var found = ShellMarkup.Files.SelectMany(file => file.Elements
+            .Where(IsSpacingResource)
+            .Where(resource => !OnTheGrid(resource.Value)
+                && !(file.IsApplicationResources && OpticalCorrections.ContainsKey(resource.Attribute(Key)?.Value ?? string.Empty)))
+            .Select(resource => file.At(resource, $"{resource.Attribute(Key)?.Value} is {resource.Value}, off the 4 px grid, and is not a listed optical correction")));
+
+        RuleBaseline.Hold("a spacing resource is on the 4 px grid, or an optical correction listed with its reason", found, new Dictionary<string, int>());
+    }
+
+    [Fact]
+    public void EveryListedOpticalCorrectionIsDeclaredInTheApplicationResources()
+    {
+        var declared = ApplicationResources().Keys.ToHashSet(StringComparer.Ordinal);
+
+        Assert.All(OpticalCorrections.Keys, key => Assert.True(declared.Contains(key), $"{key} is listed as an optical correction but App.xaml declares no spacing resource by that name."));
+    }
+
+    /// <summary>A correction moved onto the grid is a role value like any other, so it leaves the list.</summary>
+    [Fact]
+    public void EveryListedOpticalCorrectionIsOffTheGrid()
+    {
+        var declared = ApplicationResources();
+
+        Assert.All(
+            OpticalCorrections.Keys.Where(declared.ContainsKey),
+            key => Assert.False(OnTheGrid(declared[key]), $"{key} is {declared[key]}, on the 4 px grid: remove it from the optical corrections."));
+    }
+
+    [Fact]
+    public void TheScaleNamesEveryRole()
+    {
+        var declared = ApplicationResources();
+
+        Assert.All(
+            ["LabelGap", "ControlGap", "RegionGap", "RegionGapAbove", "CardPadding", "CardRowPadding", "RowPadding"],
+            role => Assert.True(declared.ContainsKey(role), $"App.xaml's spacing scale has no {role}."));
+    }
+
+    /// <summary>The region gap is written twice, as a length and as a margin, and the two are one gap.</summary>
+    [Fact]
+    public void TheRegionGapAndItsMarginAgree()
+    {
+        var declared = ApplicationResources();
+
+        Assert.Equal(new double[] { 0, double.Parse(declared["RegionGap"], CultureInfo.InvariantCulture), 0, 0 }, ShellMarkup.Lengths(declared["RegionGapAbove"]));
+    }
+
+    private static Dictionary<string, string> ApplicationResources() => ShellMarkup.Files
+        .Single(file => file.IsApplicationResources).Elements
+        .Where(IsSpacingResource)
+        .ToDictionary(element => element.Attribute(Key)!.Value, element => element.Value.Trim(), StringComparer.Ordinal);
+
+    private static bool IsSpacingResource(XElement element) =>
+        element.Attribute(Key)?.Value is { } key
+        && (element.Name.LocalName == "Thickness" || (element.Name.LocalName == "Double" && key.EndsWith("Gap", StringComparison.Ordinal)));
+
+    private static bool OnTheGrid(string value) => ShellMarkup.Lengths(value).All(length => length is 0 or 1 or -1 || Math.Abs(length % 4) == 0);
 }

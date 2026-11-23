@@ -75,6 +75,53 @@
             <converters:AttributeStandingChipStyleConverter x:Key="AttributeStandingChipStyle" />
 
             <!--
+                The spacing scale: one resource per role, each a multiple of Fluent's 4 px grid, so
+                edges and baselines line up from page to page and a role is changed in one place.
+                Markup that sets one of these roles takes its resource, and any literal, a role's or
+                a one-off's, still sits on the grid. DesignSpacingTests holds every value, here and on the pages, to the grid.
+
+                Label gap: between a line and the line that qualifies it (a name and its path, a
+                title and its description, a figure and its label). Control gap: between neighbours
+                inside one region (controls in a row, rows in a stack, the columns of a row). Region
+                gap: between the regions of a page or a card, such as a group of settings and the
+                next; RegionGapAbove is the same gap as a margin, for a heading or card that opens a
+                region inside a stack already spaced by the control gap, and the two move together.
+                Card row padding is a row drawn as a card, or as the heading of one; row padding is a
+                row of a list inside a card.
+            -->
+            <x:Double x:Key="LabelGap">4</x:Double>
+            <x:Double x:Key="ControlGap">8</x:Double>
+            <x:Double x:Key="RegionGap">16</x:Double>
+            <Thickness x:Key="RegionGapAbove">0,16,0,0</Thickness>
+            <Thickness x:Key="CardPadding">20</Thickness>
+            <Thickness x:Key="CardRowPadding">16,12</Thickness>
+            <Thickness x:Key="RowPadding">12,8</Thickness>
+
+            <!--
+                The optical corrections, the only values off the grid, each named for the reason it
+                is off it. The box each one shapes is still on the grid; the odd pixels set what is
+                inside it against a glyph, a line of text or a baseline.
+
+                ChipPadding: a Caption line is 16 px, so 2 above and below makes a 20 px chip, Fluent's
+                medium badge, which sits centred in a row without setting its height.
+                LinkPadding and InlineLinkPadding: 2 above and below a 20 px line of link text makes
+                a 24 px target, the least WCAG 2.5.8 allows, without the row growing. A link among
+                other controls has 4 at each side for its pointer-over plate; a link that starts or
+                ends a line of text has none, so its words line up with the text above and below it.
+                FirstLineOffset: a glyph or check box set at the top of wrapping text, moved down to
+                sit level with the text's first 20 px line rather than with the top of its box.
+                HeroFigureBaselineOffset and FigureBaselineOffset: lift Body text set at the foot of
+                a HeroFigure or a Figure onto the figure's baseline, which the larger line's deeper
+                descent puts above the foot of the box.
+            -->
+            <Thickness x:Key="ChipPadding">8,2</Thickness>
+            <Thickness x:Key="LinkPadding">4,2</Thickness>
+            <Thickness x:Key="InlineLinkPadding">0,2</Thickness>
+            <Thickness x:Key="FirstLineOffset">0,2,0,0</Thickness>
+            <Thickness x:Key="HeroFigureBaselineOffset">0,0,0,7</Thickness>
+            <Thickness x:Key="FigureBaselineOffset">0,0,0,2</Thickness>
+
+            <!--
                 §7's "colour by tier". These are Styles rather than loose brushes so the colours
                 live in XAML as ThemeResource references: each element resolves them itself and
                 re-resolves on a light/dark switch, which a brush handed over from C# cannot do.
@@ -83,7 +130,7 @@
             -->
             <Style x:Key="TierChipBase" TargetType="ContentControl">
                 <Setter Property="CornerRadius" Value="10" />
-                <Setter Property="Padding" Value="9,2" />
+                <Setter Property="Padding" Value="{StaticResource ChipPadding}" />
                 <Setter Property="FontSize" Value="{StaticResource CaptionTextBlockFontSize}" />
                 <Setter Property="FontWeight" Value="SemiBold" />
                 <Setter Property="IsTabStop" Value="False" />
@@ -155,7 +202,6 @@
                 §6.5: colours come from theme brushes so they stay legible over unpredictable
                 desktop content, in light and dark, and with the backdrop absent entirely.
             -->
-            <Thickness x:Key="CardPadding">20</Thickness>
             <!-- A Startup row's tint by whether the entry starts (StartupRowStyleConverter). Styles, as the
                  chips are, so each row re-resolves its brush on a light or dark switch. -->
             <Style x:Key="StartupRowStarts" TargetType="Grid">

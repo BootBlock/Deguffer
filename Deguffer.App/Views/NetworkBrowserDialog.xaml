@@ -28,7 +28,7 @@
         <KeyboardAccelerator Key="L" Modifiers="Control" Invoked="OnAddInvoked" />
     </ContentDialog.KeyboardAccelerators>
 
-    <Grid Width="680" Height="500" RowSpacing="10" RowDefinitions="Auto,Auto,Auto,*,Auto">
+    <Grid Width="680" Height="500" RowSpacing="{StaticResource ControlGap}" RowDefinitions="Auto,Auto,Auto,*,Auto">
         <!-- A computer discovery cannot find is reached by its name: added here, kept in the
              settings, and listed under Computers you added. -->
         <Grid ColumnSpacing="8" ColumnDefinitions="*,Auto">
@@ -87,9 +87,9 @@
                                   HasUnrealizedChildren="{x:Bind HasUnrealizedChildren, Mode=OneWay}"
                                   AutomationProperties.Name="{x:Bind Spoken}">
                         <Grid ColumnSpacing="8" ColumnDefinitions="Auto,*,Auto,Auto" Padding="0,4">
-                            <FontIcon Glyph="{x:Bind Glyph}" FontSize="{StaticResource GlyphSizeStandard}" VerticalAlignment="Top" Margin="0,2,0,0" />
+                            <FontIcon Glyph="{x:Bind Glyph}" FontSize="{StaticResource GlyphSizeStandard}" VerticalAlignment="Top" Margin="{StaticResource FirstLineOffset}" />
 
-                            <StackPanel Grid.Column="1" Spacing="2">
+                            <StackPanel Grid.Column="1" Spacing="{StaticResource LabelGap}">
                                 <!-- Text from another computer, shown as text and nothing else. -->
                                 <TextBlock Text="{x:Bind Name}" TextTrimming="CharacterEllipsis" />
 
@@ -117,7 +117,7 @@
                                                  Click="OnSignIn"
                                                  AutomationProperties.Name="Sign in through the Windows credentials prompt" />
 
-                                <Button Padding="6,4"
+                                <Button Padding="8,4"
                                         Visibility="{x:Bind IsRemovable}"
                                         Click="OnRemoveComputer"
                                         ToolTipService.ToolTip="Remove this computer from the tree"

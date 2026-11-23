@@ -21,7 +21,7 @@
             <ItemsControl ItemsSource="{x:Bind Confirmation.Items}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="execution:CleanConfirmationItem">
-                        <Grid ColumnSpacing="12" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,6">
+                        <Grid ColumnSpacing="12" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,8">
                             <!--
                                 Decoration, and the only element on the row with nothing to say: it is
                                 hidden from assistive technology, as ShareBar is, so a reader hears the
@@ -72,7 +72,7 @@
         <ItemsControl ItemsSource="{x:Bind Confirmation.PermanentLosses}">
             <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="execution:CleanConfirmationLoss">
-                    <StackPanel Margin="0,0,0,10">
+                    <StackPanel Margin="0,0,0,12">
                         <TextBlock Text="{x:Bind ProviderName}"
                                    FontWeight="SemiBold"
                                    TextWrapping="Wrap"
