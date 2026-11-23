@@ -41,18 +41,13 @@ internal sealed class MftDirectoryFinder(
         // how a found directory's path is read back without recursion or a parent walk.
         var entered = new List<(int Holder, string Name)>();
         var stack = new Stack<(uint Node, int Holder)>();
-        var visited = 0;
+        var cancellation = new AmortisedCancellation(ct);
 
         Push(start, -1);
 
         while (stack.TryPop(out var item))
         {
-            // A source folder can hold millions of entries, so the cancellation check is amortised
-            // rather than paid per entry.
-            if ((++visited & 0xFFFF) == 0)
-            {
-                ct.ThrowIfCancellationRequested();
-            }
+            cancellation.Step();
 
             var node = item.Node;
 

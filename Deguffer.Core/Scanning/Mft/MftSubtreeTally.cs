@@ -24,15 +24,22 @@ internal sealed class MftSubtreeTally(MftVolumeTree tree, MftChildLinks links)
     /// <param name="keepRoot">See <see cref="ScanBounds.KeepRoot"/>.</param>
     /// <param name="leftOut">See <see cref="ScanBounds.LeftOut"/>.</param>
     /// <param name="counting">What a file with several names counts.</param>
+    /// <param name="ct">Checked as the pass steps through a folder's subtree, which can be millions of nodes.</param>
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was cancelled.</exception>
     public MftMeasurement? TryTally(
-        uint node, IReadOnlyList<MinimumAge> keeps, bool keepRoot, IReadOnlySet<uint> leftOut, LinkCounting counting)
+        uint node,
+        IReadOnlyList<MinimumAge> keeps,
+        bool keepRoot,
+        IReadOnlySet<uint> leftOut,
+        LinkCounting counting,
+        CancellationToken ct)
     {
         ArgumentOutOfRangeException.ThrowIfZero(keeps.Count);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(keeps.Count, MostGuards);
 
         if (tree.IsDirectory(node))
         {
-            return TrySumSubtree(node, keeps, keepRoot, leftOut, counting);
+            return TrySumSubtree(node, keeps, keepRoot, leftOut, counting, ct);
         }
 
         if (tree.SizeUnknown(node))
@@ -84,7 +91,12 @@ internal sealed class MftSubtreeTally(MftVolumeTree tree, MftChildLinks links)
     /// over, because that walk neither counts nor judges a folder.</para>
     /// </summary>
     private MftMeasurement? TrySumSubtree(
-        uint root, IReadOnlyList<MinimumAge> keeps, bool keepRoot, IReadOnlySet<uint> leftOut, LinkCounting counting)
+        uint root,
+        IReadOnlyList<MinimumAge> keeps,
+        bool keepRoot,
+        IReadOnlySet<uint> leftOut,
+        LinkCounting counting,
+        CancellationToken ct)
     {
         var guards = keeps.Count;
         var everyGuard = guards == MostGuards ? uint.MaxValue : (1u << guards) - 1;
@@ -98,10 +110,13 @@ internal sealed class MftSubtreeTally(MftVolumeTree tree, MftChildLinks links)
         var stores = new List<IReadOnlyList<string>>();
 
         var stack = new Stack<(uint Node, int Holder)>();
+        var cancellation = new AmortisedCancellation(ct);
         stack.Push((root, -1));
 
         while (stack.TryPop(out var item))
         {
+            cancellation.Step();
+
             var node = item.Node;
 
             // First, as the removal asks whether an entry is spared first: neither counted nor

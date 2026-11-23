@@ -75,7 +75,9 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
         out bool withheldRecent,
         out IReadOnlyList<IReadOnlyList<string>> mailStores)
     {
-        if (TryMeasure(relativePath, [keep], keepRoot, leftOut) is not { } measured)
+        // These overloads serve a caller with one small question and nothing to cancel. A measurement
+        // a caller can abandon asks the overload below, with its token.
+        if (TryMeasure(relativePath, [keep], keepRoot, leftOut, CancellationToken.None) is not { } measured)
         {
             withheldRecent = false;
             mailStores = [];
@@ -104,14 +106,20 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
     /// Nodes below the path that are neither counted nor entered, and keep every folder above them
     /// standing, as <see cref="TryPlace"/> found them. See <see cref="ScanBounds.LeftOut"/>.
     /// </param>
+    /// <param name="ct">
+    /// Checked as the pass steps through the subtree, which for a path near the volume root is millions
+    /// of nodes, so a cancelled scan or preview does not wait for a total nobody will read.
+    /// </param>
     /// <param name="counting">What a file with several names counts.</param>
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was cancelled.</exception>
     public MftMeasurement? TryMeasure(
         IReadOnlyList<string> relativePath,
         IReadOnlyList<MinimumAge> keeps,
         bool keepRoot,
         IReadOnlySet<uint> leftOut,
+        CancellationToken ct,
         LinkCounting counting = LinkCounting.EachName) =>
-        TryResolve(relativePath) is { } record ? _tally.TryTally(record, keeps, keepRoot, leftOut, counting) : null;
+        TryResolve(relativePath) is { } record ? _tally.TryTally(record, keeps, keepRoot, leftOut, counting, ct) : null;
 
     /// <summary>The same, where the caller has no guard and so nothing to be told about.</summary>
     public ScanSize? TryMeasure(IReadOnlyList<string> relativePath) =>
@@ -144,7 +152,7 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
 
     /// <summary>
     /// The node of each entry of <paramref name="leftOut"/>, given as components below
-    /// <paramref name="root"/>, for <see cref="TryMeasure(IReadOnlyList{string}, IReadOnlyList{MinimumAge}, bool, IReadOnlySet{uint}, LinkCounting)"/>
+    /// <paramref name="root"/>, for <see cref="TryMeasure(IReadOnlyList{string}, IReadOnlyList{MinimumAge}, bool, IReadOnlySet{uint}, CancellationToken, LinkCounting)"/>
     /// to leave out, or null where one cannot be placed. See <see cref="MftLeftOutPlacement"/>.
     /// </summary>
     /// <param name="describe">
