@@ -272,44 +272,30 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
     /// under the lock would hold every other asker on the lock for the whole read, and
     /// <see cref="Invalidate"/> and <see cref="Reach"/> behind it too.</para>
     ///
-    /// <para><b>A reading that failed or was stopped is not kept</b>, so the next question reads
-    /// again rather than being handed the same failure. One stopped by the token of whoever
-    /// started it, and not by this asker's, is read again for this asker.</para>
+    /// <para><b>A reading that failed or was stopped is not kept</b>, and one stopped for whoever
+    /// started it is read again for an asker that still wants it (<see cref="SharedTask"/>).</para>
     /// </summary>
     private async Task<(ProcessTable Table, LiveTreeMatch Match, long Number)> SnapshotAsync(CancellationToken ct)
     {
-        while (true)
-        {
-            Task<ProcessTable> reading;
-            LiveTreeMatch match;
-            long number;
-
-            lock (_gate)
+        var (table, (match, number)) = await SharedTask.AwaitAsync(
+            () =>
             {
-                reading = _snapshot.Get(() => WorkerThreads.Shared.RunAsync(() => Filtered(RunningProcessTable.Read(_calls, ct)), ct));
-                match = _match ??= new LiveTreeMatch(_volumes);
-                number = _snapshot.Number;
-            }
-
-            try
-            {
-                return (await reading.WaitAsync(ct).ConfigureAwait(false), match, number);
-            }
-            catch (OperationCanceledException) when (reading.IsCanceled && !ct.IsCancellationRequested)
-            {
-                // Stopped for whoever started it. This asker still wants an answer.
-            }
-            finally
-            {
-                if (reading.IsFaulted || reading.IsCanceled)
+                lock (_gate)
                 {
-                    lock (_gate)
-                    {
-                        _snapshot.Forget(reading);
-                    }
+                    var reading = _snapshot.Get(() => WorkerThreads.Shared.RunAsync(() => Filtered(RunningProcessTable.Read(_calls, ct)), ct));
+                    return (reading, (_match ??= new LiveTreeMatch(_volumes), _snapshot.Number));
                 }
-            }
-        }
+            },
+            failed =>
+            {
+                lock (_gate)
+                {
+                    _snapshot.Forget(failed);
+                }
+            },
+            ct).ConfigureAwait(false);
+
+        return (table, match, number);
     }
 
     /// <summary>

@@ -63,7 +63,10 @@ public sealed class LiveTreeQuestionSourceTests : IDisposable
             if (!_building.IsSet)
             {
                 _building.Set();
-                _release.Wait(Patience);
+
+                // Longer than the test waits, so a check held behind this build times out while it
+                // is still held.
+                _release.Wait(Patience * 3);
             }
 
             return Task.FromResult(Question());

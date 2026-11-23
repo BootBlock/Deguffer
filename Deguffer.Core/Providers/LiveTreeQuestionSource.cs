@@ -39,51 +39,47 @@ internal sealed class LiveTreeQuestionSource(Func<CancellationToken, Task<LiveTr
     /// </summary>
     public async Task<LiveTreeQuestion> ForAsync(LiveTreeReading reading, CancellationToken ct)
     {
-        while (true)
+        var (question, _) = await SharedTask.AwaitAsync(() => (Take(reading, ct), reading), Forget, ct).ConfigureAwait(false);
+        return question;
+    }
+
+    /// <summary>
+    /// The build for <paramref name="reading"/>, started where none is held for it.
+    /// </summary>
+    private Task<LiveTreeQuestion> Take(LiveTreeReading reading, CancellationToken ct)
+    {
+        Task<Task<LiveTreeQuestion>>? start = null;
+        Task<LiveTreeQuestion> question;
+
+        lock (_gate)
         {
-            Task<Task<LiveTreeQuestion>>? start = null;
-            Task<LiveTreeQuestion> question;
-
-            lock (_gate)
+            if (_built is { } built && built.Reading == reading)
             {
-                if (_built is { } built && built.Reading == reading)
-                {
-                    question = built.Question;
-                }
-                else
-                {
-                    // Created cold and run below, so the rule's first steps, which may read the disk
-                    // before it first awaits, are taken outside the gate too. Awaited inside its own
-                    // async body, so a rule stopped before its first await ends cancelled, as one
-                    // stopped later does, rather than faulted.
-                    start = new Task<Task<LiveTreeQuestion>>(async () => await rule(ct).ConfigureAwait(false));
-                    question = start.Unwrap();
-                    _built = (reading, question);
-                }
+                question = built.Question;
             }
-
-            start?.RunSynchronously(TaskScheduler.Default);
-
-            try
+            else
             {
-                return await question.WaitAsync(ct).ConfigureAwait(false);
+                // Created cold and run below, so the rule's first steps, which may read the disk before
+                // it first awaits, are taken outside the gate too. Awaited inside its own async body, so
+                // a rule stopped before its first await ends cancelled, as one stopped later does,
+                // rather than faulted.
+                start = new Task<Task<LiveTreeQuestion>>(async () => await rule(ct).ConfigureAwait(false));
+                question = start.Unwrap();
+                _built = (reading, question);
             }
-            catch (OperationCanceledException) when (question.IsCanceled && !ct.IsCancellationRequested)
+        }
+
+        start?.RunSynchronously(TaskScheduler.Default);
+        return question;
+    }
+
+    private void Forget(Task<LiveTreeQuestion> failed)
+    {
+        lock (_gate)
+        {
+            if (_built is { } built && ReferenceEquals(built.Question, failed))
             {
-                // Stopped for the check that started it. This check still wants an answer.
-            }
-            finally
-            {
-                if (question.IsFaulted || question.IsCanceled)
-                {
-                    lock (_gate)
-                    {
-                        if (_built is { } built && ReferenceEquals(built.Question, question))
-                        {
-                            _built = null;
-                        }
-                    }
-                }
+                _built = null;
             }
         }
     }

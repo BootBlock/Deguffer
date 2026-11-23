@@ -54,12 +54,16 @@ public sealed class ProcessTableReadingTests : IDisposable
     /// <summary>
     /// Read several at once, the table lists the processes in the order the system did, leaves out
     /// the one that refused to open, and keeps the doubt one process's directory raised, exactly as a
-    /// read of one at a time does.
+    /// read of one at a time does. Read several at once, the first process is held until the last
+    /// has been opened, so it finishes last, and a table gathered as the reads finished would list
+    /// it last.
     /// </summary>
     [Fact]
     public void TheTableReadSeveralAtOnceIsTheTableReadOneAtATime()
     {
         var calls = new FakeProcessTableCalls().With(FakeProcessTableCalls.Own);
+        using var lastOpened = new ManualResetEventSlim();
+        var holdFirst = false;
 
         for (var id = 5000; id < 5040; id++)
         {
@@ -71,6 +75,12 @@ public sealed class ProcessTableReadingTests : IDisposable
                 ImagePath = $@"C:\Tools\p{id}\p{id}.exe",
                 CommandLine = $@"p{id}.exe C:\Users\testuser\src\p{id}",
                 StartTime = DateTimeOffset.UnixEpoch.AddSeconds(id),
+                WhileOpening = id switch
+                {
+                    5001 => () => Assert.True(!holdFirst || lastOpened.Wait(Patience)),
+                    5039 => lastOpened.Set,
+                    _ => null,
+                },
                 Memory = id == 5013
                     ? FakeProcessMemory.Wow64(Project + @"\", @"C:\Windows\", "cmd.exe", wow64CommandLine: "garbage")
                     : FakeProcessMemory.Native($@"C:\Users\testuser\src\p{id}\", $"p{id}.exe"),
@@ -78,6 +88,8 @@ public sealed class ProcessTableReadingTests : IDisposable
         }
 
         var one = RunningProcessTable.Read(calls, threads: 1, CancellationToken.None);
+        lastOpened.Reset();
+        holdFirst = true;
         var many = RunningProcessTable.Read(calls, threads: 8, CancellationToken.None);
 
         Assert.Equal(Describe(one), Describe(many));
