@@ -193,54 +193,74 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var byPath = scan.Targets.Where(t => !resetPaths.Contains(t.Path)).ToList();
-        // Dated here rather than by the plan, because their newest age goes onto the step Windows'
-        // cleanup runs.
-        var resetLogs = await DatedAsync([.. scan.Targets.Where(t => resetPaths.Contains(t.Path))], ct).ConfigureAwait(false);
-
-        var (deletions, measured) = await PlanDeletionsAsync(byPath, keep, ct).ConfigureAwait(false);
-        var steps = new List<CleanupStep>(deletions);
-
-        // The measurement that took the slower route is the one the plan reports, whichever of the
-        // two it was: the reset logs are measured apart from the logs removed by path.
-        var scanned = measured;
-
+        var found = scan.Targets.Where(t => resetPaths.Contains(t.Path)).ToList();
         var volume = LongPath.Display(_system.SystemDrive);
-        var survey = resetLogs.Count == 0
+
+        // Asked before the logs are dated and measured, because it needs only the volume, and the
+        // handler's start beside the walk of the other logs costs the longer of the two rather than
+        // their sum. Asked only whether it starts, because setupcln.dll decides when it starts.
+        var early = found.Count == 0
             ? null
-            // Asked only whether it starts, because setupcln.dll decides when it starts.
-            : await Task.Run(
-                () => _handlers.Survey(ResetLogsHandler, volume, DiskCleanupQuestion.Starts, ct), ct).ConfigureAwait(false);
+            : new EarlyDiskCleanupSurvey(_handlers, ResetLogsHandler, volume, DiskCleanupQuestion.Starts, ct);
 
-        if (survey is { MayOffer: true })
+        var steps = new List<CleanupStep>();
+        ScanBatch scanned;
+
+        try
         {
-            var (cleared, resetMeasured) = await PlanDiskCleanupsAsync(
-                [
-                    new DiskCleanupTarget(
-                        resetLogs[0].Path,
-                        "Logs from resetting or refreshing this PC, cleared by Windows' own cleanup for them.",
-                        ResetLogsHandler,
-                        volume,
-                        [.. resetLogs.Skip(1).Select(t => t.Path)],
-                        resetLogs.Any(t => t.LastWritten is null) ? null : resetLogs.Max(t => t.LastWritten),
-                        RequiresElevation: true),
-                ],
-                keep,
-                ct).ConfigureAwait(false);
+            // Dated here rather than by the plan, because their newest age goes onto the step Windows'
+            // cleanup runs.
+            var resetLogs = await DatedAsync(found, ct).ConfigureAwait(false);
 
-            steps.AddRange(cleared);
+            var (deletions, measured) = await PlanDeletionsAsync(byPath, keep, ct).ConfigureAwait(false);
+            steps.AddRange(deletions);
 
-            if (FallbackReasonText.Prevailing(scanned.Fallback, resetMeasured.Fallback) != scanned.Fallback)
+            // The measurement that took the slower route is the one the plan reports, whichever of the
+            // two it was: the reset logs are measured apart from the logs removed by path.
+            scanned = measured;
+
+            var survey = early is null ? null : await early.TakeAsync().ConfigureAwait(false);
+
+            if (survey is { MayOffer: true })
             {
-                scanned = resetMeasured;
+                var (cleared, resetMeasured) = await PlanDiskCleanupsAsync(
+                    [
+                        new DiskCleanupTarget(
+                            resetLogs[0].Path,
+                            "Logs from resetting or refreshing this PC, cleared by Windows' own cleanup for them.",
+                            ResetLogsHandler,
+                            volume,
+                            [.. resetLogs.Skip(1).Select(t => t.Path)],
+                            resetLogs.Any(t => t.LastWritten is null) ? null : resetLogs.Max(t => t.LastWritten),
+                            RequiresElevation: true),
+                    ],
+                    keep,
+                    ct).ConfigureAwait(false);
+
+                steps.AddRange(cleared);
+
+                if (FallbackReasonText.Prevailing(scanned.Fallback, resetMeasured.Fallback) != scanned.Fallback)
+                {
+                    scanned = resetMeasured;
+                }
+            }
+            else if (survey?.WhyLeftAlone(ResetLogsHandler, LongPath.Display(resetLogs[0].Path)) is { } why)
+            {
+                // Deleting them by hand is not the fallback: §5.1 prefers Windows' own route, and where
+                // that route will not clear them the logs are left where they are and §5.6 proves it.
+                notes.Add(new PlanNote(PlanNoteSeverity.Information, why));
+                held.AddRange(resetLogs.Select(t => new ProtectedPath(
+                    t.Path, "Left alone because Windows' own cleanup does not clear it.", PathPresence.Present)));
             }
         }
-        else if (survey?.WhyLeftAlone(ResetLogsHandler, LongPath.Display(resetLogs[0].Path)) is { } why)
+        finally
         {
-            // Deleting them by hand is not the fallback: §5.1 prefers Windows' own route, and where
-            // that route will not clear them the logs are left where they are and §5.6 proves it.
-            notes.Add(new PlanNote(PlanNoteSeverity.Information, why));
-            held.AddRange(resetLogs.Select(t => new ProtectedPath(
-                t.Path, "Left alone because Windows' own cleanup does not clear it.", PathPresence.Present)));
+            // Where dating or measuring failed or was cancelled before the answer was taken, the
+            // handler is stopped and waited for, so none runs past the plan that asked.
+            if (early is not null)
+            {
+                await early.DiscardAsync().ConfigureAwait(false);
+            }
         }
 
         if (scanned.Note is { } scanNote)
