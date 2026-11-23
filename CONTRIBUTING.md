@@ -204,7 +204,9 @@ use, counted once before the first run, and the bytes of free records each run r
 what reading across free records cost the run. That last figure holds only for a complete run.
 They also report how many reads of clusters each run made, the bitmap's and those of the attribute
 lists kept outside the table, and how long the lists took from the first read starting to the last
-ending: the time the list reads add after the first pass. The mean read is the bytes of records
+ending. Read after the first pass, that is the time the list reads add to it. Read beside it
+(`--list-reads beside`), that span overlaps the pass, and the `extension lists` stage shows what is
+left once the pass ends. The mean read is the bytes of records
 over the reads of records: a table in many pieces, or with many runs of free records, reads in
 smaller pieces.
 

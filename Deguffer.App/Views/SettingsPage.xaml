@@ -608,7 +608,7 @@
 
             <views:SettingsRow Glyph="&#xE8FD;"
                                Title="Attribute list reads at once"
-                               Description="How many of the small lists a volume keeps outside its file table, for files in many pieces, are read on this kind of drive at the same time. They are read after the table, so each one waiting adds to the scan. Used only when Deguffer runs as administrator. Empty the box to go back to Auto.">
+                               Description="How many lists kept outside the file table are read at once on this kind of drive. Used only when Deguffer runs as administrator.">
                 <views:SettingsRow.Control>
                     <NumberBox Value="{x:Bind Scanning.TableListReadsInFlight, Mode=TwoWay}"
                                PlaceholderText="{x:Bind Scanning.AutoTableListReadsInFlight, Mode=OneWay}"
@@ -620,7 +620,7 @@
                                ValidationMode="InvalidInputOverwritten"
                                MinWidth="150"
                                Header="Reads"
-                               ToolTipService.ToolTip="Auto reads 32 at once, which was fastest where it was measured. One at a time took several times as long on the drive measured with thousands of lists."
+                               ToolTipService.ToolTip="These lists describe files in many pieces. On an NVMe SSD they are read while the table is, and on other drives after it, where each one waiting adds to the scan. Auto reads 32 at once, which was fastest where it was measured. One at a time took several times as long on the drive measured with thousands of lists. Empty the box to go back to Auto."
                                AutomationProperties.Name="Attribute list reads at once" />
                 </views:SettingsRow.Control>
             </views:SettingsRow>

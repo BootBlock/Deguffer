@@ -15,7 +15,7 @@ public sealed class DesignSettingsTextTests
 
     private static readonly Dictionary<string, int> Baseline = new(StringComparer.Ordinal)
     {
-        ["Deguffer.App/Views/SettingsPage.xaml"] = 18,
+        ["Deguffer.App/Views/SettingsPage.xaml"] = 17,
     };
 
     [Fact]
