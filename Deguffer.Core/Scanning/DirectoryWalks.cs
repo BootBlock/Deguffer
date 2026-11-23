@@ -1,3 +1,5 @@
+using Deguffer.Core.Scanning.Media;
+
 namespace Deguffer.Core.Scanning;
 
 /// <summary>
@@ -28,21 +30,33 @@ internal static class DirectoryWalks
     /// The walks of the directories at <paramref name="directories"/> among <paramref name="asked"/>,
     /// one list for each set of disks. Asks each volume's device the first time it is met, so never call
     /// it on the UI thread.
+    ///
+    /// <para>Each directory's storage is asked once, through the measurement's
+    /// <paramref name="storages"/>, and both its disks and its walk's values are read from that one
+    /// answer (#1065).</para>
     /// </summary>
     public static IReadOnlyList<IReadOnlyList<DirectoryWalk>> Plan(
-        IReadOnlyList<ScanRequest> asked, IReadOnlyList<int> directories, ScanTuner tuner)
+        IReadOnlyList<ScanRequest> asked, IReadOnlyList<int> directories, ScanTuner tuner, PathStorages storages)
     {
         if (directories.Count == 0)
         {
             return [];
         }
 
+        // By slot in the measurement, so a directory's answer is found without a lookup.
+        var storage = new VolumeMedia?[asked.Count];
+
+        foreach (var i in directories)
+        {
+            storage[i] = storages.Of(asked[i].Path);
+        }
+
         return
         [
-            .. FolderPipelines.ByDisks(directories, i => [asked[i].Path], tuner.StorageOf).Select(set => (IReadOnlyList<DirectoryWalk>)
+            .. FolderPipelines.ByDisks(directories, i => [storage[i]]).Select(set => (IReadOnlyList<DirectoryWalk>)
             [
                 .. set
-                    .GroupBy(i => tuner.For(asked[i].Path).Walk)
+                    .GroupBy(i => tuner.For(storage[i]).Walk)
                     .Select(walk => new DirectoryWalk(walk.Key, [.. walk])),
             ]),
         ];

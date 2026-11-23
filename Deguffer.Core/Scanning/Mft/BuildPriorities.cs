@@ -47,6 +47,15 @@ namespace Deguffer.Core.Scanning.Mft;
 ///
 /// <para>One lock for every build and walk, held across the priority calls, so two changes never apply
 /// out of order. Each call is one system call on a handle already open.</para>
+///
+/// <para><b>A walk is placed only once a build could yield to it.</b> Which volumes and disks a walk
+/// reads is asked of each of its paths, and a walk with no build in flight beside it has no priority
+/// to change, which is every walk of an unelevated pass and of the walk-only route (#1065). So a walk
+/// is placed when it starts only where a build is in flight, and a build that starts during walks not
+/// yet placed places them before it yields. Either way the asking happens outside the lock, because
+/// the first question about a volume can wait on its device. While any build is in flight, every walk
+/// in flight is placed, so a priority is never decided under the lock from a walk not yet
+/// asked about. A build that ends stops counting (<see cref="Ended"/>).</para>
 /// </summary>
 internal sealed class BuildPriorities
 {
@@ -69,15 +78,29 @@ internal sealed class BuildPriorities
         internal IndexBuildTrace? Trace { get; set; }
     }
 
-    /// <summary>A walk in flight of <paramref name="volumes"/>, until disposed.</summary>
-    public sealed class Walk(BuildPriorities owner, IReadOnlyList<VolumeDisks> volumes) : IDisposable
+    /// <summary>
+    /// A walk in flight of the volumes <paramref name="volumesOf"/> names, until disposed. The volumes
+    /// are asked for only once a build could yield to the walk (<see cref="IsPlaced"/>).
+    /// </summary>
+    public sealed class Walk(BuildPriorities owner, Func<IReadOnlyList<VolumeDisks>> volumesOf) : IDisposable
     {
+        private IReadOnlyList<VolumeDisks>? _volumes;
+
         public void Dispose() => owner.End(this);
+
+        /// <summary>Whether the walk's volumes have been asked for.</summary>
+        internal bool IsPlaced => Volatile.Read(ref _volumes) is not null;
+
+        /// <summary>
+        /// The walk's volumes, asked for the first time they are needed. Two threads asking at once may
+        /// both ask, and one answer is kept: both describe the same paths.
+        /// </summary>
+        internal IReadOnlyList<VolumeDisks> Volumes => LazyInitializer.EnsureInitialized(ref _volumes, volumesOf);
 
         /// <summary>Whether a build of <paramref name="built"/> yields to this walk: see <see cref="VolumeDisks.Contends"/>.</summary>
         internal bool Contends(VolumeDisks built)
         {
-            foreach (var volume in volumes)
+            foreach (var volume in Volumes)
             {
                 if (volume.Contends(built))
                 {
@@ -95,12 +118,39 @@ internal sealed class BuildPriorities
     /// </summary>
     public void Yield(Build build, IMftVolume volume, VolumeDisks place)
     {
+        while (true)
+        {
+            Walk? unplaced;
+
+            lock (_gate)
+            {
+                unplaced = _walks.Find(walk => !walk.IsPlaced);
+
+                if (unplaced is null)
+                {
+                    build.Volume = volume;
+                    build.Place = place;
+                    _builds.Add(build);
+                    Apply(build);
+                    return;
+                }
+            }
+
+            // Outside the lock, because asking what a path is on can wait on a device the first time,
+            // and every walk and build of the pass takes this lock. See the class remarks.
+            _ = unplaced.Volumes;
+        }
+    }
+
+    /// <summary>
+    /// <paramref name="build"/> has ended, and has no priority left to change, so the walks after it
+    /// need not be placed for its sake.
+    /// </summary>
+    public void Ended(Build build)
+    {
         lock (_gate)
         {
-            build.Volume = volume;
-            build.Place = place;
-            _builds.Add(build);
-            Apply(build);
+            _builds.Remove(build);
         }
     }
 
@@ -115,19 +165,28 @@ internal sealed class BuildPriorities
     }
 
     /// <summary>
-    /// A walk of <paramref name="volumes"/> is in flight until the walk returned is disposed.
+    /// A walk of the volumes <paramref name="volumesOf"/> names is in flight until the walk returned is
+    /// disposed. They are asked for here only where a build is in flight: see the class remarks.
     /// </summary>
-    public Walk Walking(IReadOnlyList<VolumeDisks> volumes)
+    public Walk Walking(Func<IReadOnlyList<VolumeDisks>> volumesOf)
     {
-        var walk = new Walk(this, volumes);
+        var walk = new Walk(this, volumesOf);
 
-        lock (_gate)
+        while (true)
         {
-            _walks.Add(walk);
-            ApplyAll();
-        }
+            lock (_gate)
+            {
+                if (_builds.Count == 0 || walk.IsPlaced)
+                {
+                    _walks.Add(walk);
+                    ApplyAll();
+                    return walk;
+                }
+            }
 
-        return walk;
+            // Outside the lock, as in Yield.
+            _ = walk.Volumes;
+        }
     }
 
     /// <summary>

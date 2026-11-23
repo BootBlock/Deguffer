@@ -111,8 +111,19 @@ public sealed class MftVolumeIndexCache
     /// <summary>
     /// A walk of <paramref name="paths"/> is in flight until the walk returned is disposed, and every
     /// build of another volume on the disks under them reads after it. See <see cref="BuildPriorities"/>.
+    ///
+    /// <para>What the paths are on is asked through <paramref name="storages"/>, the answers of the
+    /// measurement the walk is part of, and only once a build could yield to the walk: a walk with no
+    /// build in flight beside it has no priority to change, so it asks nothing (#1065).</para>
     /// </summary>
-    public IDisposable Walking(IEnumerable<string> paths) => _priorities.Walking(VolumesOf(paths));
+    internal IDisposable Walking(IReadOnlyList<string> paths, PathStorages storages) =>
+        _priorities.Walking(() => VolumesOf(paths, storages));
+
+    /// <summary>
+    /// <see cref="Walking(IReadOnlyList{string}, PathStorages)"/> for a walk that is no part of a
+    /// measurement, such as one search's walk of an approved folder, which asks through answers of its own.
+    /// </summary>
+    public IDisposable Walking(IReadOnlyList<string> paths) => Walking(paths, _tuning.ForOneMeasurement());
 
     /// <summary>
     /// The volumes holding <paramref name="paths"/>, each once, with the physical disks under them.
@@ -122,13 +133,13 @@ public sealed class MftVolumeIndexCache
     /// machine, which its media says with no reason, and is left out rather than taken to be on every
     /// disk.</para>
     /// </summary>
-    private List<VolumeDisks> VolumesOf(IEnumerable<string> paths)
+    private static List<VolumeDisks> VolumesOf(IReadOnlyList<string> paths, PathStorages storages)
     {
         var volumes = new List<VolumeDisks>();
 
         foreach (var path in paths)
         {
-            var place = PlaceOf(path);
+            var place = PlaceOf(storages.PlaceOf(path));
 
             if (place == VolumeDisks.Unknown)
             {
@@ -148,11 +159,11 @@ public sealed class MftVolumeIndexCache
     }
 
     /// <summary>
-    /// The volume holding <paramref name="path"/> and the disks under it: <see cref="VolumeDisks.Unknown"/>
-    /// where the machine's volumes were not asked or none holds it, and no disks where it is on none of
-    /// this machine's.
+    /// The volume of <paramref name="asked"/> and the disks under it: <see cref="VolumeDisks.Unknown"/>
+    /// where the machine's volumes were not asked or none holds the path, and no disks where it is on
+    /// none of this machine's.
     /// </summary>
-    private VolumeDisks PlaceOf(string path) => _tuning.PathStorageOf(path) switch
+    private static VolumeDisks PlaceOf(PathStorage? asked) => asked switch
     {
         { Media.PhysicalDisks.Count: > 0 } storage => new VolumeDisks(storage.VolumeRoot, storage.Media.PhysicalDisks),
         { Media.Reason: MediaUnknownReason.None } storage => new VolumeDisks(storage.VolumeRoot, []),
@@ -204,7 +215,7 @@ public sealed class MftVolumeIndexCache
         // File table first waits for the table, so its build is the answer and keeps normal priority.
         if (_tuning.Route is Configuration.ScanRoute.Auto)
         {
-            _priorities.Yield(priority, volume, PlaceOf($@"{driveLetter}:\"));
+            _priorities.Yield(priority, volume, PlaceOf(_tuning.PathStorageOf($@"{driveLetter}:\")));
         }
 
         // A build Invalidate or the last hold ends stops at its next check of the token, with the handle
@@ -236,6 +247,7 @@ public sealed class MftVolumeIndexCache
                 finally
                 {
                     trace?.Ended(ready);
+                    _priorities.Ended(priority);
                 }
             },
             scan);
@@ -244,6 +256,7 @@ public sealed class MftVolumeIndexCache
         // build, and the build is all that closes the handle. A build that ran closed it on the way out.
         if ((built.IsFaulted || built.IsCanceled) && !Volatile.Read(ref ran))
         {
+            _priorities.Ended(priority);
             volume.Dispose();
         }
 

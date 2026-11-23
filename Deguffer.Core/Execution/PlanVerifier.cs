@@ -65,7 +65,7 @@ public static class PlanVerifier
             .. DiskBoundWork.Each(
                 plan.ProtectedPaths,
                 protectedPath => protectedPath.Path,
-                sources.Tuning ?? ScanTuner.Shipped,
+                (sources.Tuning ?? ScanTuner.Shipped).For,
                 ListingBudget.Shared,
                 protectedPath => SurvivalCheck.Of(protectedPath, places, residue, enteredRoots, probe),
                 ct),

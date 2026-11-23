@@ -28,6 +28,8 @@ public sealed class FakeVolumeInventory : IVolumeInventory
 
     private string? _answer;
 
+    private int _substituteQueries;
+
     public IReadOnlyList<LocalVolume> Volumes => _volumes;
 
     public int InvalidateCount { get; private set; }
@@ -199,7 +201,15 @@ public sealed class FakeVolumeInventory : IVolumeInventory
         return this;
     }
 
-    public string? SubstituteOf(string driveRoot) => _substitutes.GetValueOrDefault(driveRoot);
+    public string? SubstituteOf(string driveRoot)
+    {
+        Interlocked.Increment(ref _substituteQueries);
+
+        return _substitutes.GetValueOrDefault(driveRoot);
+    }
+
+    /// <summary>How many times <see cref="SubstituteOf"/> was asked, which the machine answers with a call each time.</summary>
+    public int SubstituteQueries => Volatile.Read(ref _substituteQueries);
 
     /// <summary>
     /// Answer every <see cref="MountPointOf"/> with <paramref name="mountPoint"/>, whatever the path.

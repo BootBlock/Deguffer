@@ -21,7 +21,7 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 internal static class SourceSearchLanes
 {
-    /// <param name="storageOf">What a path is on, or null where that is not known (<see cref="Scanning.ScanTuner.StorageOf"/>).</param>
+    /// <param name="storageOf">What a path is on, or null where that is not known (<see cref="Scanning.PathStorages.Of"/>).</param>
     /// <returns>Each lane's folders, by their index in <paramref name="folders"/>, in the order asked.</returns>
     public static IReadOnlyList<IReadOnlyList<int>> Of(IReadOnlyList<string> folders, Func<string, VolumeMedia?> storageOf)
     {
