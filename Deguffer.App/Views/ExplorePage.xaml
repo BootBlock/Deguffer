@@ -466,27 +466,35 @@
             <!-- At least room for the first steps beside the buttons: where the trail and the hint
                  below cannot share the line with that much, the hint moves under them. -->
             <ItemsControl ItemsSource="{x:Bind ViewModel.Listing.Trail}" VerticalAlignment="Center" MinWidth="200">
+                <!-- A deep trail wraps onto a further line, and a step too long for a line trims, so
+                     the step the reader is on is never drawn off the edge of a narrow window. -->
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
-                        <StackPanel Orientation="Horizontal" />
+                        <controls:FlowRow />
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:ExploreCrumb">
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Grid ColumnDefinitions="Auto,*" VerticalAlignment="Center">
                             <!-- The separator between two steps, so the trail reads as a path down
                                  into something rather than as a row of links. Raw to a screen
                                  reader, which is given the steps themselves and their order. -->
-                            <FontIcon Glyph="&#xE76C;"
+                            <FontIcon Grid.Column="0"
+                                      Glyph="&#xE76C;"
                                       FontSize="{StaticResource GlyphSizeCompact}"
                                       Visibility="{x:Bind FollowsAnother}"
                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                       AutomationProperties.AccessibilityView="Raw" />
 
-                            <HyperlinkButton Content="{x:Bind Name}"
+                            <HyperlinkButton Grid.Column="1"
                                              Padding="{StaticResource LinkPadding}"
-                                             Click="OnCrumbClicked" />
-                        </StackPanel>
+                                             AutomationProperties.Name="{x:Bind Name}"
+                                             Click="OnCrumbClicked">
+                                <TextBlock Text="{x:Bind Name}"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTipService.ToolTip="{x:Bind Name}" />
+                            </HyperlinkButton>
+                        </Grid>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>

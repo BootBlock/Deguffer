@@ -39,11 +39,11 @@ public sealed partial class FlowRow : Panel
 
     protected override Size MeasureOverride(Size availableSize)
     {
-        var unbounded = new Size(double.PositiveInfinity, availableSize.Height);
-
+        // Each control is offered a whole line, the most it can have on any line: one wider than
+        // that, such as a long breadcrumb step, trims to the line instead of running off the edge.
         foreach (var child in Children)
         {
-            child.Measure(unbounded);
+            child.Measure(availableSize);
         }
 
         return Lay(availableSize.Width, arrange: false);
