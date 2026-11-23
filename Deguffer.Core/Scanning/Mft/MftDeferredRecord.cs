@@ -19,6 +19,7 @@ internal sealed class MftDeferredRecord
     private MftRecordDraft _draft;
     private readonly List<(MftSegmentReference Segment, MftAttributeKinds Needs)> _segments = [];
     private bool _declaresUnnamedData;
+    private Following? _landed;
 
     /// <param name="record">The base record <paramref name="draft"/> was absorbed from, which this outlives.</param>
     public MftDeferredRecord(long number, ushort sequence, bool isDirectory, MftRecordDraft draft, ReadOnlySpan<byte> record)
@@ -56,29 +57,52 @@ internal sealed class MftDeferredRecord
     /// Work out from the list's entries which extension records have to be read, or fail where the
     /// list could not be read. Null entries are a list that could not be read.
     /// </summary>
-    public void Follow(IReadOnlyList<MftAttributeListEntry>? entries)
+    public void Follow(IReadOnlyList<MftAttributeListEntry>? entries) => Commit(Plan(entries));
+
+    /// <summary>
+    /// Work out what <see cref="Follow"/> would, and keep it for <see cref="FollowLanded"/> rather
+    /// than act on it: for a list read beside the first pass, which is followed only once the pass
+    /// has ended, in the order the budget is spent in. Called on a thread other than the one that
+    /// follows it, which sees what this kept because it waits for that thread first. Returns how many
+    /// extension records the list wants.
+    /// </summary>
+    public int Land(IReadOnlyList<MftAttributeListEntry>? entries)
     {
-        PendingList = null;
+        var landed = Plan(entries);
+
+        _landed = landed;
+        return landed.Segments?.Count ?? 0;
+    }
+
+    /// <summary>Follow the list <see cref="Land"/> kept, as though it had just been read.</summary>
+    public void FollowLanded() =>
+        Commit(_landed ?? throw new InvalidOperationException("The list was not read beside the first pass."));
+
+    /// <summary>
+    /// What a list's entries say. Worked out from the base record alone, which nothing changes
+    /// before the list is followed, so it can be worked out on another thread and acted on later.
+    /// </summary>
+    private Following Plan(IReadOnlyList<MftAttributeListEntry>? entries)
+    {
+        var declaresUnnamedData = false;
 
         if (entries is null)
         {
-            FailList();
-            return;
+            return new Following(Segments: null, declaresUnnamedData);
         }
 
         var wanted = new List<(MftSegmentReference Segment, MftAttributeKinds Needs)>();
 
         foreach (var entry in entries)
         {
-            var needs = NeedsOf(entry);
+            var needs = NeedsOf(entry, ref declaresUnnamedData);
             var elsewhere = entry.Segment.Record != Self.Record;
 
             // An entry naming the base record itself is already read, but it still has to name the
             // base record as it is now. A list that does not is one caught mid-change.
             if (!elsewhere && entry.Segment.Sequence != Self.Sequence)
             {
-                FailList();
-                return;
+                return new Following(Segments: null, declaresUnnamedData);
             }
 
             if (elsewhere && needs != MftAttributeKinds.None)
@@ -96,16 +120,39 @@ internal sealed class MftDeferredRecord
             ? a.Segment.Record.CompareTo(b.Segment.Record)
             : a.Segment.Sequence.CompareTo(b.Segment.Sequence));
 
-        foreach (var (segment, needs) in wanted)
+        // Merged in place, the kept entries written over the front of the list.
+        var merged = 0;
+
+        for (var i = 0; i < wanted.Count; i++)
         {
-            if (_segments.Count > 0 && _segments[^1].Segment == segment)
+            var (segment, needs) = wanted[i];
+
+            if (merged > 0 && wanted[merged - 1].Segment == segment)
             {
-                _segments[^1] = (segment, _segments[^1].Needs | needs);
+                wanted[merged - 1] = (segment, wanted[merged - 1].Needs | needs);
                 continue;
             }
 
-            _segments.Add((segment, needs));
+            wanted[merged++] = (segment, needs);
         }
+
+        wanted.RemoveRange(merged, wanted.Count - merged);
+        return new Following(wanted, declaresUnnamedData);
+    }
+
+    private void Commit(Following following)
+    {
+        PendingList = null;
+        _landed = null;
+        _declaresUnnamedData |= following.DeclaresUnnamedData;
+
+        if (following.Segments is null)
+        {
+            FailList();
+            return;
+        }
+
+        _segments.AddRange(following.Segments);
     }
 
     /// <summary>
@@ -186,7 +233,7 @@ internal sealed class MftDeferredRecord
     /// pieces, and reading the rest would learn nothing. A directory's own stream is never counted,
     /// so its pieces are not wanted at all.</para>
     /// </summary>
-    private MftAttributeKinds NeedsOf(MftAttributeListEntry entry)
+    private MftAttributeKinds NeedsOf(MftAttributeListEntry entry, ref bool declaresUnnamedData)
     {
         switch (entry.Type)
         {
@@ -194,7 +241,7 @@ internal sealed class MftDeferredRecord
                 return MftAttributeKinds.Name;
 
             case MftRecordParser.AttributeData when !entry.IsNamed:
-                _declaresUnnamedData = true;
+                declaresUnnamedData = true;
                 return entry.LowestVcn == 0 && !_isDirectory ? MftAttributeKinds.DataStart : MftAttributeKinds.None;
 
             case MftRecordParser.AttributeData when entry.IsWofStream:
@@ -207,4 +254,11 @@ internal sealed class MftDeferredRecord
                 return MftAttributeKinds.None;
         }
     }
+
+    /// <summary>
+    /// What one list said: the extension records it sends the reader to, merged and in record order,
+    /// or null where the list could not be trusted, and whether it declared the file's unnamed stream.
+    /// </summary>
+    private readonly record struct Following(
+        List<(MftSegmentReference Segment, MftAttributeKinds Needs)>? Segments, bool DeclaresUnnamedData);
 }

@@ -71,7 +71,7 @@ internal static class Tuning
             var reads = string.Create(
                 CultureInfo.InvariantCulture,
                 $"{table.ReadBytes / 1024} KiB reads, {table.ReadsInFlight} in flight, parsed on {table.ParseThreads} threads, " +
-                $"{table.ListReadsInFlight} list reads in flight");
+                $"{table.ListReadsInFlight} list reads in flight {ListReads(table)}");
 
             return route.TakesSnapshots() ? reads + Snapshots(snapshots) : reads;
         }
@@ -125,8 +125,12 @@ internal static class Tuning
             CultureInfo.InvariantCulture,
             $"{walked}, {Listing(walk)}, raced against the index of {char.ToUpperInvariant(drive)}:, {relation.Describe()}, " +
             $"{table.ReadBytes / 1024} KiB reads {priority}, {table.ReadsInFlight} in flight, parsed on {table.ParseThreads} threads, " +
-            $"{table.ListReadsInFlight} list reads in flight, {between}");
+            $"{table.ListReadsInFlight} list reads in flight {ListReads(table)}, {between}");
     }
+
+    private static string ListReads(TableTuning table) => table.ListReads is AttributeListReads.BesideFirstPass
+        ? string.Create(CultureInfo.InvariantCulture, $"beside the first pass in batches of {table.ListBatch}")
+        : "after the first pass";
 
     private static string Listing(WalkTuning walk) => string.Create(
         CultureInfo.InvariantCulture,
