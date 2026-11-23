@@ -19,7 +19,7 @@ public sealed class ExploreZoomRetentionTests
 
         // The tracker is handed the camera's bounds and the jump the resize asked for at the next
         // commit, so it is a live tracker, not a request still to be sent, that is asked to let go.
-        await CompositionThread.Run(() => CompositionThread.Compositor.RequestCommitAsync()).AsTask();
+        await CompositionThread.CommitAsync();
 
         Assert.True(Collector.Reclaims(zoom));
         GC.KeepAlive(camera);
