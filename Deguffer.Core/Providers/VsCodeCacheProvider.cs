@@ -352,7 +352,7 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
             {
                 notes.Add(new PlanNote(
                     PlanNoteSeverity.Information,
-                    $"In '{editor.UserData.Name}', {spared} other {(spared == 1 ? "item is" : "items are")} "
+                    $"In '{editor.UserData.Name}', {spared:N0} other {Counted.Form(spared, "item is", "items are")} "
                     + "left alone beside the caches. Your settings, your workspace state and your local file "
                     + "history all live in that folder, so only the recognised caches are removed."
                     + (walk.EmptiedAContainer

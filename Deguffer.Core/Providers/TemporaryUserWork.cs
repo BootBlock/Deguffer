@@ -124,12 +124,14 @@ internal static partial class TemporaryUserWork
         ? null
         : new PlanNote(
             PlanNoteSeverity.Information,
-            (entries.Count == 1
-                ? "One entry in these folders holds work that was never saved anywhere else"
-                : $"{entries.Count} entries in these folders hold work that was never saved anywhere else")
-            + (entries.Count == 1
-                ? ", so this row leaves it alone however old it is: "
-                : ", so this row leaves them alone however old they are: ")
+            Counted.Form(
+                entries.Count,
+                "One entry in these folders holds work that was never saved anywhere else",
+                $"{entries.Count:N0} entries in these folders hold work that was never saved anywhere else")
+            + Counted.Form(
+                entries.Count,
+                ", so this row leaves it alone however old it is: ",
+                ", so this row leaves them alone however old they are: ")
             + $"{string.Join("; ", entries.Select(e => e.What).Distinct(StringComparer.Ordinal))}.");
 
     /// <summary>

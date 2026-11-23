@@ -318,7 +318,7 @@ public sealed partial class DuplicatesViewModel : ObservableObject
             return;
         }
 
-        CsvOutcome = (await DuplicateCsv.SaveAsync(path, [.. Groups.Select(row => row.Marks.Group)], CancellationToken.None)).Summary;
+        CsvOutcome = (await DuplicateCsv.SaveAsync(path, (DuplicateGroup[])[.. Groups.Select(row => row.Marks.Group)], CancellationToken.None)).Summary;
     }
 
     private bool CanStop() => IsSearching;

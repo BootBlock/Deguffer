@@ -53,8 +53,8 @@ public sealed record RemovalConfirmation(
 {
     /// <summary>The dialog's title, which says how many copies go and how.</summary>
     public string Title => Mode == ExploreRemovalMode.RecycleBin
-        ? $"Move {Count(Copies.Count, "copy", "copies")} to the Recycle Bin?"
-        : $"Permanently delete {Count(Copies.Count, "copy", "copies")}?";
+        ? $"Move {Counted.Of(Copies.Count, "copy", "copies")} to the Recycle Bin?"
+        : $"Permanently delete {Counted.Of(Copies.Count, "copy", "copies")}?";
 
     /// <summary>The button that confirms, which names what it does rather than saying yes.</summary>
     public string ConfirmLabel => Mode == ExploreRemovalMode.RecycleBin ? "Move to Recycle Bin" : "Delete permanently";
@@ -129,7 +129,7 @@ public sealed record RemovalConfirmation(
         List<DuplicateCandidate> copies = [.. byGroup.SelectMany(going => going)];
         var space = copies.Sum(copy => copy.SizeOnDisk);
 
-        var summary = $"{Count(copies.Count, "copy", "copies")} from {Count(byGroup.Count, "group", "groups")} will be "
+        var summary = $"{Counted.Of(copies.Count, "copy", "copies")} from {Counted.Of(byGroup.Count, "group", "groups")} will be "
             + (toBin ? "moved to the Recycle Bin" : "removed permanently")
             + $". They occupy {FreeSpace.Format(space)} on disk, and the removal may free less: copies can share space, "
             + "as block-cloned and deduplicated copies do"
@@ -143,8 +143,8 @@ public sealed record RemovalConfirmation(
             .GroupBy(pair => pair.Folder!)
             .Select(folder => (folder.Key, folder.Count())))
         {
-            warnings.Add($"{Count(inIt, "copy is", "copies are")} in a cloud folder, and other devices that sync it lose "
-                + $"{(inIt == 1 ? "it" : "them")} too. {cloudFolder}");
+            warnings.Add($"{Counted.Of(inIt, "copy is", "copies are")} in a cloud folder, and other devices that sync it lose "
+                + $"{Counted.Form(inIt, "it", "them")} too. {cloudFolder}");
         }
 
         if (mode == ExploreRemovalMode.Permanent)
@@ -158,9 +158,9 @@ public sealed record RemovalConfirmation(
 
         if (staying.Count > 0)
         {
-            var them = staying.Count == 1 ? "it" : "them";
-            warnings.Add($"{Count(staying.Count, "marked copy stays", "marked copies stay")} where "
-                + $"{(staying.Count == 1 ? "it is" : "they are")}, because the Recycle Bin cannot take {them}, and Windows "
+            var them = Counted.Form(staying.Count, "it", "them");
+            warnings.Add($"{Counted.Of(staying.Count, "marked copy stays", "marked copies stay")} where "
+                + $"{Counted.Form(staying.Count, "it is", "they are")}, because the Recycle Bin cannot take {them}, and Windows "
                 + $"deletes outright what its bin cannot take. Each is listed with why. Delete permanently removes {them}.");
         }
 
@@ -187,8 +187,6 @@ public sealed record RemovalConfirmation(
             }
         }
     }
-
-    private static string Count(int count, string one, string many) => $"{count:N0} {(count == 1 ? one : many)}";
 }
 
 /// <summary>A marked copy that stays because the Recycle Bin cannot take it.</summary>

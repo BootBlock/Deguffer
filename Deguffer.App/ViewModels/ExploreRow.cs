@@ -282,7 +282,7 @@ public sealed record ExploreLegendBand(string Label, Color Swatch)
         .. Enum.GetValues<ExploreColouring>().Select(colouring => (IReadOnlyList<ExploreLegendBand>[])
         [
             .. Enum.GetValues<ExploreScheme>().Select(scheme => (IReadOnlyList<ExploreLegendBand>)
-            [
+            (ExploreLegendBand[])[
                 .. MapLegend.For(colouring, scheme).Select(band => new ExploreLegendBand(band.Label, band.Colour.ToColor())),
             ]),
         ]),
@@ -312,6 +312,6 @@ public sealed record ExploreLegendBand(string Label, Color Swatch)
 
         return tuning.IsNone
             ? built
-            : [.. MapLegend.For(colouring, scheme).Select(band => new ExploreLegendBand(band.Label, tuning.Apply(band.Colour).ToColor()))];
+            : (ExploreLegendBand[])[.. MapLegend.For(colouring, scheme).Select(band => new ExploreLegendBand(band.Label, tuning.Apply(band.Colour).ToColor()))];
     }
 }

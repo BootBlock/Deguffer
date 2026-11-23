@@ -103,7 +103,7 @@ public sealed partial class FindingViewModel : ObservableObject
         FacetColumns = columns.Labels;
 
         Steps =
-        [
+        (StepViewModel[])[
             // A step that cannot be acted on starts unticked whatever the finding's default is:
             // its checkbox is disabled, so ticking it would leave the user a selection they have
             // no way to clear, and the row-level toggle skips it for the same reason.
@@ -285,7 +285,7 @@ public sealed partial class FindingViewModel : ObservableObject
     /// <summary>Exactly what would run — the plan, made inspectable before anything is deleted.</summary>
     public IReadOnlyList<StepViewModel> Steps { get; private set; }
 
-    public IReadOnlyList<StepViewModel> SelectedSteps => [.. Steps.Where(s => s.IsSelected)];
+    public IReadOnlyList<StepViewModel> SelectedSteps => (StepViewModel[])[.. Steps.Where(s => s.IsSelected)];
 
     /// <summary>What this row contributes to the selected total, counting only ticked steps.</summary>
     public ScanSize SelectedSize =>
@@ -388,7 +388,7 @@ public sealed partial class FindingViewModel : ObservableObject
     private static HashSet<CleanupStep> OfferedSteps(Finding finding) => [.. finding.Plan?.Steps ?? []];
 
     private static IReadOnlyList<string> NotesOf(Finding finding) =>
-        [.. finding.Plan?.Notes.Select(n => n.Message) ?? []];
+        (string[])[.. finding.Plan?.Notes.Select(n => n.Message) ?? []];
 
     /// <summary>
     /// What to remember about this row, so a later scan starts where the user left it.

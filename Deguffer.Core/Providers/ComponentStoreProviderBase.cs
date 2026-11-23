@@ -229,9 +229,9 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
         + "left it, so running it again would free nothing. What is left is what Windows keeps: the "
         + "components its later updates are built on, and the features it can switch on without a download."
         + (report.ReclaimablePackages > 0
-            ? $" Windows still counts {report.ReclaimablePackages} superseded "
-              + $"{(report.ReclaimablePackages == 1 ? "package" : "packages")} it could remove, and its cleanup keeps "
-              + (report.ReclaimablePackages == 1 ? "it." : "them.")
+            ? $" Windows still counts {report.ReclaimablePackages:N0} superseded "
+              + $"{Counted.Form(report.ReclaimablePackages, "package", "packages")} it could remove, and its cleanup keeps "
+              + Counted.Form(report.ReclaimablePackages, "it.", "them.")
             : string.Empty)
         + " It is offered again once the store changes, as it does when Windows installs an update.";
 
@@ -245,7 +245,7 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
         + $"the store's actual size as {FreeSpace.Format(report.ActualSize)}. Of that, "
         + $"{FreeSpace.Format(report.BackupsAndDisabledFeatures)} is superseded components and switched-off "
         + $"features, and {FreeSpace.Format(report.CacheAndTemporaryData)} is cache and temporary data. Windows "
-        + $"counts {report.ReclaimablePackages} superseded {(report.ReclaimablePackages == 1 ? "package" : "packages")} "
+        + $"counts {report.ReclaimablePackages:N0} superseded {Counted.Form(report.ReclaimablePackages, "package", "packages")} "
         + "it can remove"
         + (report.LastCleanup is { } last ? $", and last cleaned the store on {last}." : ".");
 }

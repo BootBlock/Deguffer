@@ -118,7 +118,7 @@ internal sealed class ExploreMarking(ExploreHighlight highlight)
         if (tile is not null && outlining.Drawing.Zoom?.Viewport is { } drawn)
         {
             highlight.ShowHovered(
-                [
+                (ExploreOutline[])[
                     .. under.Count > 0 && ReadingOf(tile.Picture.Tree) is { } inTile
                         ? tile.Outlines(inTile.InDrawing(under), drawn, outlining.Drawing.Width, outlining.Drawing.Height)
                         : [],
@@ -130,7 +130,7 @@ internal sealed class ExploreMarking(ExploreHighlight highlight)
         }
 
         highlight.ShowHovered(
-            [.. under.Count > 0 ? outlining.Drawing.Outlines(outlining.Reading.InDrawing(under)) : [], .. focusOutlines],
+            (ExploreOutline[])[.. under.Count > 0 ? outlining.Drawing.Outlines(outlining.Reading.InDrawing(under)) : [], .. focusOutlines],
             surface,
             canvas);
     }

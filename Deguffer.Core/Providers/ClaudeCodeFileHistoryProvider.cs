@@ -205,7 +205,7 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
-                $"Left the snapshots of {ClaudeCodeClassificationBuilder.Count(snapshots.Recent.Count, "session", "sessions")} "
+                $"Left the snapshots of {Counted.Of(snapshots.Recent.Count, "session", "sessions")} "
                 + $"alone that Claude Code wrote to in the last {ClaudeCodeSessionRegistry.RecentWindow.TotalDays:0} days. "
                 + "A session can run for days, so recent snapshots are not offered even when nothing lists their "
                 + "session as running."));
@@ -388,7 +388,7 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
         {
             sorting.Note(
                 PlanNoteSeverity.Information,
-                $"Left the snapshots of {ClaudeCodeClassificationBuilder.Count(running, "running Claude Code session", "running Claude Code sessions")} alone.");
+                $"Left the snapshots of {Counted.Of(running, "running Claude Code session", "running Claude Code sessions")} alone.");
         }
 
         return sorting.Build();

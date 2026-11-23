@@ -259,7 +259,7 @@ public sealed partial class ExploreGrowth : ObservableObject
             change.Kind == FolderChangeKind.Removed ? string.Empty : FreeSpace.Format(change.After),
             change.Node);
 
-        LiveList.Show(Rows, [.. growth.Listing().Select(Row)], row => row.Path);
+        LiveList.Show(Rows, (ExploreGrowthRow[])[.. growth.Listing().Select(Row)], row => row.Path);
     }
 
     private void ShowUsedSpace(IReadOnlyList<KeptSummary> kept)
@@ -268,7 +268,7 @@ public sealed partial class ExploreGrowth : ObservableObject
 
         LiveList.Rewrite(
             UsedSpace,
-            [
+            (UsedSpaceBar[])[
                 .. kept.Select(summary => new UsedSpaceBar(
                     capacity > 0 ? 100.0 * summary.UsedBytes / capacity : 0,
                     $"{Local(summary.TakenUtc)}: {FreeSpace.Format(summary.UsedBytes)} used of "

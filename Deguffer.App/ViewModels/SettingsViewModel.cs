@@ -75,7 +75,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         // Brought up to date rather than emptied and filled: releasing one item costs the list one
         // removal, and the reader's place in the rest of it is where they left it.
         LiveList.Show(
-            KeptItems, [.. InDisplayOrder(_keeps.Current)], kept => (kept.ProviderId, kept.Item.Key));
+            KeptItems, (KeptItem[])[.. InDisplayOrder(_keeps.Current)], kept => (kept.ProviderId, kept.Item.Key));
 
         OnPropertyChanged(nameof(HasNoKeptItems));
     }
@@ -159,7 +159,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         SaveFailed = !change();
 
-        LiveList.Show(SourceRoots, [.. _sourceRoots.Current], root => root.Path);
+        LiveList.Show(SourceRoots, (SourceRoot[])[.. _sourceRoots.Current], root => root.Path);
 
         OnPropertyChanged(nameof(HasNoSourceRoots));
     }
@@ -198,7 +198,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         SaveFailed = !change();
 
-        LiveList.Show(EmulatorFolders, [.. _emulatorFolders.Current], folder => folder);
+        LiveList.Show(EmulatorFolders, (string[])[.. _emulatorFolders.Current], folder => folder);
 
         OnPropertyChanged(nameof(HasNoEmulatorFolders));
     }

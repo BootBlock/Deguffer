@@ -33,7 +33,7 @@ public sealed partial class ProviderInfoView : UserControl
         Finding = finding;
         _showItems = showItems;
         History = history;
-        HistoryNewestFirst = [.. history.Reverse()];
+        HistoryNewestFirst = (ProviderSizeRow[])[.. history.Reverse()];
         InitializeComponent();
     }
 

@@ -56,23 +56,18 @@ public static class ForecastText
     public static string Within(TimeSpan fillsIn) => fillsIn.TotalDays switch
     {
         < 1 => "within a day",
-        < 14 => $"in about {Count(fillsIn.TotalDays, "day")}",
-        < 91 => $"in about {Count(fillsIn.TotalDays / 7, "week")}",
-        _ => $"in about {Count(fillsIn.TotalDays / (365.25 / 12), "month")}",
+        < 14 => $"in about {Counted.Of(Whole(fillsIn.TotalDays), "day", "days")}",
+        < 91 => $"in about {Counted.Of(Whole(fillsIn.TotalDays / 7), "week", "weeks")}",
+        _ => $"in about {Counted.Of(Whole(fillsIn.TotalDays / (365.25 / 12)), "month", "months")}",
     };
 
     /// <summary>A length of time as the horizon states it: weeks within three months, then months, then a year.</summary>
     private static string Span(TimeSpan span) => span.TotalDays switch
     {
-        < 91 => Count(span.TotalDays / 7, "week"),
-        < 365 => Count(span.TotalDays / (365.25 / 12), "month"),
+        < 91 => Counted.Of(Whole(span.TotalDays / 7), "week", "weeks"),
+        < 365 => Counted.Of(Whole(span.TotalDays / (365.25 / 12)), "month", "months"),
         _ => "a year",
     };
 
-    private static string Count(double value, string unit)
-    {
-        var whole = Math.Max(1, (int)Math.Round(value, MidpointRounding.AwayFromZero));
-
-        return whole == 1 ? $"1 {unit}" : $"{whole} {unit}s";
-    }
+    private static int Whole(double value) => Math.Max(1, (int)Math.Round(value, MidpointRounding.AwayFromZero));
 }

@@ -32,7 +32,7 @@ public static class VirtualDiskReport
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
-                $"{Count(present.Count)} {(present.Count == 1 ? "takes" : "take")} "
+                $"{Counted.Of(present.Count, "virtual disk", "virtual disks")} {Counted.Form(present.Count, "takes", "take")} "
                 + $"{FreeSpace.Format(present.Sum(entry => entry.Size.Taken))} on this drive. "
                 + VirtualDiskRoutes.InsideIsNotOnTheDrive));
         }
@@ -99,8 +99,6 @@ public static class VirtualDiskReport
             + $"{FreeSpace.Format(usage.Reclaimable)} is reclaimable ({rows}). Pruning frees it inside the disk, "
             + "and the drive gets it back only once the disk is compacted." + volumes);
     }
-
-    private static string Count(int disks) => disks == 1 ? "1 virtual disk" : $"{disks} virtual disks";
 
     private static string Capitalised(string text) => text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
 }

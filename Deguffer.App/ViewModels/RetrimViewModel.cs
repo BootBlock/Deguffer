@@ -133,7 +133,7 @@ public sealed partial class RetrimViewModel : ObservableObject
     {
         // BasisOf offers only a volume Windows names, so every candidate has its name.
         IReadOnlyList<RetrimTarget> targets =
-            [.. _offered.Select(candidate => new RetrimTarget(candidate.Volume.RootPath, candidate.Volume.VolumeName!))];
+            (RetrimTarget[])[.. _offered.Select(candidate => new RetrimTarget(candidate.Volume.RootPath, candidate.Volume.VolumeName!))];
 
         if (_isElevated)
         {

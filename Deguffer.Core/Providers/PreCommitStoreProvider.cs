@@ -236,8 +236,8 @@ public sealed partial class PreCommitStoreProvider : CleanupProviderBase
         if (Environment.FindExecutable("pre-commit") is not { } preCommit)
         {
             return UnexaminedPlan(
-                $"pre-commit's store at {store} holds {repositories.Count} hook "
-                + $"{(repositories.Count == 1 ? "repository" : "repositories")}, but no 'pre-commit' command is on "
+                $"pre-commit's store at {store} holds {repositories.Count:N0} hook "
+                + $"{Counted.Form(repositories.Count, "repository", "repositories")}, but no 'pre-commit' command is on "
                 + "the PATH, and only 'pre-commit gc' can tell which of them no project uses any more. "
                 + "Deguffer is leaving them alone.");
         }
@@ -256,7 +256,7 @@ public sealed partial class PreCommitStoreProvider : CleanupProviderBase
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
-                $"The store also holds {stashed} {(stashed == 1 ? "copy" : "copies")} of unstaged changes "
+                $"The store also holds {Counted.Of(stashed, "copy", "copies")} of unstaged changes "
                 + "pre-commit stashed during a commit. They are left alone, because one can be the only copy of that work."));
         }
 

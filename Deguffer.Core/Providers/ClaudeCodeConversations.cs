@@ -321,14 +321,14 @@ internal static class ClaudeCodeConversations
         {
             sorting.Note(
                 PlanNoteSeverity.Information,
-                $"Left {ClaudeCodeClassificationBuilder.Count(running, "running Claude Code session", "running Claude Code sessions")} alone.");
+                $"Left {Counted.Of(running, "running Claude Code session", "running Claude Code sessions")} alone.");
         }
 
         if (occupied > 0)
         {
             sorting.Note(
                 PlanNoteSeverity.Information,
-                $"Left {ClaudeCodeClassificationBuilder.Count(occupied, "conversation", "conversations")} alone from projects "
+                $"Left {Counted.Of(occupied, "conversation", "conversations")} alone from projects "
                 + "Claude Code is running in. A running session can resume any conversation in its project.");
         }
 

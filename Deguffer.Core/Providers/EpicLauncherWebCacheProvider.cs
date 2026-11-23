@@ -369,7 +369,7 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
-                $"{spared} other {(spared == 1 ? "item is" : "items are")} left alone beside the "
+                $"{Counted.Of(spared, "other item is", "other items are")} left alone beside the "
                 + "caches. Your sign-in and the store's saved data are in there, so only the "
                 + "recognised cache directories are removed."
                 + (emptiedAContainer

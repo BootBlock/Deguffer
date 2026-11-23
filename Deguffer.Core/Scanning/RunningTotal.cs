@@ -25,6 +25,7 @@ internal sealed class RunningTotal
     private readonly bool[] _counts;
     private readonly ScanSize[] _readings;
     private readonly Lock _gate = new();
+    private CountedSum _sum;
     private long _shown = -1;
 
     private RunningTotal(IReadOnlyList<ScanRequest> asked, IProgress<ScanSize> progress)
@@ -42,28 +43,39 @@ internal sealed class RunningTotal
         progress is null ? RunningPaths.None : new RunningPaths(new RunningTotal(asked, progress), null);
 
     /// <summary>
-    /// Put each reading <paramref name="readingOf"/> gives in the slot of the path at the same place in
-    /// <paramref name="indexes"/>, then report the sum once if it rose.
+    /// Put the reading <paramref name="readingOf"/> gives for each of the first <paramref name="count"/>
+    /// of <paramref name="indexes"/> in the slot of that path, then report the sum once if it rose.
     /// </summary>
-    internal void Report(IReadOnlyList<int>? indexes, int count, Func<int, ScanSize> readingOf)
+    /// <param name="places">
+    /// The slot of each path of the part reporting, or null where the part is the whole measurement.
+    /// </param>
+    /// <param name="indexes">
+    /// The paths among the part's that have a reading, or null where they are its first
+    /// <paramref name="count"/>.
+    /// </param>
+    /// <param name="readingOf">The reading of a path, given its index among the part's.</param>
+    internal void Report(int[]? places, IReadOnlyList<int>? indexes, int count, Func<int, ScanSize> readingOf)
     {
         // One at a time, so the sum is read whole and the caller's handler never runs beside itself.
         lock (_gate)
         {
             for (var i = 0; i < count; i++)
             {
-                _readings[indexes?[i] ?? i] = readingOf(i);
-            }
+                var index = indexes?[i] ?? i;
+                var slot = places?[index] ?? index;
+                var reading = readingOf(index);
 
-            var sum = ScanSize.Zero;
-
-            for (var i = 0; i < _readings.Length; i++)
-            {
-                if (_counts[i])
+                // Kept as it goes rather than added up again, so a measurement of N paths reported one
+                // at a time costs N steps rather than N squared.
+                if (_counts[slot])
                 {
-                    sum += _readings[i];
+                    _sum.Replace(_readings[slot], reading);
                 }
+
+                _readings[slot] = reading;
             }
+
+            var sum = _sum.Total;
 
             if (sum.Reclaimable > _shown)
             {
@@ -107,6 +119,35 @@ internal sealed class RunningTotal
 
         return counts;
     }
+
+    /// <summary>
+    /// The sum of the counted slots, as parts a reading can be taken back out of exactly.
+    ///
+    /// <para>Not a <see cref="ScanSize"/>, because its subtraction clamps at zero and cannot take a
+    /// flag back out: a total stays approximate once any part was, even after that part is replaced
+    /// by an exact reading. So each flag is a count of the slots that carry it.</para>
+    /// </summary>
+    private struct CountedSum
+    {
+        private long _allocated;
+        private long _logical;
+        private long _entries;
+        private int _approximate;
+        private int _ceilings;
+
+        public readonly ScanSize Total => new(_allocated, _logical, _approximate > 0, _entries, _ceilings > 0);
+
+        public void Replace(ScanSize old, ScanSize reading)
+        {
+            _allocated += reading.Allocated - old.Allocated;
+            _logical += reading.Logical - old.Logical;
+            _entries += reading.Entries - old.Entries;
+            _approximate += Flag(reading.IsApproximate) - Flag(old.IsApproximate);
+            _ceilings += Flag(reading.IsCeiling) - Flag(old.IsCeiling);
+        }
+
+        private static int Flag(bool set) => set ? 1 : 0;
+    }
 }
 
 /// <summary>
@@ -148,14 +189,25 @@ internal readonly struct RunningPaths
         return new RunningPaths(_total, places);
     }
 
-    /// <summary>The reading of the path at <paramref name="index"/> among these.</summary>
-    public void Report(int index, ScanSize reading) =>
-        _total?.Report([_places?[index] ?? index], 1, _ => reading);
+    /// <summary>
+    /// A final reading of each of the paths at <paramref name="indexes"/> among these, given its index
+    /// by <paramref name="readingOf"/>, and one report for all of them: the files a probe read whole,
+    /// or the paths one look at a table answered.
+    /// </summary>
+    public void Report(IReadOnlyList<int> indexes, Func<int, ScanSize> readingOf)
+    {
+        // No path answered is nothing to say. The first sum always goes on, so a report of none would
+        // send a zero ahead of every real figure.
+        if (indexes.Count > 0)
+        {
+            _total?.Report(_places, indexes, indexes.Count, readingOf);
+        }
+    }
 
     /// <summary>
     /// A reading of each of the first <paramref name="count"/> paths here, from one look at a walk, and
     /// one report for all of them.
     /// </summary>
     public void Report(int count, Func<int, ScanSize> readingOf) =>
-        _total?.Report(_places, count, readingOf);
+        _total?.Report(_places, null, count, readingOf);
 }

@@ -18,6 +18,14 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <Platforms>x86;x64;ARM64</Platforms>
     <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+
+    <!--
+      This assembly is never trimmed, published or compiled ahead of time, and the CsWinRT AOT
+      optimizer and its analyzer exist only for those. The 10.0.19041.87 projection pack reports a
+      collection expression aimed at a read-only interface (CsWinRT1032), which is how these tests
+      build their fixtures, so the optimizer is off here. The App keeps it on and complies.
+    -->
+    <CsWinRTAotOptimizerEnabled>false</CsWinRTAotOptimizerEnabled>
   </PropertyGroup>
 
   <ItemGroup>

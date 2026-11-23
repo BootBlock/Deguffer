@@ -150,7 +150,7 @@ public sealed class CapCutCacheProvider : CleanupProviderBase
     }
 
     private static string HeldReason(IReadOnlyList<string> running) =>
-        $"{string.Join(" and ", running)} {(running.Count == 1 ? "is" : "are")} running, and the editor reads "
+        $"{string.Join(" and ", running)} {Counted.Form(running.Count, "is", "are")} running, and the editor reads "
         + "these folders while a draft is open, so they are left alone. Close it, then scan again.";
 
     private IReadOnlyList<string> Running() => Inspector.FindRunning(ProcessNames);

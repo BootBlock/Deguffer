@@ -346,8 +346,8 @@ public abstract class MozillaProfileCacheProvider : CleanupProviderBase
             {
                 notes.Add(new PlanNote(
                     PlanNoteSeverity.Information,
-                    $"In the '{profile.Name}' profile, {spared} other "
-                    + $"{(spared == 1 ? "item is" : "items are")} left alone beside the caches."));
+                    $"In the '{profile.Name}' profile, "
+                    + $"{Counted.Of(spared, "other item is", "other items are")} left alone beside the caches."));
             }
         }
 
@@ -424,9 +424,9 @@ public abstract class MozillaProfileCacheProvider : CleanupProviderBase
     /// </summary>
     private string StoredElsewhere(IReadOnlyList<MozillaProfileElsewhere> profiles) =>
         $"The '{string.Join("' and '", profiles.Select(profile => profile.Name))}' "
-        + $"{(profiles.Count == 1 ? "profile is" : "profiles are")} "
+        + $"{Counted.Form(profiles.Count, "profile is", "profiles are")} "
         + $"kept outside {App}'s own folder. Deguffer did not examine "
-        + $"{(profiles.Count == 1 ? "it" : "them")}: a profile stored that way keeps its cache among "
+        + $"{Counted.Form(profiles.Count, "it", "them")}: a profile stored that way keeps its cache among "
         + $"your {_application.UserDataSummary} rather than separately from them.";
 
     private static PlanNote LinkNote(string path) => new(

@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using CommunityToolkit.Mvvm.Input;
 using Deguffer.Core.Choosing;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.Text;
 using Deguffer.Core.Viewing;
 
 namespace Deguffer.App.ViewModels;
@@ -72,7 +73,7 @@ public sealed partial class ItemGroupViewModel : ObservableCollection<StepViewMo
         LiveList.Show(this, items, step => step);
 
         var size = this.Aggregate(ScanSize.Zero, (total, step) => total + step.Step.Reclaim);
-        Summary = $"{(Count == 1 ? "1 item" : $"{Count} items")}, {FreeSpace.Format(size)}";
+        Summary = $"{Counted.Of(Count, "item", "items")}, {FreeSpace.Format(size)}";
 
         Refresh();
     }

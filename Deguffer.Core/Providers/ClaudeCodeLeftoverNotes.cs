@@ -39,7 +39,7 @@ internal static class ClaudeCodeLeftoverNotes
         {
             yield return new PlanNote(
                 PlanNoteSeverity.Information,
-                $"Left {ClaudeCodeClassificationBuilder.Count(recent, "leftover", "leftovers")} alone that Claude Code "
+                $"Left {Counted.Of(recent, "leftover", "leftovers")} alone that Claude Code "
                 + $"wrote in the last {ClaudeCodeSessionRegistry.RecentWindow.TotalDays:0} days. A session can run for days, so recent "
                 + "leftovers are not offered even when nothing lists their session as running.");
         }

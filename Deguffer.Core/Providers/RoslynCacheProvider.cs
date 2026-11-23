@@ -246,8 +246,7 @@ public sealed class RoslynCacheProvider : CleanupProviderBase
     }
 
     private static string Describe(RoslynHostDirectory set) =>
-        $"The indexes {set.Program} kept for {set.Solutions} "
-        + (set.Solutions == 1 ? "solution" : "solutions")
+        $"The indexes {set.Program} kept for {Counted.Of(set.Solutions, "solution", "solutions")}"
         + ". Roslyn rebuilds a solution's index from its source the next time the solution is opened.";
 
     /// <summary>

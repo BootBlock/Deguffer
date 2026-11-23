@@ -124,7 +124,7 @@ internal static class ClaudeCodeConversationOffers
 
     private static PlanNote UnplacedNote(int unplaced) => new(
         PlanNoteSeverity.Information,
-        $"Left {ClaudeCodeClassificationBuilder.Count(unplaced, "conversation", "conversations")} alone that Deguffer "
+        $"Left {Counted.Of(unplaced, "conversation", "conversations")} alone that Deguffer "
         + "could not read well enough to say which project each belongs to. A newer version of Claude Code "
         + "may write them differently.");
 

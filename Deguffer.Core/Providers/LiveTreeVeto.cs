@@ -207,9 +207,10 @@ internal static class LiveTreeVeto
         // one of something.
         return new PlanNote(
             PlanNoteSeverity.Warning,
-            $"Left {string.Join(", ", held)} alone. " + (vetoed.Count == 1
-                ? "Close what is using it and scan again to include it."
-                : "Close what is using each one and scan again to include them."));
+            $"Left {string.Join(", ", held)} alone. " + Counted.Form(
+                vetoed.Count,
+                "Close what is using it and scan again to include it.",
+                "Close what is using each one and scan again to include them."));
     }
 
     /// <summary>
@@ -244,9 +245,10 @@ internal static class LiveTreeVeto
         ? null
         : new PlanNote(
             PlanNoteSeverity.Warning,
-            count == 1
-                ? "Deguffer could not check whether anything is using one of these, so it left it alone. "
-                  + "Scan again to include it."
-                : $"Deguffer could not check whether anything is using {count} of these, so it left them "
-                  + "alone. Scan again to include them.");
+            Counted.Form(
+                count,
+                "Deguffer could not check whether anything is using one of these, so it left it alone. "
+                + "Scan again to include it.",
+                $"Deguffer could not check whether anything is using {count:N0} of these, so it left them "
+                + "alone. Scan again to include them."));
 }

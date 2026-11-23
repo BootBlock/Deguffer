@@ -158,14 +158,14 @@ internal static class ClaudeCodeSessionFolders
         {
             sorting.Note(
                 PlanNoteSeverity.Information,
-                $"Left the spilled output of {ClaudeCodeClassificationBuilder.Count(running, "running Claude Code session", "running Claude Code sessions")} alone.");
+                $"Left the spilled output of {Counted.Of(running, "running Claude Code session", "running Claude Code sessions")} alone.");
         }
 
         if (conversations > 0)
         {
             sorting.Note(
                 PlanNoteSeverity.Information,
-                $"Left {ClaudeCodeClassificationBuilder.Count(conversations, "session folder", "session folders")} "
+                $"Left {Counted.Of(conversations, "session folder", "session folders")} "
                 + "alone although the conversation is gone. Each holds more than spilled tool output, such as "
                 + "a subagent's conversation, and that is not a leftover for Deguffer to remove.");
         }
@@ -233,7 +233,7 @@ internal static class ClaudeCodeSessionFolders
         {
             sorting.Note(
                 PlanNoteSeverity.Information,
-                $"Left the environment folders of {ClaudeCodeClassificationBuilder.Count(running, "running Claude Code session", "running Claude Code sessions")} alone.");
+                $"Left the environment folders of {Counted.Of(running, "running Claude Code session", "running Claude Code sessions")} alone.");
         }
 
         return sorting.Build();

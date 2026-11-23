@@ -176,7 +176,7 @@ public sealed class ClaudeCodeMcpLogProvider : CleanupProviderBase
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
-                $"{survey.Spared} other {(survey.Spared == 1 ? "item is" : "items are")} left alone beside the "
+                $"{Counted.Of(survey.Spared, "other item is", "other items are")} left alone beside the "
                 + "server logs."));
         }
 

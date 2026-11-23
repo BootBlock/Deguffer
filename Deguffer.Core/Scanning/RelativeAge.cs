@@ -19,12 +19,12 @@ public static class RelativeAge
         0 => "Today",
         1 => "Yesterday",
         { } days when days < 7 => $"{days} days ago",
-        { } days when days < 31 => Plural(days / 7, "week"),
+        { } days when days < 31 => $"{Counted.Of(days / 7, "week", "weeks")} ago",
         // 30, not the 30.44-day average: this is a label a reader scans, not an interval to
         // compute with, and §7's own example — 150 days as "5 months ago" — is the rounding a
         // reader expects. Dividing by 31 would report that same file as four months old.
-        { } days when days < 365 => Plural(days / 30, "month"),
-        { } days => Plural(days / 365, "year"),
+        { } days when days < 365 => $"{Counted.Of(days / 30, "month", "months")} ago",
+        { } days => $"{Counted.Of(days / 365, "year", "years")} ago",
     };
 
     /// <summary>
@@ -45,7 +45,4 @@ public static class RelativeAge
         // only reading that is both honest and safe.
         return Math.Max(0, (int)(now.ToUniversalTime() - timestamp.ToUniversalTime()).TotalDays);
     }
-
-    private static string Plural(int count, string unit) =>
-        count == 1 ? $"1 {unit} ago" : $"{count} {unit}s ago";
 }

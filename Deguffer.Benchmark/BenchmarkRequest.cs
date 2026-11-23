@@ -21,8 +21,10 @@ namespace Deguffer.Benchmark;
 /// <param name="Walk">The values the routes that walk run with. The table routes take none of them.</param>
 /// <param name="Table">The values the table routes run with. The routes that walk take none of them.</param>
 /// <param name="Snapshots">
-/// Whether the Explore walk assembles the pictures of the tree so far that Explore draws while it
-/// walks. Timed both ways, the difference is what they cost the walk. No other route takes any.
+/// Whether an Explore route assembles the pictures of the tree so far that Explore draws while it
+/// scans. Timed both ways, the difference is what they cost the walk or the read. On by default for
+/// the Explore walk, as Explore walks, and off for the table's, so a read's figures compare with any
+/// other run that takes none. No other route takes any.
 /// </param>
 /// <param name="ReadBy">How the links route reads each file. No other route reads any.</param>
 /// <param name="Folders">
@@ -165,7 +167,7 @@ internal sealed record BenchmarkRequest(
         var readsInFlight = UnknownDrive.ReadsInFlight;
         var parseThreads = UnknownDrive.ParseThreads;
         var listReadsInFlight = UnknownDrive.ListReadsInFlight;
-        var snapshots = true;
+        var snapshots = route is Route.ExploreWalk;
         var readBy = LinkRead.Name;
         var files = DefaultTree.Files;
         var depth = DefaultTree.Depth;
@@ -229,7 +231,7 @@ internal sealed record BenchmarkRequest(
                     value, TableTuning.MinimumParseThreads, TableTuning.MaximumParseThreads, out parseThreads),
                 "--list-reads-in-flight" when route.TakesTableTuning() => TryNumber(
                     value, TableTuning.MinimumListReadsInFlight, TableTuning.MaximumListReadsInFlight, out listReadsInFlight),
-                "--snapshots" when route is Route.ExploreWalk => TryOnOff(value, out snapshots),
+                "--snapshots" when route.TakesSnapshots() => TryOnOff(value, out snapshots),
                 "--read-by" when route is Route.Links => TryReadBy(value, out readBy),
                 "--files" when route is Route.Remove => TryNumber(value, 0, TreeShape.MaximumFiles, out files),
                 "--depth" when route is Route.Remove => TryNumber(value, 0, TreeShape.MaximumDepth, out depth),
@@ -259,7 +261,7 @@ internal sealed record BenchmarkRequest(
                     $"{TableTuning.MaximumReadsInFlight}, --parse-threads from " +
                     $"{TableTuning.MinimumParseThreads} to {TableTuning.MaximumParseThreads} and --list-reads-in-flight from " +
                     $"{TableTuning.MinimumListReadsInFlight} to {TableTuning.MaximumListReadsInFlight}. " +
-                    "For the Explore walk, --snapshots takes on or off. For links, --read-by takes name or handle. " +
+                    "For explore, explorefolder and explorewalk, --snapshots takes on or off. For links, --read-by takes name or handle. " +
                     $"For remove, --files takes a number from 0 to {TreeShape.MaximumFiles}, --depth from 0 to " +
                     $"{TreeShape.MaximumDepth} and --fanout from 1 to {TreeShape.MaximumFanout}, and --read-only takes nothing. " +
                     $"For clean, --trees takes a number from 1 to {MaximumTrees} and --files-per-tree from 0 to {MaximumFilesPerTree}. " +

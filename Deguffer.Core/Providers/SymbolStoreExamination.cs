@@ -96,7 +96,7 @@ internal sealed class SymbolStoreExamination
     public bool Unreadable { get; private set; }
 
     public static string HeldReason(IReadOnlyList<string> running) =>
-        $"{string.Join(", ", running)} {(running.Count == 1 ? "is" : "are")} running and may be downloading into this "
+        $"{string.Join(", ", running)} {Counted.Form(running.Count, "is", "are")} running and may be downloading into this "
         + "store, so it is left alone. Close the debugger, then scan again.";
 
     /// <param name="stores">The row's own stores.</param>
