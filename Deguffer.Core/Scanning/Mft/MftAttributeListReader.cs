@@ -99,42 +99,33 @@ internal sealed class MftAttributeListReader
         Func<MftDeferredRecord, IReadOnlyList<MftAttributeListEntry>?, bool> onList,
         CancellationToken ct)
     {
-        var lists = new List<(MftDeferredRecord Record, IReadOnlyList<DataRun> Runs, int Length)>();
-
-        foreach (var record in InReadOrder(deferred))
-        {
-            var (runs, length) = record.PendingList!.Value;
-            lists.Add((record, runs, length));
-        }
-
-        new MftAttributeListReader(source, lists, buffers).HandOn(onList, ct);
+        new MftAttributeListReader(source, InReadOrder(deferred), buffers).HandOn(onList, ct);
     }
 
     /// <summary>
-    /// The records of <paramref name="deferred"/> whose lists are still pending, in the order
+    /// The records of <paramref name="deferred"/> whose lists are still pending, with where each list
+    /// is, in the order
     /// <see cref="Read(IMftSource, IReadOnlyList{MftDeferredRecord}, int, Func{MftDeferredRecord, IReadOnlyList{MftAttributeListEntry}?, bool}, CancellationToken)"/>
     /// hands them on: by the first cluster of each list.
     /// </summary>
-    public static List<MftDeferredRecord> InReadOrder(IReadOnlyList<MftDeferredRecord> deferred)
+    public static List<(MftDeferredRecord Record, IReadOnlyList<DataRun> Runs, int Length)> InReadOrder(
+        IReadOnlyList<MftDeferredRecord> deferred)
     {
-        var pending = new List<MftDeferredRecord>();
+        var pending = new List<(MftDeferredRecord Record, IReadOnlyList<DataRun> Runs, int Length)>();
 
         foreach (var record in deferred)
         {
-            if (record.PendingList is not null)
+            if (record.PendingList is { } list)
             {
-                pending.Add(record);
+                pending.Add((record, list.Runs, list.Length));
             }
         }
 
         // A list with no runs is never pending, so every one has a first cluster. Ties are damage,
         // and broken by record so the order is the same on every run.
-        pending.Sort(static (a, b) =>
-        {
-            var (aStart, bStart) = (a.PendingList!.Value.Runs[0].StartCluster, b.PendingList!.Value.Runs[0].StartCluster);
-
-            return aStart != bStart ? aStart.CompareTo(bStart) : a.Self.Record.CompareTo(b.Self.Record);
-        });
+        pending.Sort(static (a, b) => a.Runs[0].StartCluster != b.Runs[0].StartCluster
+            ? a.Runs[0].StartCluster.CompareTo(b.Runs[0].StartCluster)
+            : a.Record.Self.Record.CompareTo(b.Record.Self.Record));
 
         return pending;
     }

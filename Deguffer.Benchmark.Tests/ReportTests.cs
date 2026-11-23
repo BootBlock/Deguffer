@@ -195,7 +195,7 @@ public sealed class ReportTests
     /// </summary>
     [Theory]
     [InlineData(AttributeListReads.AfterFirstPass, "after the first pass")]
-    [InlineData(AttributeListReads.BesideFirstPass, "beside the first pass")]
+    [InlineData(AttributeListReads.BesideFirstPass, "beside the first pass in batches of 4096")]
     public void ATableRoutesValuesAreTheOnesItRanWith(AttributeListReads listReads, string when) =>
         Assert.Equal(
             $"2048 KiB reads, 8 in flight, parsed on 3 threads, 24 list reads in flight {when}",

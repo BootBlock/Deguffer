@@ -101,7 +101,7 @@ internal static class MftRecordStream
         // Declared before the pass, so it is disposed after it: a pass that throws, or is
         // abandoned, still leaves no list read in flight.
         using var lists = tuning.ListReads is AttributeListReads.BesideFirstPass
-            ? new MftListReadAhead(source, tuning.ListReadsInFlight, most: count, ct)
+            ? new MftListReadAhead(source, tuning.ListReadsInFlight, tuning.ListBatch, most: count, ct)
             : null;
         using var pass = new MftReadPass(source, count, tuning, bitmap, new MftRecordHandOff(count, bitmap, onRecord, lists), onProgress, ct);
         var first = pass.Run();
@@ -112,9 +112,9 @@ internal static class MftRecordStream
             return false;
         }
 
-        var listsLanded = lists?.Finish() ?? false;
-        var listsResolved = MftExtensionReader.TryResolve(
-            source, first, count - first.Wanted, tuning.ListReadsInFlight, listsLanded, pass.SpareBuffer, ct);
+        var listsResolved = lists?.Finish() is true
+            ? MftExtensionReader.TryResolveLanded(source, first, count - first.Wanted, pass.SpareBuffer, ct)
+            : MftExtensionReader.TryResolve(source, first, count - first.Wanted, tuning.ListReadsInFlight, pass.SpareBuffer, ct);
         var wholeTable = first.WholeTable & listsResolved;
         timings?.End(MftBuildStage.ExtensionLists);
 

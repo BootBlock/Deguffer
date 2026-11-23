@@ -329,7 +329,7 @@ public sealed class ScanTuningTests
         Assert.Contains($"{4096:N0} KiB table reads", line, StringComparison.Ordinal);
         Assert.DoesNotContain("table reads (Auto)", line, StringComparison.Ordinal);
         Assert.Contains($", {auto.Table.ReadsInFlight} in flight (Auto)", line, StringComparison.Ordinal);
-        Assert.Contains(", 12 list reads in flight,", line, StringComparison.Ordinal);
+        Assert.Contains(", 12 list reads in flight, lists read with the table (Auto),", line, StringComparison.Ordinal);
         Assert.EndsWith("parsed on 3 threads", line, StringComparison.Ordinal);
     }
 

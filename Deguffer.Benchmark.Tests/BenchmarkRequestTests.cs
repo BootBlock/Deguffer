@@ -279,6 +279,10 @@ public sealed class BenchmarkRequestTests
     public void WhenTheListsAreReadCanBeChosen(string value, AttributeListReads listReads) =>
         Assert.Equal(listReads, BenchmarkRequest.Parse(["table", "C", "--list-reads", value], out _)!.Table.ListReads);
 
+    [Fact]
+    public void TheBatchOfListsReadBesideThePassCanBeChosen() =>
+        Assert.Equal(512, BenchmarkRequest.Parse(["table", "C", "--list-reads", "beside", "--list-batch", "512"], out _)!.Table.ListBatch);
+
     /// <summary>A table route not told otherwise reads as a scan of a drive of unknown kind does.</summary>
     [Fact]
     public void ATableRouteNotToldOtherwiseRunsAsAScanOfAnUnknownDriveDoes() =>
@@ -294,6 +298,8 @@ public sealed class BenchmarkRequestTests
     [InlineData("--list-reads-in-flight")]
     [InlineData("--list-reads", "during")]
     [InlineData("--list-reads")]
+    [InlineData("--list-batch", "0")]
+    [InlineData("--list-batch", "1048577")]
     [InlineData("--parse-threads", "0")]
     [InlineData("--parse-threads", "65")]
     [InlineData("--parse-threads")]

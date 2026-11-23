@@ -54,6 +54,17 @@ public sealed record TableTuning
     /// <summary>The deepest queue a SATA drive takes, as for <see cref="MaximumReadsInFlight"/>.</summary>
     public const int MaximumListReadsInFlight = 32;
 
+    public const int MinimumListBatch = 1;
+
+    /// <summary>More lists than a system volume of a few million records holds outside its table.</summary>
+    public const int MaximumListBatch = 1024 * 1024;
+
+    /// <summary>
+    /// What a batch beside the first pass holds: the fastest measured on NVMe, against a batch as
+    /// large as the reads in flight (see <see cref="AutoTuning.TableListReads"/>).
+    /// </summary>
+    public const int DefaultListBatch = 4096;
+
     /// <summary>As many as the walk may run, <see cref="WalkTuning.MaximumThreads"/>.</summary>
     public const int MaximumParseThreads = 64;
 
@@ -71,7 +82,8 @@ public sealed record TableTuning
         int readsInFlight,
         int parseThreads,
         int listReadsInFlight,
-        AttributeListReads listReads = AttributeListReads.AfterFirstPass)
+        AttributeListReads listReads = AttributeListReads.AfterFirstPass,
+        int listBatch = DefaultListBatch)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(readBytes, MinimumReadBytes);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(readBytes, MaximumReadBytes);
@@ -87,11 +99,15 @@ public sealed record TableTuning
             throw new ArgumentOutOfRangeException(nameof(listReads), listReads, "Not a time the lists can be read at.");
         }
 
+        ArgumentOutOfRangeException.ThrowIfLessThan(listBatch, MinimumListBatch);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(listBatch, MaximumListBatch);
+
         ReadBytes = readBytes;
         ReadsInFlight = readsInFlight;
         ParseThreads = parseThreads;
         ListReadsInFlight = listReadsInFlight;
         ListReads = listReads;
+        ListBatch = listBatch;
     }
 
     /// <summary>How many bytes of records each read asks for, at most, before it is cut to whole records and sectors.</summary>
@@ -117,6 +133,15 @@ public sealed record TableTuning
     /// reads. Only how soon they are read: never which are read, nor what is made of them.
     /// </summary>
     public AttributeListReads ListReads { get; }
+
+    /// <summary>
+    /// How many lists a batch read beside the first pass waits for before it is read, where
+    /// <see cref="ListReads"/> is <see cref="AttributeListReads.BesideFirstPass"/>; the last batch is
+    /// whatever is left once the pass ends. A small batch is read soon after its lists are parsed, but
+    /// lists close together on the disk land in different batches and are read apart, and its reads
+    /// come in short bursts that the table's reads wait behind.
+    /// </summary>
+    public int ListBatch { get; }
 
     /// <summary>How many records of <paramref name="bytesPerRecord"/> one read asks for.</summary>
     public int RecordsPerRead(int bytesPerRecord) => Math.Max(1, ReadBytes / bytesPerRecord);

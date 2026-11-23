@@ -149,7 +149,29 @@ internal static class AutoTuning
     /// <summary>
     /// Beside the first pass on NVMe, and after it, the conservative value, everywhere else.
     ///
-    /// <para>MEASUREMENTS</para>
+    /// <para>Timed elevated with 16 MiB reads, eight in flight, four parse threads and 32 list reads
+    /// in flight, five runs a measurement, rounds alternating which came first, on a machine busy
+    /// with other work, so single rounds swing by a second. The medians of the later runs, after the
+    /// pass against beside it in batches of 4,096 lists, three rounds: the NVMe system volume, 1.79 M
+    /// records in use and 77,238 held back, took 3.72 against 4.89 s, 5.30 against 3.68 s and 3.83
+    /// against 3.98 s on the <c>table</c> route, and 4.06 against 3.78 s, 4.35 against 4.52 s and 5.15
+    /// against 3.78 s on the <c>index</c> route. A second volume on that disk took 1.85 against
+    /// 1.58 s, 2.12 against 1.75 s and 1.71 against 1.51 s on <c>table</c>, and 1.96 against 1.74 s,
+    /// 1.88 against 2.32 s and 1.72 against 1.59 s on <c>index</c>. Eight of the twelve were faster
+    /// beside the pass, by a median of about 0.2 s. The stage after the pass fell from 0.37 to 0.75 s
+    /// to 0.09 to 0.35 s, and the pass itself grew in ten of the twelve, by a median of 0.12 s, because
+    /// the lists' reads share the disk with it, and lists close together on the disk are read apart when they
+    /// fall in different batches: 15,400 reads of clusters against 13,889, and 11,200 against
+    /// 8,170.</para>
+    ///
+    /// <para>A batch as large as the reads in flight, 32 lists, timed in the same rounds as a batch of
+    /// 4,096, made the system volume's pass 0.2 to 1.7 s slower in three runs of four and the scan
+    /// 1.2 to 1.8 s slower in three, for the same stage after it. On the second volume the two were
+    /// within 0.25 s of each other. Eight list reads in flight beside the pass could not keep up with
+    /// it, and left 0.45 to 1.16 s of lists for after it. The other NVMe volume holds no list outside
+    /// its table, so its runs favour neither. A SATA SSD volume, 1,131 reads of clusters, was slower
+    /// beside the pass in three runs of four, by up to 56 %, so other solid state keeps the lists
+    /// until the pass has ended.</para>
     ///
     /// <para>No spinning disk was available. There every list read beside the pass is a seek away
     /// from where the table is being read, and the drive serves the table's reads in order only while

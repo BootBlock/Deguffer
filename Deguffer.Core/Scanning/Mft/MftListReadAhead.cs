@@ -10,8 +10,8 @@ namespace Deguffer.Core.Scanning.Mft;
 /// <para><b>A list's place is known once its record is parsed</b> (<see cref="MftDeferredRecord.PendingList"/>),
 /// so the pass hands each such record over as it holds it back. They are read in batches, each in
 /// the order of its clusters and planned by <see cref="MftListReadPlanner"/> through
-/// <see cref="MftAttributeListReader"/>. A batch is at least <see cref="TableTuning.ListReadsInFlight"/>
-/// lists, so a batch fills the reads it may have in flight, or whatever is left once the pass ends.</para>
+/// <see cref="MftAttributeListReader"/>. A batch is at least <see cref="TableTuning.ListBatch"/>
+/// lists, or whatever is left once the pass ends.</para>
 ///
 /// <para><b>Nothing is followed here.</b> Each list is only landed (<see cref="MftDeferredRecord.Land"/>):
 /// what it wants is worked out and kept. What the table's budget allows depends on what the whole
@@ -34,7 +34,7 @@ namespace Deguffer.Core.Scanning.Mft;
 internal sealed class MftListReadAhead : IDisposable
 {
     private readonly IMftSource _source;
-    private readonly int _readsInFlight;
+    private readonly int _batch;
     private readonly VolumeReadBuffer?[] _buffers;
     private readonly long _most;
     private readonly CancellationTokenSource _cancel;
@@ -49,11 +49,13 @@ internal sealed class MftListReadAhead : IDisposable
     // Only ever set, and only by the reading thread. Read by the parse threads to stop handing over.
     private bool _stopped;
 
+    /// <param name="readsInFlight">How many reads of lists are outstanding at once, at most.</param>
+    /// <param name="batch">How many lists a batch waits for, as <see cref="TableTuning.ListBatch"/>.</param>
     /// <param name="most">How many extension records the table holds, which the lists landed here can never want more of.</param>
-    public MftListReadAhead(IMftSource source, int readsInFlight, long most, CancellationToken ct)
+    public MftListReadAhead(IMftSource source, int readsInFlight, int batch, long most, CancellationToken ct)
     {
         _source = source;
-        _readsInFlight = readsInFlight;
+        _batch = batch;
         _buffers = new VolumeReadBuffer?[readsInFlight];
         _most = most;
         _cancel = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -77,7 +79,7 @@ internal sealed class MftListReadAhead : IDisposable
         {
             _waiting.Add(record);
 
-            if (_waiting.Count >= _readsInFlight)
+            if (_waiting.Count >= _batch)
             {
                 _ready.Set();
             }

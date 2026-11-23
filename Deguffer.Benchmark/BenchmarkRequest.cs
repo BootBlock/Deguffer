@@ -1,4 +1,3 @@
-using System.Globalization;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Duplicates;
 using Deguffer.Core.Scanning;
@@ -167,6 +166,7 @@ internal sealed record BenchmarkRequest(
         var parseThreads = UnknownDrive.ParseThreads;
         var listReadsInFlight = UnknownDrive.ListReadsInFlight;
         var listReads = UnknownDrive.ListReads;
+        var listBatch = UnknownDrive.ListBatch;
         var snapshots = true;
         var readBy = LinkRead.Name;
         var files = DefaultTree.Files;
@@ -232,6 +232,8 @@ internal sealed record BenchmarkRequest(
                 "--list-reads-in-flight" when route.TakesTableTuning() => TryNumber(
                     value, TableTuning.MinimumListReadsInFlight, TableTuning.MaximumListReadsInFlight, out listReadsInFlight),
                 "--list-reads" when route.TakesTableTuning() => TryListReads(value, out listReads),
+                "--list-batch" when route.TakesTableTuning() =>
+                    TryNumber(value, TableTuning.MinimumListBatch, TableTuning.MaximumListBatch, out listBatch),
                 "--snapshots" when route is Route.ExploreWalk => TryOnOff(value, out snapshots),
                 "--read-by" when route is Route.Links => TryReadBy(value, out readBy),
                 "--files" when route is Route.Remove => TryNumber(value, 0, TreeShape.MaximumFiles, out files),
@@ -261,7 +263,8 @@ internal sealed record BenchmarkRequest(
                     $"--reads-in-flight a number from {TableTuning.MinimumReadsInFlight} to " +
                     $"{TableTuning.MaximumReadsInFlight}, --parse-threads from " +
                     $"{TableTuning.MinimumParseThreads} to {TableTuning.MaximumParseThreads} and --list-reads-in-flight from " +
-                    $"{TableTuning.MinimumListReadsInFlight} to {TableTuning.MaximumListReadsInFlight}, and --list-reads takes after or beside. " +
+                    $"{TableTuning.MinimumListReadsInFlight} to {TableTuning.MaximumListReadsInFlight}, --list-reads takes after or beside, and --list-batch a number from " +
+                    $"{TableTuning.MinimumListBatch} to {TableTuning.MaximumListBatch}. " +
                     "For the Explore walk, --snapshots takes on or off. For links, --read-by takes name or handle. " +
                     $"For remove, --files takes a number from 0 to {TreeShape.MaximumFiles}, --depth from 0 to " +
                     $"{TreeShape.MaximumDepth} and --fanout from 1 to {TreeShape.MaximumFanout}, and --read-only takes nothing. " +
@@ -318,7 +321,7 @@ internal sealed record BenchmarkRequest(
             path,
             runs,
             new WalkTuning(threads, bufferKiB * 1024),
-            new TableTuning(readKiB * 1024, readsInFlight, parseThreads, listReadsInFlight, listReads),
+            new TableTuning(readKiB * 1024, readsInFlight, parseThreads, listReadsInFlight, listReads, listBatch),
             snapshots,
             readBy,
             [.. folders.Select(folder => folder!)],

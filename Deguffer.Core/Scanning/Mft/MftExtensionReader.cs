@@ -32,11 +32,6 @@ internal static class MftExtensionReader
     /// first pass's own.
     /// </param>
     /// <param name="readsInFlight">How many reads of the lists kept outside the table are outstanding at once, at most.</param>
-    /// <param name="listsLanded">
-    /// Whether every list kept outside the table was already read beside the first pass and landed
-    /// (<see cref="MftListReadAhead"/>), so none is read here. Each is followed all the same, in the
-    /// order a read here would hand it on, so the budget is spent alike either way.
-    /// </param>
     /// <param name="batch">
     /// A buffer of whole records to read a record the first pass never reached into, lent by the
     /// caller so the second pass reuses the first pass's pooled buffer rather than renting another.
@@ -46,14 +41,39 @@ internal static class MftExtensionReader
         MftFirstPass first,
         long budget,
         int readsInFlight,
-        bool listsLanded,
         Span<byte> batch,
         CancellationToken ct)
     {
-        // The first pass's own wants may already have spent it, and then no list is followed at all.
-        if (budget >= 0 && listsLanded)
+        // The first pass's own wants may already have spent it, and then no list is read at all.
+        if (budget >= 0)
         {
-            foreach (var record in MftAttributeListReader.InReadOrder(first.Deferred))
+            MftAttributeListReader.Read(source, first.Deferred, readsInFlight, (record, entries) =>
+            {
+                record.Follow(entries);
+                budget -= record.Segments.Count;
+                return budget >= 0;
+            }, ct);
+        }
+
+        return Complete(source, first, budget, batch, ct);
+    }
+
+    /// <summary>
+    /// <see cref="TryResolve"/> where every list kept outside the table was already read beside the
+    /// first pass and landed (<see cref="MftListReadAhead"/>), so none is read here. Each is followed
+    /// all the same, in the order <see cref="TryResolve"/> would hand it on, so the budget is spent
+    /// alike either way and the same records are lost.
+    /// </summary>
+    public static bool TryResolveLanded(
+        IMftSource source,
+        MftFirstPass first,
+        long budget,
+        Span<byte> batch,
+        CancellationToken ct)
+    {
+        if (budget >= 0)
+        {
+            foreach (var (record, _, _) in MftAttributeListReader.InReadOrder(first.Deferred))
             {
                 record.FollowLanded();
                 budget -= record.Segments.Count;
@@ -64,16 +84,16 @@ internal static class MftExtensionReader
                 }
             }
         }
-        else if (budget >= 0)
-        {
-            MftAttributeListReader.Read(source, first.Deferred, readsInFlight, (record, entries) =>
-            {
-                record.Follow(entries);
-                budget -= record.Segments.Count;
-                return budget >= 0;
-            }, ct);
-        }
 
+        return Complete(source, first, budget, batch, ct);
+    }
+
+    /// <summary>
+    /// Everything after the lists: lose whole every record whose list the budget did not reach, fold
+    /// in what the first pass kept, and read the wanted records it never reached.
+    /// </summary>
+    private static bool Complete(IMftSource source, MftFirstPass first, long budget, Span<byte> batch, CancellationToken ct)
+    {
         if (budget < 0)
         {
             foreach (var record in first.Deferred)

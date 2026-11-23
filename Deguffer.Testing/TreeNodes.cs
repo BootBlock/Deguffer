@@ -3,8 +3,8 @@ using Deguffer.Core.Exploring;
 namespace Deguffer.Testing;
 
 /// <summary>
-/// The nodes of a tree a test built: one by path, for a test that knows the path is there, or every
-/// node reachable from the root.
+/// The nodes of a tree a test built: one by path, for a test that knows the path is there, every node
+/// reachable from the root, or what the tree draws, for comparing two trees.
 /// </summary>
 public static class TreeNodes
 {
@@ -34,4 +34,8 @@ public static class TreeNodes
 
         return reached;
     }
+
+    /// <summary>Every reachable node's path, size and length, in path order: equal for two trees that draw alike.</summary>
+    public static string[] Drawn(ExploreTree tree) =>
+        [.. Reachable(tree).Select(node => $"{tree.PathOf(node)}|{tree.SizeOf(node)}|{tree.LengthOf(node)}").Order(StringComparer.Ordinal)];
 }

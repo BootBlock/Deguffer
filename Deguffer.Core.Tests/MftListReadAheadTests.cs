@@ -30,9 +30,31 @@ public sealed class MftListReadAheadTests
             .Build();
         using var source = new HeldTableReads(table, heldFrom: 40);
 
-        var handed = ReadAll(source, new TableTuning(TableTuning.MinimumReadBytes, 1, 1, 1, AttributeListReads.BesideFirstPass), out var wholeTable);
+        var handed = ReadAll(source, new TableTuning(TableTuning.MinimumReadBytes, 1, 1, 1, AttributeListReads.BesideFirstPass, listBatch: 1), out var wholeTable);
 
         Assert.True(source.ListReadBeforeTheTableEnded, "a list read started while the rest of the table waited for one");
+        Assert.True(wholeTable);
+        Assert.Equal(1000, handed[20].Record.Size?.Logical);
+    }
+
+    /// <summary>
+    /// A batch waits for <see cref="TableTuning.ListBatch"/> lists, so one list alone in a batch of two
+    /// is not read while the table is, only once the pass has ended, and it is still read and followed.
+    /// </summary>
+    [Fact]
+    public void WaitsForAWholeBatchBeforeReadingBesideThePass()
+    {
+        using var table = new MftFixture()
+            .AddFileWithANonResidentAttributeList(20, MftRecord.RootRecordNumber, "a.tgz", allocated: 4096, logical: 1000, extension: 30, listCluster: 700)
+            .AddFile(200, MftRecord.RootRecordNumber, "last.txt", allocated: 4096, logical: 10)
+            .WithoutBitmap()
+            .Build();
+        using var source = new HeldTableReads(table, heldFrom: 40, heldSeconds: 1);
+
+        var handed = ReadAll(source, new TableTuning(TableTuning.MinimumReadBytes, 1, 1, 1, AttributeListReads.BesideFirstPass, listBatch: 2), out var wholeTable);
+
+        Assert.False(source.ListReadBeforeTheTableEnded, "the list waited for a second to fill its batch");
+        Assert.Equal(1, source.ClusterReads);
         Assert.True(wholeTable);
         Assert.Equal(1000, handed[20].Record.Size?.Logical);
     }
@@ -61,9 +83,9 @@ public sealed class MftListReadAheadTests
         Assert.Equal(!damaged, built);
         Assert.Equal(damaged, handed.Any(pair => pair.Key >= MftRecord.ReservedRecordCount && pair.Value.Outcome is MftParseOutcome.Unreadable));
 
-        foreach (var (listReadsInFlight, parseThreads) in new[] { (1, 1), (1, 4), (4, 4), (32, 2) })
+        foreach (var (listReadsInFlight, parseThreads, batch) in new[] { (1, 1, 1), (1, 4, 1), (4, 4, 4), (32, 2, 32), (32, 4, TableTuning.DefaultListBatch) })
         {
-            var beside = new TableTuning(TableTuning.MinimumReadBytes, 4, parseThreads, listReadsInFlight, AttributeListReads.BesideFirstPass);
+            var beside = new TableTuning(TableTuning.MinimumReadBytes, 4, parseThreads, listReadsInFlight, AttributeListReads.BesideFirstPass, batch);
 
             Assert.Equal(expected, Described(ReadAll(source, beside, out var besideWhole)));
             Assert.True(besideWhole);
@@ -101,9 +123,10 @@ public sealed class MftListReadAheadTests
         // What is left once 17 and 18 want 40 records must hold one list of 12 and not two.
         Assert.True(source.RecordCount - 40 is >= 12 and < 24, $"the table holds {source.RecordCount} records");
 
-        ReadAll(source, new TableTuning(TableTuning.MinimumReadBytes, 1, 1, 1, listReads), out var wholeTable);
+        ReadAll(source, new TableTuning(TableTuning.MinimumReadBytes, 1, 1, 1, listReads, listBatch: 1), out var wholeTable);
 
         Assert.Equal(listReads is AttributeListReads.BesideFirstPass, source.ListReadBeforeTheTableEnded);
+        Assert.Equal(3, source.ClusterReads);
         Assert.False(wholeTable);
         Assert.Contains(source.RecordReads, r => r.First is >= 2_000 and < 2_012);
         Assert.Contains(source.RecordReads, r => r.First is >= 3_000 and < 3_012);
@@ -131,13 +154,15 @@ public sealed class MftListReadAheadTests
 
         Assert.True(source.RecordCount * 2 < 24 * 12, "the lists between them must want far more than the table holds");
 
-        ReadAll(source, new TableTuning(TableTuning.MinimumReadBytes, 1, 1, 1, AttributeListReads.BesideFirstPass), out var wholeTable);
+        var beside = Described(ReadAll(source, new TableTuning(TableTuning.MinimumReadBytes, 1, 1, 1, AttributeListReads.BesideFirstPass, listBatch: 1), out var wholeTable));
+        var besideReads = source.ClusterReads;
 
         Assert.False(wholeTable);
+        Assert.Equal(Described(ReadAll(source, new TableTuning(TableTuning.MinimumReadBytes, 1, 1, 1), out _)), beside);
 
         // Read beside the pass until the lists landed wanted more than the table holds, and then
         // read again in cluster order until the budget was spent: never every list, let alone twice.
-        Assert.True(source.ClusterReads < 24, $"{source.ClusterReads} lists were read");
+        Assert.True(besideReads < 24, $"{besideReads} lists were read");
     }
 
     /// <summary>
@@ -157,7 +182,7 @@ public sealed class MftListReadAheadTests
         Assert.Throws<InvalidOperationException>(() => MftRecordStream.TryReadAll(
             source,
             (int)source.RecordCount,
-            new TableTuning(TableTuning.MinimumReadBytes, 1, 1, 1, AttributeListReads.BesideFirstPass),
+            new TableTuning(TableTuning.MinimumReadBytes, 1, 1, 1, AttributeListReads.BesideFirstPass, listBatch: 1),
             (number, _, in _, _, _) =>
             {
                 if (number == 200)
@@ -210,12 +235,8 @@ public sealed class MftListReadAheadTests
     private static string[] Described(Dictionary<long, (MftParseOutcome Outcome, MftRecord Record, string Name)> handed) =>
         [.. handed.OrderBy(pair => pair.Key).Select(pair => $"{pair.Key}|{pair.Value.Outcome}|{pair.Value.Record}|{pair.Value.Name}")];
 
-    private static string[] Drawn(IMftSource source, TableTuning tuning)
-    {
-        var tree = MftExploreReader.Read(source, Root, [], tuning, progress: null, default).Tree!;
-
-        return [.. TreeNodes.Reachable(tree).Select(node => $"{tree.PathOf(node)}|{tree.SizeOf(node)}|{tree.LengthOf(node)}").Order(StringComparer.Ordinal)];
-    }
+    private static string[] Drawn(IMftSource source, TableTuning tuning) =>
+        TreeNodes.Drawn(MftExploreReader.Read(source, Root, [], tuning, progress: null, default).Tree!);
 
     private static Dictionary<long, (MftParseOutcome Outcome, MftRecord Record, string Name)> ReadAll(
         IMftSource source, TableTuning tuning, out bool wholeTable)
@@ -237,13 +258,13 @@ public sealed class MftListReadAheadTests
 
     /// <summary>
     /// A table whose overlapped reads of records from <c>heldFrom</c> on wait until a read of clusters
-    /// has started, for up to ten seconds, and which records every read of clusters and every read of
+    /// has started, for up to <c>heldSeconds</c>, and which records every read of clusters and every read of
     /// records made one at a time. A read of the cluster <c>unreadableCluster</c> fails. Where
     /// <c>slowClusters</c>, a read of clusters waits until it is cancelled, and lands a little after,
     /// as a real read does.
     /// </summary>
     private sealed class HeldTableReads(
-        IMftSource table, long heldFrom, long unreadableCluster = -1, bool slowClusters = false) : IMftSource
+        IMftSource table, long heldFrom, long unreadableCluster = -1, bool slowClusters = false, int heldSeconds = 10) : IMftSource
     {
         private readonly TaskCompletionSource _listRead = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int _clusterReads;
@@ -284,7 +305,7 @@ public sealed class MftListReadAheadTests
         {
             if (firstRecord >= heldFrom && !_released)
             {
-                ListReadBeforeTheTableEnded = await Task.WhenAny(_listRead.Task, Task.Delay(TimeSpan.FromSeconds(10), ct)) == _listRead.Task;
+                ListReadBeforeTheTableEnded = await Task.WhenAny(_listRead.Task, Task.Delay(TimeSpan.FromSeconds(heldSeconds), ct)) == _listRead.Task;
                 _released = true;
             }
 

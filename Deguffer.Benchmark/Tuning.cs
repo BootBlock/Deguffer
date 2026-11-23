@@ -124,7 +124,7 @@ internal static class Tuning
     }
 
     private static string ListReads(TableTuning table) => table.ListReads is AttributeListReads.BesideFirstPass
-        ? "beside the first pass"
+        ? string.Create(CultureInfo.InvariantCulture, $"beside the first pass in batches of {table.ListBatch}")
         : "after the first pass";
 
     private static string Listing(WalkTuning walk) => string.Create(
