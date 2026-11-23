@@ -47,14 +47,13 @@
              list, drawing its piece of its group's card: the sides, and under the last copy the
              bottom edge (CardRows). -->
         <DataTemplate x:Key="CopyTemplate" x:DataType="vm:DuplicateCopyRow">
-            <Border Background="{ThemeResource LayerFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            <Border Style="{StaticResource CardRowStyle}"
                     BorderThickness="{x:Bind controls:CardRows.Sides(IsLast)}"
                     CornerRadius="{x:Bind controls:CardRows.Corners(IsLast)}"
                     Padding="{x:Bind controls:CardRows.Inside(IsLast)}"
                     AutomationProperties.Name="{x:Bind Description, Mode=OneWay}">
                 <Grid>
-                    <Border Background="{ThemeResource SystemFillColorCriticalBackgroundBrush}" CornerRadius="4"
+                    <Border Background="{ThemeResource SystemFillColorCriticalBackgroundBrush}" CornerRadius="{ThemeResource ControlCornerRadius}"
                             Visibility="{x:Bind IsMarked, Mode=OneWay}" />
 
                     <Grid Padding="8,4,12,4" ColumnSpacing="12" ColumnDefinitions="Auto,*,Auto,Auto,Auto" RowDefinitions="Auto,Auto,Auto">
@@ -129,15 +128,14 @@
              highlight reaches. -->
         <DataTemplate x:Key="GroupHeading" x:DataType="vm:DuplicateGroupRow">
             <Border Margin="{StaticResource RegionGapAbove}"
-                    Background="{ThemeResource LayerFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    Style="{StaticResource CardRowStyle}"
                     BorderThickness="{x:Bind controls:CardRows.HeadingSides}"
                     CornerRadius="{x:Bind controls:CardRows.HeadingCorners}"
                     Padding="{x:Bind controls:CardRows.HeadingInside}">
                 <StackPanel Spacing="8">
                     <Grid ColumnSpacing="16" ColumnDefinitions="Auto,*,Auto"
                           AutomationProperties.Name="{x:Bind Description, Mode=OneWay}">
-                        <Border Width="40" Height="40" CornerRadius="6" VerticalAlignment="Top"
+                        <Border Width="40" Height="40" CornerRadius="{ThemeResource ControlCornerRadius}" VerticalAlignment="Top"
                                 Background="{ThemeResource ControlAltFillColorSecondaryBrush}">
                             <FontIcon Glyph="{x:Bind Glyph}" FontSize="{StaticResource GlyphSizeLarge}"
                                       Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"

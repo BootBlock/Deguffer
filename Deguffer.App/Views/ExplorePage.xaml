@@ -566,10 +566,8 @@
         -->
         <Grid Grid.Row="4" ColumnSpacing="{StaticResource ControlGap}" ColumnDefinitions="*,Auto">
         <Border Grid.Column="0"
-                Background="{ThemeResource LayerFillColorDefaultBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                CornerRadius="6">
+                Style="{StaticResource CardStyle}"
+                Padding="0">
             <Grid>
                 <controls:ExploreMap x:Name="Map"
                                      Zoomable="True"
@@ -920,7 +918,7 @@
                     -->
                     <Border HorizontalAlignment="Right"
                             VerticalAlignment="Bottom"
-                            CornerRadius="16"
+                            CornerRadius="{StaticResource PillCornerRadius}"
                             Opacity="0.5"
                             Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
                             Visibility="{x:Bind ViewModel.Notes.ShowsButton, Mode=OneWay}">
@@ -928,7 +926,7 @@
                                 Width="32"
                                 Height="32"
                                 Padding="0"
-                                CornerRadius="16"
+                                CornerRadius="{StaticResource PillCornerRadius}"
                                 Click="OnShowNotes"
                                 ToolTipService.ToolTip="{x:Bind ViewModel.Notes.ButtonLabel, Mode=OneWay}"
                                 AutomationProperties.Name="{x:Bind ViewModel.Notes.ButtonLabel, Mode=OneWay}">
@@ -952,12 +950,9 @@
             -->
             <Border Grid.Column="1"
                     Width="340"
-                    Background="{ThemeResource LayerFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    CornerRadius="6"
+                    Style="{StaticResource CardStyle}"
                     Visibility="{x:Bind ViewModel.ShowsGrowth, Mode=OneWay}">
-                <Grid Padding="12" RowSpacing="8" RowDefinitions="Auto,Auto,Auto,Auto,Auto,*">
+                <Grid RowSpacing="8" RowDefinitions="Auto,Auto,Auto,Auto,Auto,*">
                     <TextBlock Grid.Row="0"
                                Text="What grew"
                                Style="{StaticResource CardHeading}" />
@@ -1063,7 +1058,7 @@
                          the map and the list; a removed folder has nothing to open. -->
                     <ListView Grid.Row="5"
                               x:Name="GrowthList"
-                              Margin="-12,0,-12,0"
+                              Margin="{StaticResource CardBleed}"
                               SelectionMode="None"
                               IsItemClickEnabled="True"
                               ItemClick="OnGrowthRowClicked"
@@ -1083,7 +1078,7 @@
                                     <Border x:Name="Mark"
                                             Grid.RowSpan="2" Grid.ColumnSpan="2"
                                             Margin="-8,-4"
-                                            CornerRadius="4"
+                                            CornerRadius="{ThemeResource ControlCornerRadius}"
                                             Opacity="0"
                                             Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                                             AutomationProperties.AccessibilityView="Raw" />
@@ -1130,12 +1125,9 @@
             -->
             <Border Grid.Column="1"
                     Width="340"
-                    Background="{ThemeResource LayerFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    CornerRadius="6"
+                    Style="{StaticResource CardStyle}"
                     Visibility="{x:Bind ViewModel.ShowsTypes, Mode=OneWay}">
-                <Grid Padding="12" RowSpacing="8" RowDefinitions="Auto,Auto,*">
+                <Grid RowSpacing="8" RowDefinitions="Auto,Auto,*">
                     <TextBlock Grid.Row="0"
                                Text="What kind of files"
                                Style="{StaticResource CardHeading}" />
@@ -1148,7 +1140,7 @@
                     <!-- Largest first. A click lists that kind's files below this folder. -->
                     <ListView Grid.Row="2"
                               x:Name="TypesList"
-                              Margin="-12,0,-12,0"
+                              Margin="{StaticResource CardBleed}"
                               SelectionMode="None"
                               IsItemClickEnabled="True"
                               ItemClick="OnTypeRowClicked"
@@ -1168,13 +1160,13 @@
                                     <Border x:Name="Mark"
                                             Grid.RowSpan="3" Grid.ColumnSpan="3"
                                             Margin="-8,-4"
-                                            CornerRadius="4"
+                                            CornerRadius="{ThemeResource ControlCornerRadius}"
                                             Opacity="0"
                                             Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                                             AutomationProperties.AccessibilityView="Raw" />
 
                                     <Border Grid.Column="0"
-                                            Width="12" Height="12" CornerRadius="2"
+                                            Width="12" Height="12" CornerRadius="{ThemeResource ControlCornerRadius}"
                                             VerticalAlignment="Center"
                                             AutomationProperties.AccessibilityView="Raw">
                                         <Border.Background>
@@ -1230,12 +1222,9 @@
             -->
             <Border Grid.Column="1"
                     Width="340"
-                    Background="{ThemeResource LayerFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    CornerRadius="6"
+                    Style="{StaticResource CardStyle}"
                     Visibility="{x:Bind ViewModel.ShowsShortcutFolders, Mode=OneWay}">
-                <Grid Padding="12" RowSpacing="8" RowDefinitions="Auto,Auto,*">
+                <Grid RowSpacing="8" RowDefinitions="Auto,Auto,*">
                     <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
                         <TextBlock Text="Start menu and desktop"
                                    Style="{StaticResource CardHeading}"
@@ -1385,7 +1374,7 @@
                     <DataTemplate x:DataType="vm:ExploreLegendBand">
                         <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,0"
                                     AutomationProperties.Name="{x:Bind Label}">
-                            <Border Width="12" Height="12" CornerRadius="2"
+                            <Border Width="12" Height="12" CornerRadius="{ThemeResource ControlCornerRadius}"
                                     VerticalAlignment="Center"
                                     AutomationProperties.AccessibilityView="Raw">
                                 <Border.Background>
