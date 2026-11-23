@@ -1619,7 +1619,11 @@ explains. It changes nothing on any drive, and it deletes nothing.
   reading carries a mark saying so, and is judged by nothing but the drive's own threshold. The
   drive's details name the entry used, or say why none was: no entry, an entry that could not be
   read, a pattern Deguffer cannot translate before the match, or a file that could not be read, in
-  which case none of the database is used.
+  which case none of the database is used. Where the entry used gives a warning, such as a firmware
+  fault and the update that fixes it, it is shown under the drive's details as the database words
+  it ([#1078](https://github.com/BootBlock/Deguffer/issues/1078)), whether or not the entry has a
+  firmware pattern, as smartctl shows it. It is not a reading of the drive, so it is never a finding
+  and never moves the verdict.
 - A serial number appears on the page and nowhere else: no record prints it, and a drive's key is a hash.
 
 **Beside the volumes**

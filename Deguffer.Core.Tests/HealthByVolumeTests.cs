@@ -15,7 +15,7 @@ public sealed class HealthByVolumeTests
     private readonly HealthByVolume _health = new();
 
     private static DriveHealth Report(DriveDescription drive, DriveVerdict verdict) =>
-        new(drive.Key, drive.Name, verdict, "summary", null, [], [], [], false);
+        new(drive.Key, drive.Name, verdict, "summary", null, [], [], null, [], false);
 
     private static DriveVolumes On(DriveDescription drive, params string[] roots) => new(drive.Key, string.Join("; ", roots), roots);
 

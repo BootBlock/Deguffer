@@ -177,7 +177,7 @@ internal static class CodeRuleBook
             Pattern(@"\bawait\s+[\w.?!]*\b(?:SurvivorsAsync|UnofferedAsync)\s*\("),
             SourceView.Code,
             [Core],
-            "Start the question as a task where the walk exists, measure, then await it where the plan reads it: the first one in a pass reads every row's declarations (G4).",
+            "Start the question as a task where the walk exists, measure, then await it where the plan reads it: it reads every row that can declare its folder (G4).",
             "var spared = await walk.SurvivorsAsync(_declarations, ct);"),
         new(
             "selection-is-not-an-enum-ordinal",

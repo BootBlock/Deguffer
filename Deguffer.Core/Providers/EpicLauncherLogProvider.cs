@@ -127,6 +127,9 @@ public sealed class EpicLauncherLogProvider : CleanupProviderBase
     /// <summary>§5.2 as §7.1 needs it read from outside. The declaration is the shared one.</summary>
     public override IReadOnlyList<ToolRoot> ToolRoots => [EpicLauncherSaved.Root(Environment)];
 
+    /// <summary>The one root above is the launcher's <c>Saved</c> folder, at a fixed place in the local application data.</summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(EpicLauncherSaved.PathIn(Environment));
+
     /// <summary>
     /// The launcher's log and crash report folders. Its settings, cloud saves and the store's browser
     /// folder beside them are never reached, so its own folder is not a place.

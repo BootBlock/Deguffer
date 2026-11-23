@@ -108,6 +108,12 @@ public sealed class BunInstallCacheProvider : CleanupProviderBase
         CacheRoot(DefaultCache),
     ];
 
+    /// <summary>
+    /// Bun's home, which holds every root above wherever <c>BUN_INSTALL</c> puts it. A cache Bun
+    /// reports elsewhere is declared only by <see cref="DiscoverToolRootsAsync"/>.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(HomeDirectory);
+
     /// <summary>The cache Bun reports, where its prune would be run there.</summary>
     public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
         await AcceptedCacheAsync(ct).ConfigureAwait(false) is { } cache

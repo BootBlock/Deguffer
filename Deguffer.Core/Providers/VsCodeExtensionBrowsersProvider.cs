@@ -100,6 +100,12 @@ public sealed class VsCodeExtensionBrowsersProvider : CleanupProviderBase
                 static _ => false))),
     ];
 
+    /// <summary>
+    /// Every root above is inside an extension's storage in an editor's folder, which the discovery
+    /// finds only under one application-data root.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(_discovery.Root);
+
     /// <summary>Each browser folder of every cache found, where the builds are, and nothing above it.</summary>
     public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<CleanedPlace>>(

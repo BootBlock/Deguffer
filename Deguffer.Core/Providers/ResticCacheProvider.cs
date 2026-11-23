@@ -113,6 +113,15 @@ public sealed class ResticCacheProvider : CleanupProviderBase
         [.. Roots().Select(root => ToolRoot.Folders(root, RootReason, ResticCacheLayout.IsRepositoryCache))];
 
     /// <summary>
+    /// The default folder and whatever the variable holds in either reading, unjudged: judging a value
+    /// asks the disk, and a value this declines only drops a root.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(
+        DefaultRoot,
+        ConfiguredFolder.Read(VariableReading.Current, ResticCacheLayout.CacheVariable, Environment),
+        ConfiguredFolder.Read(VariableReading.Tool, ResticCacheLayout.CacheVariable, Environment));
+
+    /// <summary>
     /// Each repository's cache recognises only the folders restic caches into, and nothing at all while
     /// restic runs.
     /// </summary>
@@ -170,7 +179,7 @@ public sealed class ResticCacheProvider : CleanupProviderBase
         var unreadable = false;
 
         // Asked for every folder before any folder is measured, and each awaited only after its folder's
-        // measurement: the first such question in a pass reads every row's declarations.
+        // measurement: each question reads every row that can declare its folder.
         var sparing = folders.Select(folder => _declarations.UnofferedAsync(folder.Unrecognised, ct)).ToList();
 
         foreach (var (folder, spared) in folders.Zip(sparing))

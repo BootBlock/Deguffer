@@ -160,6 +160,9 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
             name => ReleaseVersion().IsMatch(name)),
     ];
 
+    /// <summary>The tooling's folder, which holds both levels above. Nothing moves it.</summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(_root);
+
     /// <summary>
     /// The folder holding the releases, whole, because a release is any child whose name is a
     /// version, which no narrower place can name. Never the tooling's folder above it, where the feed

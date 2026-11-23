@@ -127,6 +127,12 @@ public sealed class ConanCacheProvider : CleanupProviderBase
     public override IReadOnlyList<ToolRoot> ToolRoots => [ConanDeclarations.Home(DefaultHome)];
 
     /// <summary>
+    /// The default home, the one root declared here. A home or store anything moves is declared only
+    /// by <see cref="DiscoverToolRootsAsync"/>, which this scope does not bound.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(DefaultHome);
+
+    /// <summary>
     /// The home and the store Conan reports, which a <c>.conanrc</c>, <c>CONAN_HOME</c> or
     /// <c>core.cache:storage_path</c> moves, and a home or store set to a folder this declines, where
     /// only Conan's own files are refused. See <see cref="ToolRoot.Sparing"/>.

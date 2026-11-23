@@ -175,6 +175,9 @@ public sealed class TopazModelsProvider : CleanupProviderBase
         }
     }
 
+    /// <summary>The vendor folder: the survey looks only at its children, so every product root is inside it.</summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(Root);
+
     /// <summary>§7.1: while a Topaz program runs, Explore refuses what the plan holds back, with its reason.</summary>
     public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
     {

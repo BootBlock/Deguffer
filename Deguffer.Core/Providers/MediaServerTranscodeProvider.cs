@@ -55,6 +55,12 @@ public abstract class MediaServerTranscodeProvider : CleanupProviderBase
 
     public override IReadOnlyList<ToolRoot> ToolRoots => Layout.ToolRoots;
 
+    /// <summary>
+    /// Stated by each server, because where its settings live decides whether its folders can be
+    /// bounded without reading the settings: a registry value can, a settings file cannot.
+    /// </summary>
+    public abstract override ToolRootScope ToolRootScope { get; }
+
     /// <summary>What the user is told when this server has left nothing on the machine.</summary>
     protected abstract string NothingHere { get; }
 

@@ -82,6 +82,12 @@ public abstract class InstallerPayloadProvider : CleanupProviderBase
     ];
 
     /// <summary>
+    /// The folders the rows name, which are the roots themselves: each is built from a known folder
+    /// when the provider is made, so none has to be found.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(_roots.Select(root => root.Path));
+
+    /// <summary>
     /// A recognised payload that may hold something. One listing per folder, and only of the folders
     /// the rows name, so answering never reaches the top of the drive.
     /// </summary>

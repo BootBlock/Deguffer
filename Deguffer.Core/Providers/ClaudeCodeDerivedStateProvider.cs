@@ -139,7 +139,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
     private readonly ISystemDirectories _system;
     private readonly RowDeclarations _declarations;
 
-    private readonly PassMemo<Survey?> _survey = new();
+    private readonly PassMemo<ClaudeCodeLeftoverSurvey?> _survey = new();
     private readonly PassMemo<IReadOnlyList<ToolRoot>> _toolRoots = new();
 
     /// <param name="sessions">
@@ -251,6 +251,13 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots.Get(Declare);
 
+    /// <summary>
+    /// Every root above is inside Claude Code's folder, which is one of these whichever way the
+    /// variable is set, or one of the two neighbours beside the default folder.
+    /// </summary>
+    public override ToolRootScope ToolRootScope =>
+        ToolRootScope.Under([.. ClaudeCodeHome.Bounds(Environment), ConfigurationFile, SwapBackupFolder]);
+
     public override void InvalidateCaches()
     {
         _projects.Invalidate();
@@ -292,13 +299,11 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
 
         var notes = new List<PlanNote>(survey.Root.Notes);
         notes.AddRange(kinds.SelectMany(kind => kind.Notes));
-        notes.AddRange(EvidenceNotes(survey.Evidence, recent.Count));
+        notes.AddRange(ClaudeCodeLeftoverNotes.Evidence(survey.Evidence, recent.Count));
 
         if (targets.Count == 0 && recent.Count == 0 && !refused && !unreadable)
         {
-            notes.Add(new PlanNote(
-                PlanNoteSeverity.Information,
-                "Claude Code has left nothing behind that Deguffer can show is no longer used."));
+            notes.Add(ClaudeCodeLeftoverNotes.NothingLeft);
         }
 
         // Every offer here is "whatever wrote this has ended", which says nothing about a file written after
@@ -349,16 +354,14 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
     /// kind of leftover left alone.
     /// </summary>
     /// <param name="spared">What the walk of the folder's top level spared that no other row offers.</param>
-    private IEnumerable<(string Path, string Reason)> Survivors(Survey survey, IReadOnlyList<(string Path, string Reason)> spared)
+    private IEnumerable<(string Path, string Reason)> Survivors(ClaudeCodeLeftoverSurvey survey, IReadOnlyList<(string Path, string Reason)> spared)
     {
         yield return (survey.Evidence.Home, "Claude Code's own folder must survive — only recognised leftovers inside it are removed.");
 
-        yield return (
-            Path.Combine(Environment.UserProfile, ".claude.json"),
-            NamedFiles[".claude.json"]);
+        yield return (ConfigurationFile, NamedFiles[".claude.json"]);
 
         yield return (
-            Path.Combine(Environment.UserProfile, ".claude-swap-backup"),
+            SwapBackupFolder,
             "Not part of Claude Code. Another program keeps saved sign-ins here, under a name that begins the same way.");
 
         foreach (var file in (survey.RootEntries ?? []).OfType<FileInfo>())
@@ -374,39 +377,6 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
         foreach (var survivor in survey.Kinds.SelectMany(kind => kind.Survivors))
         {
             yield return survivor;
-        }
-    }
-
-    /// <summary>
-    /// What the user is told about the two sources of evidence every session-keyed kind depends on,
-    /// and about what was held back for being recent.
-    /// </summary>
-    private static IEnumerable<PlanNote> EvidenceNotes(ClaudeCodeEvidence evidence, int recent)
-    {
-        if (!evidence.Sessions.Complete)
-        {
-            yield return new PlanNote(
-                PlanNoteSeverity.Warning,
-                "Deguffer could not read Claude Code's list of running sessions, so it offers nothing a running "
-                + "session could still be using. Only the handshake files and keys of processes it asked about "
-                + "directly can be offered.");
-        }
-
-        if (!evidence.Projects.Complete)
-        {
-            yield return new PlanNote(
-                PlanNoteSeverity.Warning,
-                "Deguffer could not list every Claude Code project folder, so it cannot tell which sessions still "
-                + "have a conversation. No session's leftover folders are offered.");
-        }
-
-        if (recent > 0)
-        {
-            yield return new PlanNote(
-                PlanNoteSeverity.Information,
-                $"Left {Counted.Of(recent, "leftover", "leftovers")} alone that Claude Code "
-                + $"wrote in the last {ClaudeCodeSessionRegistry.RecentWindow.TotalDays:0} days. A session can run for days, so recent "
-                + "leftovers are not offered even when nothing lists their session as running.");
         }
     }
 
@@ -439,16 +409,25 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
         ];
     }
 
+    /// <summary>
+    /// Claude Code's own configuration, beside its default folder in the profile, which
+    /// <see cref="ClaudeCodeHome.ConfigDirectoryVariable"/> does not move.
+    /// </summary>
+    private string ConfigurationFile => Path.Combine(Environment.UserProfile, ".claude.json");
+
+    /// <summary>Another program's saved sign-ins, beside Claude Code's default folder under a name that begins the same way.</summary>
+    private string SwapBackupFolder => Path.Combine(Environment.UserProfile, ".claude-swap-backup");
+
     /// <summary>The two paths beside Claude Code's folder that the plan names as survivors.</summary>
     private IEnumerable<ToolRoot> Neighbours() =>
     [
         new ToolRoot(
-            Path.Combine(Environment.UserProfile, ".claude.json"),
+            ConfigurationFile,
             "This is Claude Code's own configuration: your account, and each project's trust decisions "
             + "and servers. Deguffer never removes it.",
             static _ => false),
         new ToolRoot(
-            Path.Combine(Environment.UserProfile, ".claude-swap-backup"),
+            SwapBackupFolder,
             "This is not part of Claude Code. Another program keeps saved sign-ins here, under a name that "
             + "begins the same way, and Deguffer never removes it.",
             static _ => false),
@@ -459,9 +438,9 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
     /// plan and the declaration both read this, so the walk and the process probes behind it are paid
     /// for once per pass and not at all where nothing asks.
     /// </summary>
-    private Survey? Look(CancellationToken ct = default) => _survey.Get(() => Examine(ct));
+    private ClaudeCodeLeftoverSurvey? Look(CancellationToken ct = default) => _survey.Get(() => Examine(ct));
 
-    private Survey? Examine(CancellationToken ct)
+    private ClaudeCodeLeftoverSurvey? Examine(CancellationToken ct)
     {
         if (ClaudeCodeHome.Resolve(Environment, _system, Volumes) is not { } home
             || LongPath.ProbeDirectory(home, out var homeIsLink) is not PathPresence.Present
@@ -481,7 +460,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
             _sessions,
             Scanner.Tuning);
 
-        return new Survey(
+        return new ClaudeCodeLeftoverSurvey(
             CacheLevelWalk.Under(HomeLevel, home, ct),
             FolderEntries.Of(home),
             evidence,
@@ -494,46 +473,5 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
                 ClaudeCodeTimedFiles.ShellSnapshots(evidence, ct),
                 ClaudeCodeTimedFiles.FailedEvents(evidence, ct),
             ]);
-    }
-
-    /// <param name="Root">What Claude Code's folder holds one level down, classified against <see cref="HomeChildren"/>.</param>
-    /// <param name="RootEntries">Everything at that level, for the files the walk does not see. Null where it refused to be listed.</param>
-    /// <param name="Evidence">What every kind was judged against.</param>
-    /// <param name="Looked">
-    /// Keeps anything written once the evidence was being read, as a guard the removal applies. See
-    /// <see cref="MinimumAge.Since"/>.
-    /// </param>
-    /// <param name="Kinds">One classification per kind of leftover.</param>
-    private sealed record Survey(
-        LevelWalk Root,
-        IReadOnlyList<FileSystemInfo>? RootEntries,
-        ClaudeCodeEvidence Evidence,
-        MinimumAge Looked,
-        IReadOnlyList<ClaudeCodeClassification> Kinds)
-    {
-        /// <summary>
-        /// Everything this look listed: Claude Code's folder, the walk of its top level, the project
-        /// folders, and each folder a kind of leftover was classified in. Nearly every path the plan
-        /// protects was returned by one of them, so §5.6's record of it is taken from there.
-        /// </summary>
-        public ListedEntries Listed()
-        {
-            var listed = new ListedEntries();
-
-            if (RootEntries is not null)
-            {
-                listed.AddFolder(Evidence.Home, RootEntries);
-            }
-
-            listed.Include(Root.Listed);
-            listed.Include(Evidence.Projects.Listed);
-
-            foreach (var kind in Kinds)
-            {
-                listed.Include(kind.Listed);
-            }
-
-            return listed;
-        }
     }
 }

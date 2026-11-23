@@ -139,6 +139,9 @@ public sealed class SteamLibraryArtworkProvider : CleanupProviderBase
                 IsOffered)]
             : []);
 
+    /// <summary>The one root above is inside the folder Windows records Steam as installed in.</summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(_discovery.RecordedRoot);
+
     /// <summary>
     /// Steam's artwork folder beside the program wherever Windows records Steam as installed. Each
     /// game's artwork is named by its app ID, so the folder is the narrowest place that holds a game

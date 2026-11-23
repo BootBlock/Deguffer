@@ -83,6 +83,14 @@ public static partial class ClaudeCodeHome
             .Distinct(StringComparer.OrdinalIgnoreCase)];
 
     /// <summary>
+    /// The default folder and the value of <see cref="ConfigDirectoryVariable"/> as it is set, named
+    /// without touching the disk: every folder <see cref="Resolve"/> can answer is one of them,
+    /// because only the checks that may decline the variable's folder look at the disk.
+    /// </summary>
+    public static IEnumerable<string?> Bounds(IUserEnvironment environment) =>
+        [DefaultIn(environment), ConfiguredFolder.Read(VariableReading.Current, ConfigDirectoryVariable, environment)];
+
+    /// <summary>
     /// Two ways for <see cref="ConfigDirectoryVariable"/> to be no answer.
     ///
     /// <list type="bullet">

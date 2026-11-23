@@ -129,6 +129,12 @@ public sealed class YarnClassicCacheProvider : CleanupProviderBase
         .. ConfigurationFiles.Select(file => new ToolRoot(file, ConfigurationReason, static _ => false)),
     ];
 
+    /// <summary>
+    /// Yarn's folder, which holds the default cache root, and the two configuration files. A root Yarn 1
+    /// reports is declared only by <see cref="DiscoverToolRootsAsync"/>, which this scope does not bound.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under([ToolFolder, .. ConfigurationFiles]);
+
     /// <summary>The cache root Yarn 1 reports, where its clean would be run there.</summary>
     public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
         await AcceptedRootAsync(ct).ConfigureAwait(false) is { } root

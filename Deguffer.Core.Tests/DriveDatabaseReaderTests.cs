@@ -1,4 +1,5 @@
 using Deguffer.Core.Health;
+using Deguffer.Core.Health.Smartmontools;
 using Deguffer.Testing;
 using Microsoft.Win32;
 
@@ -55,6 +56,44 @@ public sealed class DriveDatabaseReaderTests : IDisposable
         Assert.Contains(report.Facts, fact => fact is { Label: FactLabel, Value: InventedDriveDatabase.Family });
         var row = Assert.Single(report.Attributes, attribute => attribute.Key == "ata-230");
         Assert.Equal(("Example Paired Count", "10 / 7", ReadingBasis.DriveDatabase), (row.Name, row.Reading, row.Basis));
+    }
+
+    [Fact]
+    public async Task TheEntrysWarningIsGivenBesideTheDetailsAndNeverMovesTheVerdict()
+    {
+        Install("""{ "Example Warned SSDs", "EXAMPLE SSD .*", "", "A firmware fault can hang these drives.", "" },""" + InventedDriveDatabase.Text);
+        Sata(0, InventedDriveDatabase.Model, new AtaEntry(5, 100));
+
+        var report = Assert.Single(await ReadAll());
+
+        Assert.Contains(report.Facts, fact => fact is { Label: FactLabel, Value: "Example Warned SSDs" });
+        Assert.Equal(new DatabaseWarning("Example Warned SSDs", "A firmware fault can hang these drives."), report.DatabaseWarning);
+        Assert.Equal(DriveVerdict.Good, report.Verdict);
+        Assert.Empty(report.Findings);
+    }
+
+    [Fact]
+    public async Task TheWarningIsGivenWhereTheDriveGivesNoAttributeTable()
+    {
+        Install("""{ "Example Warned SSDs", "EXAMPLE SSD .*", "", "A firmware fault can hang these drives.", "" },""");
+        _probe.Answer(0, DriveQuestion.Device, DriveBytes.Device(DriveBytes.Sata, InventedDriveDatabase.Model, serial: "SATA0"));
+
+        var report = Assert.Single(await ReadAll());
+
+        Assert.Equal("A firmware fault can hang these drives.", report.DatabaseWarning?.Message);
+        Assert.Equal(DriveVerdict.Unknown, report.Verdict);
+    }
+
+    [Fact]
+    public async Task AFamilyWithNoWarningAndADriveWithNoDatabaseGiveNone()
+    {
+        Install(InventedDriveDatabase.Text);
+        Sata(0, InventedDriveDatabase.Model);
+        _probe
+            .Answer(1, DriveQuestion.Device, DriveBytes.Device(DriveBytes.Nvme, "Test NVMe", serial: "NVME1"))
+            .Answer(1, DriveQuestion.NvmeHealth, DriveBytes.NvmeHealth());
+
+        Assert.All(await ReadAll(), report => Assert.Null(report.DatabaseWarning));
     }
 
     [Fact]

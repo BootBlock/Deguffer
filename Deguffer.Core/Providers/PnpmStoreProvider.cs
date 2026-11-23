@@ -111,6 +111,13 @@ public sealed class PnpmStoreProvider : CleanupProviderBase
     ];
 
     /// <summary>
+    /// The home, the one root above, which <see cref="HomeDirectory"/> reads from the variable alone.
+    /// The store pnpm reports is declared only by <see cref="DiscoverToolRootsAsync"/>, which this
+    /// scope does not bound.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(HomeDirectory);
+
+    /// <summary>
     /// The store <c>pnpm store path</c> reports, which is inside <see cref="HomeDirectory"/> only on a
     /// default install and moves with <c>store-dir</c>. It recognises no child for the same reason
     /// the home does: <c>pnpm store prune</c> works inside the store and never removes it.

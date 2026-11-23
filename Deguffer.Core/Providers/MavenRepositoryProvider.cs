@@ -1,5 +1,3 @@
-using System.Xml;
-using System.Xml.Linq;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -47,14 +45,6 @@ namespace Deguffer.Core.Providers;
 public sealed class MavenRepositoryProvider : CleanupProviderBase
 {
     /// <summary>
-    /// The one property this reads from a configured path. Maven interpolates its whole property
-    /// set into <c>localRepository</c>, which Deguffer cannot reproduce, but this one is the common
-    /// idiom for writing a portable settings file and resolving it is exact rather than a guess.
-    /// A value naming any other property is left unresolved and the provider says so.
-    /// </summary>
-    private const string UserHomeProperty = "${user.home}";
-
-    /// <summary>
     /// Things in the Maven home that §5.6 must assert survived. Named rather than enumerated, and
     /// the first two are the whole reason the root is never a target.
     /// </summary>
@@ -68,7 +58,7 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
 
     private readonly ISystemDirectories _system;
 
-    private readonly PassMemo<UserSettings> _settings = new();
+    private readonly PassMemo<MavenUserSettings> _settings = new();
 
     private (string Repository, string? Why)? _vetted;
 
@@ -147,43 +137,8 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
     /// What the user's <c>settings.xml</c> says, read once for the pass. Memoised whole, so a
     /// repository that cannot be resolved is not read again by every caller that asks.
     /// </summary>
-    private UserSettings Settings => _settings.Get(ReadSettings);
-
-    /// <summary>What the user's <c>settings.xml</c> says about the local repository.</summary>
-    /// <param name="LocalRepository">See <see cref="ResolveLocalRepository"/>.</param>
-    /// <param name="Unread">
-    /// The file where it could not be read, or Windows would not say whether it is there, so a
-    /// repository it moves elsewhere was never looked for. <paramref name="LocalRepository"/> is then
-    /// the default.
-    /// </param>
-    private sealed record UserSettings(string? LocalRepository, UnreadFile? Unread);
-
-    private UserSettings ReadSettings()
-    {
-        switch (LongPath.ProbeFile(SettingsPath))
-        {
-            case PathPresence.Absent:
-                return new UserSettings(DefaultLocalRepository, Unread: null);
-
-            case PathPresence.Refused:
-                return new UserSettings(DefaultLocalRepository, new UnreadFile(SettingsPath, Unreached: true));
-        }
-
-        if (ReadConfiguredRepository(out var unreadable) is not { } configured)
-        {
-            return new UserSettings(
-                DefaultLocalRepository,
-                unreadable ? new UnreadFile(SettingsPath, Unreached: false) : null);
-        }
-
-        // Normalised rather than used as it arrived. A trailing separator would make the leaf name
-        // empty, and a location with an empty relative path resolves back to the root that holds it
-        // — so the plan would target the very directory it also asserts must survive, and §5.6 would
-        // report a correct run as a failure. A value ending in '..' is worse: LongPath.Extended
-        // requires an already-resolved path, so the removal would land a directory higher than the
-        // plan named.
-        return new UserSettings(LongPath.Configured(configured), Unread: null);
-    }
+    private MavenUserSettings Settings =>
+        _settings.Get(() => MavenUserSettings.Read(SettingsPath, DefaultLocalRepository, Environment.UserProfile));
 
     /// <summary>
     /// <c>settings.xml</c> is edited by hand and by every IDE, so the repository can move between
@@ -219,6 +174,12 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
             + "server passwords and your toolchains all sit beside it.",
             static name => name.Equals("repository", StringComparison.OrdinalIgnoreCase)),
     ];
+
+    /// <summary>
+    /// Maven's folder, the one root above. A repository the settings file moves out of it is declared
+    /// only by <see cref="DiscoverToolRootsAsync"/>, which this scope does not bound.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(Home);
 
     /// <summary>
     /// The directory holding the repository this machine's <c>settings.xml</c> actually names, which
@@ -501,37 +462,5 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
                 [],
                 ProtectedNames),
         ];
-    }
-
-    /// <summary>
-    /// The <c>localRepository</c> element of the user's settings file, or null if there is not one.
-    ///
-    /// Matched on the local name, because Maven's own schema puts the file in a namespace and a
-    /// great many real settings files omit it. A malformed file is treated as no override rather
-    /// than as an error: Maven itself would refuse to build, which the user will hear about from
-    /// Maven, and the default location is the right thing for Deguffer to fall back on either way.
-    ///
-    /// <para>A file that would not be read is different, and <paramref name="unreadable"/> says so.
-    /// Maven may read it where Deguffer cannot, so <see cref="ReadSettings"/> still examines the
-    /// default, and the plan says the settings were not read.</para>
-    /// </summary>
-    private string? ReadConfiguredRepository(out bool unreadable)
-    {
-        var configured = XmlFile
-            .TryLoad(SettingsPath, out unreadable)?
-            .Root?
-            .Elements()
-            .FirstOrDefault(e => e.Name.LocalName == "localRepository")?
-            .Value
-            .Trim();
-
-        if (string.IsNullOrEmpty(configured))
-        {
-            return null;
-        }
-
-        return configured.StartsWith(UserHomeProperty, StringComparison.OrdinalIgnoreCase)
-            ? Path.Combine(Environment.UserProfile, configured[UserHomeProperty.Length..].TrimStart('/', '\\'))
-            : configured;
     }
 }

@@ -1,9 +1,9 @@
-using System.Globalization;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Duplicates;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Media;
 using Deguffer.Core.Scanning.Mft;
+using static Deguffer.Benchmark.OptionValues;
 
 namespace Deguffer.Benchmark;
 
@@ -167,6 +167,8 @@ internal sealed record BenchmarkRequest(
         var readsInFlight = UnknownDrive.ReadsInFlight;
         var parseThreads = UnknownDrive.ParseThreads;
         var listReadsInFlight = UnknownDrive.ListReadsInFlight;
+        var listReads = UnknownDrive.ListReads;
+        var listBatch = UnknownDrive.ListBatch;
         var snapshots = route is Route.ExploreWalk;
         var readBy = LinkRead.Name;
         var files = DefaultTree.Files;
@@ -192,7 +194,7 @@ internal sealed record BenchmarkRequest(
         // on, and a value an option sets has to win over them.
         if (route is Route.Race && RaceDefaults(args, tuner) is { } race)
         {
-            (threads, bufferKiB, readKiB, readsInFlight, parseThreads, listReadsInFlight) = race;
+            (threads, bufferKiB, readKiB, readsInFlight, parseThreads, listReadsInFlight, listReads) = race;
         }
 
         // Only the routes that take several folders take more than one target, so for them the
@@ -231,6 +233,9 @@ internal sealed record BenchmarkRequest(
                     value, TableTuning.MinimumParseThreads, TableTuning.MaximumParseThreads, out parseThreads),
                 "--list-reads-in-flight" when route.TakesTableTuning() => TryNumber(
                     value, TableTuning.MinimumListReadsInFlight, TableTuning.MaximumListReadsInFlight, out listReadsInFlight),
+                "--list-reads" when route.TakesTableTuning() => TryListReads(value, out listReads),
+                "--list-batch" when route.TakesTableTuning() =>
+                    TryNumber(value, TableTuning.MinimumListBatch, TableTuning.MaximumListBatch, out listBatch),
                 "--snapshots" when route.TakesSnapshots() => TryOnOff(value, out snapshots),
                 "--read-by" when route is Route.Links => TryReadBy(value, out readBy),
                 "--files" when route is Route.Remove => TryNumber(value, 0, TreeShape.MaximumFiles, out files),
@@ -260,7 +265,8 @@ internal sealed record BenchmarkRequest(
                     $"--reads-in-flight a number from {TableTuning.MinimumReadsInFlight} to " +
                     $"{TableTuning.MaximumReadsInFlight}, --parse-threads from " +
                     $"{TableTuning.MinimumParseThreads} to {TableTuning.MaximumParseThreads} and --list-reads-in-flight from " +
-                    $"{TableTuning.MinimumListReadsInFlight} to {TableTuning.MaximumListReadsInFlight}. " +
+                    $"{TableTuning.MinimumListReadsInFlight} to {TableTuning.MaximumListReadsInFlight}, --list-reads takes after or beside, and --list-batch a number from " +
+                    $"{TableTuning.MinimumListBatch} to {TableTuning.MaximumListBatch}. " +
                     "For explore, explorefolder and explorewalk, --snapshots takes on or off. For links, --read-by takes name or handle. " +
                     $"For remove, --files takes a number from 0 to {TreeShape.MaximumFiles}, --depth from 0 to " +
                     $"{TreeShape.MaximumDepth} and --fanout from 1 to {TreeShape.MaximumFanout}, and --read-only takes nothing. " +
@@ -317,7 +323,7 @@ internal sealed record BenchmarkRequest(
             path,
             runs,
             new WalkTuning(threads, bufferKiB * 1024),
-            new TableTuning(readKiB * 1024, readsInFlight, parseThreads, listReadsInFlight),
+            new TableTuning(readKiB * 1024, readsInFlight, parseThreads, listReadsInFlight, listReads, listBatch),
             snapshots,
             readBy,
             [.. folders.Select(folder => folder!)],
@@ -337,7 +343,7 @@ internal sealed record BenchmarkRequest(
     /// two drives under the shipped settings, or null where the arguments name no folder or drive the
     /// race can use, which the parse then refuses with the reason.
     /// </summary>
-    private static (int Threads, int BufferKiB, int ReadKiB, int ReadsInFlight, int ParseThreads, int ListReadsInFlight)? RaceDefaults(
+    private static (int Threads, int BufferKiB, int ReadKiB, int ReadsInFlight, int ParseThreads, int ListReadsInFlight, AttributeListReads ListReads)? RaceDefaults(
         IReadOnlyList<string> args,
         ScanTuner tuner)
     {
@@ -360,31 +366,13 @@ internal sealed record BenchmarkRequest(
         var walk = tuner.For(folder).Walk;
         var table = tuner.ForVolume(drive).Table;
 
-        return (walk.Threads, walk.ListingBufferBytes / 1024, table.ReadBytes / 1024, table.ReadsInFlight, table.ParseThreads, table.ListReadsInFlight);
+        return (walk.Threads, walk.ListingBufferBytes / 1024, table.ReadBytes / 1024, table.ReadsInFlight, table.ParseThreads, table.ListReadsInFlight, table.ListReads);
     }
 
     private static bool TryDrive(string? text, out char? drive)
     {
         drive = text is null ? null : VolumeRoot(text)?[0];
         return drive is not null;
-    }
-
-    private static bool TryCommand(string? text, out string? command)
-    {
-        command = string.IsNullOrWhiteSpace(text) ? null : text;
-        return command is not null;
-    }
-
-    private static bool TryYield(string? text, out bool yields)
-    {
-        yields = text is not "normal";
-        return text is "yield" or "normal";
-    }
-
-    private static bool TryRacer(string? text, out Route racer)
-    {
-        racer = text is "walk" ? Route.Walk : Route.Sources;
-        return text is "sources" or "walk";
     }
 
     /// <summary>The index of the first argument after the route that is an option, or the count where none is.</summary>
@@ -403,61 +391,11 @@ internal sealed record BenchmarkRequest(
 
     /// <summary>
     /// What a scan reads the table with on a drive of unknown kind: the read size and reads in flight
-    /// from before they could be set, the parse threads Auto gives the machine, and the list reads in
-    /// flight Auto gives every kind.
+    /// from before they could be set, the parse threads Auto gives the machine, the list reads in
+    /// flight Auto gives every kind, and the lists read once the first pass has ended.
     /// </summary>
     public static TableTuning UnknownDrive { get; } =
         VolumeTuning.Resolve(ScanPreferences.Default, StorageMedia.Unknown).Table;
-
-    private static bool TryNumber(string? text, int minimum, int maximum, out int number) =>
-        int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out number)
-        && number >= minimum
-        && number <= maximum;
-
-    private static bool TryNumber(string? text, long minimum, long maximum, out long number) =>
-        long.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out number)
-        && number >= minimum
-        && number <= maximum;
-
-    /// <summary>
-    /// A checksum this machine offers, by the name other tools print it under, in any case and with or
-    /// without its hyphen: <c>sha256</c>, <c>SHA-256</c> and <c>sha-256</c> are one.
-    /// </summary>
-    private static bool TryChecksum(string? text, out ChecksumAlgorithm algorithm)
-    {
-        var named = text is null
-            ? null
-            : ChecksumAlgorithms.Offered
-                .Where(offered => string.Equals(Unhyphenated(offered.Name()), Unhyphenated(text), StringComparison.OrdinalIgnoreCase))
-                .Cast<ChecksumAlgorithm?>()
-                .SingleOrDefault();
-
-        algorithm = named ?? ChecksumAlgorithm.XxHash128;
-        return named is not null;
-    }
-
-    /// <summary>The name a checksum is given on the command line, as other tools print it, in lower case.</summary>
-    private static string Token(ChecksumAlgorithm algorithm) => algorithm.Name().ToLowerInvariant();
-
-    private static string Unhyphenated(string name) => name.Replace("-", string.Empty, StringComparison.Ordinal);
-
-    private static bool TryCache(string? text, out CacheStart cache)
-    {
-        cache = text is "warm" ? CacheStart.Warm : CacheStart.Cold;
-        return text is "cold" or "warm";
-    }
-
-    private static bool TryReadBy(string? text, out LinkRead readBy)
-    {
-        readBy = text is "handle" ? LinkRead.Handle : LinkRead.Name;
-        return text is "name" or "handle";
-    }
-
-    private static bool TryOnOff(string? text, out bool on)
-    {
-        on = text is "on";
-        return text is "on" or "off";
-    }
 
     /// <summary>
     /// <c>C</c>, <c>C:</c> or <c>C:\</c> as the volume's root, or null. The table belongs to a

@@ -100,6 +100,9 @@ public sealed class CondaCacheProvider : CleanupProviderBase
 
     protected override IReadOnlyList<string> ConflictingProcessNames => ["conda", "mamba"];
 
+    /// <summary>The user's conda configuration, which may name private channels and their tokens.</summary>
+    private string ConfigurationFile => Path.Combine(Environment.UserProfile, ".condarc");
+
     /// <summary>
     /// §5.2 as §7.1 needs it read from outside. Conda declares no directory here: its installation
     /// prefix, its environment directories and its package caches all come from
@@ -110,11 +113,17 @@ public sealed class CondaCacheProvider : CleanupProviderBase
     public override IReadOnlyList<ToolRoot> ToolRoots =>
     [
         new ToolRoot(
-            Path.Combine(Environment.UserProfile, ".condarc"),
+            ConfigurationFile,
             "This is your conda configuration, and it may name private channels together with their "
             + "tokens. Deguffer never removes it.",
             static _ => false),
     ];
+
+    /// <summary>
+    /// The configuration file, the one root declared here. The directories conda reports are declared
+    /// only by <see cref="DiscoverToolRootsAsync"/>, which this scope does not bound.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(ConfigurationFile);
 
     /// <summary>
     /// Everything <c>conda info --json</c> reports, which is the whole of what this provider
@@ -351,7 +360,7 @@ public sealed class CondaCacheProvider : CleanupProviderBase
             .Select(directory => (directory, "Your environments — every package they use stays in place.")));
 
         candidates.Add((
-            Path.Combine(Environment.UserProfile, ".condarc"),
+            ConfigurationFile,
             "Your conda configuration, which may name private channels and their tokens."));
 
         candidates.AddRange(packageCaches

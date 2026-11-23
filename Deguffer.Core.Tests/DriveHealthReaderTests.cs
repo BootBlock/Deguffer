@@ -457,5 +457,5 @@ public sealed class DriveHealthReaderTests : IDisposable
     }
 
     private static DriveHealth Report(bool moreWhenElevated) =>
-        new(new DriveKey("k"), "n", DriveVerdict.Good, "s", null, [], [], [], moreWhenElevated);
+        new(new DriveKey("k"), "n", DriveVerdict.Good, "s", null, [], [], null, [], moreWhenElevated);
 }

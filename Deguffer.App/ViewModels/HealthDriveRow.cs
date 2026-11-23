@@ -51,6 +51,16 @@ public sealed partial class HealthDriveRow : ObservableObject
     [ObservableProperty]
     public partial bool HasFindings { get; private set; }
 
+    /// <summary>Whether the installed drive database gives a warning about this drive's family.</summary>
+    [ObservableProperty]
+    public partial bool HasDatabaseWarning { get; private set; }
+
+    [ObservableProperty]
+    public partial string DatabaseWarningHeading { get; private set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string DatabaseWarningMessage { get; private set; } = string.Empty;
+
     /// <summary>Follow the name a fresh listing gives, keeping everything the last reading showed.</summary>
     public void Show(DriveDescription drive) => Title = drive.Name;
 
@@ -70,5 +80,9 @@ public sealed partial class HealthDriveRow : ObservableObject
         LiveList.Show(Attributes, report.Attributes, attribute => attribute.Key);
 
         HasFindings = Findings.Count > 0;
+
+        HasDatabaseWarning = report.DatabaseWarning is not null;
+        DatabaseWarningHeading = report.DatabaseWarning?.Heading ?? string.Empty;
+        DatabaseWarningMessage = report.DatabaseWarning?.Message ?? string.Empty;
     }
 }

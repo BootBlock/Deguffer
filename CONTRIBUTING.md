@@ -183,8 +183,10 @@ Deguffer.Benchmark plan --runs 6 > %TEMP%\deguffer-plan.txt
 - `--read-size KiB`, `--reads-in-flight N`, `--parse-threads N` and `--list-reads-in-flight N` set
   how many KiB of records each read of the file table asks for (4 to 16384), how many reads are
   outstanding at once (1 to 32), how many threads parse what arrives (1 to 64), and how many reads
-  of the attribute lists kept outside the table are outstanding at once (1 to 32). They default to what a scan
-  uses on a drive of unknown kind, and only the table routes take them.
+  of the attribute lists kept outside the table are outstanding at once (1 to 32). `--list-reads after|beside`
+  sets whether those lists are read once the first pass over the table has ended or while it reads,
+  and `--list-batch N` how many lists each batch read beside the pass waits for (1 to 1048576).
+  They default to what a scan uses on a drive of unknown kind, and only the table routes take them.
 - Every result states the values it ran with, so compare two results only where those match, or
   where they are the one thing you changed. The values a scan uses for each kind of drive are in
   `AutoTuning`, beside the measurements they come from.

@@ -166,6 +166,12 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
             : [];
 
     /// <summary>
+    /// The one root itself: <see cref="ResolveRoot"/> reads only the variable and judges it as text,
+    /// so it costs nothing to ask here, and a per-project setting leaves no scope at all.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(ResolveRoot());
+
+    /// <summary>
     /// The browser cache the variable names and the default one, because the variable can be unset
     /// again after a duplicate search has read it. Each whole: a build is any child whose name has a
     /// revision on the end, which no narrower place can name, and the only other thing there is

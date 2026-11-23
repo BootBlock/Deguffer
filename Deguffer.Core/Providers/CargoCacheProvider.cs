@@ -228,6 +228,13 @@ public sealed class CargoCacheProvider : CleanupProviderBase
     ];
 
     /// <summary>
+    /// The default home and whatever <see cref="HomeVariable"/> names, taken as it stands: the checks
+    /// that decline a home read the disk, and a scope that also covers a declined home is only wider.
+    /// </summary>
+    public override ToolRootScope ToolRootScope =>
+        ToolRootScope.Under(Environment.GetEnvironmentVariable(HomeVariable), DefaultHome);
+
+    /// <summary>
     /// A home the variable names but this declines is still where Cargo writes its tokens and installs
     /// its binaries, so Explore refuses those there and nothing else: refusing everything Cargo does not
     /// recognise would read a whole drive or the profile as Cargo's. Declared here rather than in

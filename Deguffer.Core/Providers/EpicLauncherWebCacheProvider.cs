@@ -220,6 +220,12 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
         ]);
 
     /// <summary>
+    /// Every root above is the launcher's <c>Saved</c> folder or a web cache folder listed inside it,
+    /// so the folder bounds the listing without taking it.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(EpicLauncherSaved.PathIn(Environment));
+
+    /// <summary>
     /// Each cache this row recognises, at each of its levels, in every one of the store's browser
     /// folders the same look the plan reads finds, whether or not one is there today. The sign-in
     /// cookies and the store's saved data beside them are never reached, so neither the browser folder
@@ -321,7 +327,7 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
         var spared = 0;
 
         // Every cache is walked, and its survivors asked, before either is awaited: the measurement needs
-        // only the targets, and the first survivors question in a pass reads every row's declarations.
+        // only the targets, and a survivors question reads every row that can declare its folder.
         List<(string Cache, LevelWalk Walk, Task<IReadOnlyList<(string Path, string Reason)>> Sparing)> walks = [];
 
         foreach (var cache in caches)

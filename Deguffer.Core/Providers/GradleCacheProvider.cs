@@ -144,6 +144,14 @@ public sealed class GradleCacheProvider : CleanupProviderBase
     ];
 
     /// <summary>
+    /// The folder the variable names, as it is set, and the default home. The variable is read raw
+    /// rather than through <see cref="ResolveHome"/>, which probes the disk to decline a folder: a
+    /// declined one is never a root, so naming it only widens the scope.
+    /// </summary>
+    public override ToolRootScope ToolRootScope =>
+        ToolRootScope.Under(ConfiguredFolder.Read(VariableReading.Current, HomeVariable, Environment), DefaultHome);
+
+    /// <summary>
     /// A home the variable names but this declines is still where Gradle writes its configuration, so
     /// Explore refuses that configuration there and nothing else: refusing everything but
     /// <c>caches</c> and <c>wrapper</c> would read a whole drive or the user's Documents as Gradle's.

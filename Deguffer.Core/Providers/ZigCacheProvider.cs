@@ -175,6 +175,13 @@ public sealed class ZigCacheProvider : CleanupProviderBase
             : [];
 
     /// <summary>
+    /// The default cache and whatever the variable holds, unjudged: judging a value asks the disk, and a
+    /// value this declines only drops the root.
+    /// </summary>
+    public override ToolRootScope ToolRootScope =>
+        ToolRootScope.Under(DefaultRoot, Environment.GetEnvironmentVariable(CacheVariable));
+
+    /// <summary>
     /// The disposable children of the cache in use and of the default cache, because the variable can
     /// be unset again after a duplicate search has read it. Never <c>p</c>, where fetched packages may
     /// be the only copy, and never a folder the variable names that this declines.

@@ -1,6 +1,7 @@
 using System.Globalization;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Scanning.Media;
+using Deguffer.Core.Scanning.Mft;
 
 namespace Deguffer.Core.Scanning;
 
@@ -26,7 +27,8 @@ public static class ScanTuningText
     /// What a scan of <paramref name="drive"/> runs with under <paramref name="preferences"/>, each
     /// value marked where Auto chose it, such as
     /// <c>C: (NVMe SSD): 16 threads (Auto), 16 KiB listing buffer (Auto), 1,024 KiB table reads (Auto),
-    /// 8 in flight (Auto), 32 list reads in flight (Auto), parsed on 4 threads (Auto)</c>.
+    /// 8 in flight (Auto), 32 list reads in flight (Auto), lists read with the table (Auto), parsed on
+    /// 4 threads (Auto)</c>. When the lists are read is always Auto's.
     /// </summary>
     public static string Describe(DriveKind drive, ScanPreferences preferences)
     {
@@ -41,8 +43,13 @@ public static class ScanTuningText
             $"{tuning.Table.ReadBytes / 1024:N0} KiB table reads{AutoMark(chosen.TableReadKiB)}, " +
             $"{tuning.Table.ReadsInFlight:N0} in flight{AutoMark(chosen.TableReadsInFlight)}, " +
             $"{tuning.Table.ListReadsInFlight:N0} list reads in flight{AutoMark(chosen.TableListReadsInFlight)}, " +
+            $"{ListReads(tuning.Table)}{AutoMark(null)}, " +
             $"parsed on {tuning.Table.ParseThreads:N0} threads{AutoMark(preferences.TableParseThreads)}");
     }
+
+    private static string ListReads(TableTuning table) => table.ListReads is AttributeListReads.BesideFirstPass
+        ? "lists read with the table"
+        : "lists read after the table";
 
     private static string AutoMark(int? chosen) => chosen is null ? " (Auto)" : string.Empty;
 }

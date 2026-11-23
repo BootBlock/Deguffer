@@ -97,6 +97,13 @@ public sealed class CapCutSupersededBuildProvider : CleanupProviderBase
         }),
     ];
 
+    /// <summary>
+    /// Each edition's <c>Apps</c> folder, named rather than looked for: an installation found is always
+    /// one of them, and the scope must not take the look.
+    /// </summary>
+    public override ToolRootScope ToolRootScope =>
+        ToolRootScope.Under(CapCutLayout.Editions.Select(edition => CapCutLayout.AppsIn(Environment, edition)));
+
     /// <summary>The superseded builds of an editor that is running, each as a root recognising no child.</summary>
     public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
     {

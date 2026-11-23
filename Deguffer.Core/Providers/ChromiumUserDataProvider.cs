@@ -14,8 +14,9 @@ namespace Deguffer.Core.Providers;
 /// planned and pre-selected under the row's. The engine's caches are Tier 1 and a service worker's
 /// offline storage is Tier 2 (see <see cref="ChromiumServiceWorkerStorageProvider"/>), so each is a
 /// subclass with its own table, and this class holds everything the two have in common: which folders
-/// are Chromium's, which files in them must survive, when a folder is in use, and how a table is
-/// walked. A third table is a third subclass, never a tier per child.</para>
+/// are Chromium's, which files in them must survive (named in <see cref="ChromiumFolderSurvivors"/>),
+/// when a folder is in use, and how a table is walked. A third table is a third subclass, never a
+/// tier per child.</para>
 ///
 /// <para><b>Each table is an exact allow-list, and that is the whole safety argument.</b> What sits
 /// beside the named directories is Tier 3 and looks identical: <c>Local Storage</c>,
@@ -49,42 +50,6 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 public abstract class ChromiumUserDataProvider : CleanupProviderBase
 {
-    /// <summary>
-    /// Why the file that identified the user-data folder must survive. §5.6 asserts it by name
-    /// because a <see cref="DisposableChildSet"/> only ever classifies a directory, so a file beside
-    /// the caches is never enumerated, never classified, and never asserted unless it is named —
-    /// the lesson NVIDIA's <c>accounts</c> taught, in a folder with a great deal more to lose. Which
-    /// file that is belongs to the folder's <see cref="ChromiumLayout"/>.
-    /// </summary>
-    private const string IdentifyingFileReason =
-        "The application's own settings, and the key that decrypts its saved cookies and passwords.";
-
-    /// <summary>
-    /// Why a framework host's partition keeps its own copy of the identifying file. It is what
-    /// made the directory a profile, and it holds that partition's settings.
-    /// </summary>
-    private const string PartitionFileReason = "The settings of this part of the application's browser.";
-
-    /// <summary>
-    /// The same, per profile: the credential surface, named in full rather than sampled. Anything
-    /// less makes the §5.6 evidence weaker than the claim it supports.
-    ///
-    /// <c>Cookies</c> is listed at both paths because Chromium moved it under <c>Network</c> and
-    /// older profiles still keep it at the top level. Whichever is absent records itself as nothing
-    /// to preserve rather than as a pass.
-    /// </summary>
-    private static readonly (string Name, string Reason)[] ProtectedProfileFiles =
-    [
-        ("Cookies", "Sign-in cookies. Removing them signs the user out of everything."),
-        (@"Network\Cookies", "Sign-in cookies. Removing them signs the user out of everything."),
-        ("Login Data", "Saved usernames and passwords."),
-        ("Web Data", "Saved addresses and payment cards."),
-    ];
-
-    /// <summary>Why a folder a running program is using is asserted to survive whole.</summary>
-    private const string InUseReason =
-        "A running program is using this folder, so nothing inside it is removed.";
-
     private readonly ChromiumUserDataDiscovery _discovery;
     private readonly ILiveTreeInspector _liveTrees;
     private readonly RowDeclarations _declarations;
@@ -191,6 +156,12 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
                    + "passwords and payment cards sit beside it.",
                    level.Children),
         ]);
+
+    /// <summary>
+    /// Every root above is a level of a profile of a folder the discovery found, and it finds folders
+    /// only under the application-data roots it walks and the tiers its declared hosts sit in.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(_discovery.Bounds);
 
     /// <summary>
     /// Each application-data root the discovery did not look in, refused whole: what is inside it was
@@ -311,7 +282,7 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
         var withheld = 0;
 
         // Every profile is walked, and its survivors asked, before either is awaited: the measurement
-        // needs only the targets, and the first survivors question in a pass reads every row's declarations.
+        // needs only the targets, and a survivors question reads every row that can declare its folder.
         var walks = new Dictionary<string, (LevelWalk Walk, Task<IReadOnlyList<(string Path, string Reason)>> Sparing)>(
             StringComparer.OrdinalIgnoreCase);
 
@@ -342,7 +313,7 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
 
             if (live.IsLive(application.Path))
             {
-                survivors.Add((application.Path, InUseReason));
+                survivors.Add((application.Path, ChromiumFolderSurvivors.InUseReason));
                 continue;
             }
 
@@ -359,26 +330,14 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
                 unreadable = true;
             }
 
-            survivors.Add((
-                application.Path,
-                $"The '{application.Name}' data folder itself must survive — only recognised cache directories inside it are removed."));
-            survivors.Add((Path.Combine(application.Path, application.Layout.IdentifyingFile), IdentifyingFileReason));
+            survivors.AddRange(ChromiumFolderSurvivors.OfFolder(application));
 
             var spared = 0;
             var emptiedAContainer = false;
 
             foreach (var profile in application.Profiles)
             {
-                survivors.Add((
-                    profile,
-                    "The profile directory itself must survive — only recognised cache directories inside it are removed."));
-                survivors.AddRange(ProtectedProfileFiles.Select(f => (Path.Combine(profile, f.Name), f.Reason)));
-
-                if (application.Layout.Profiles is ChromiumProfileRule.Marked
-                    && !profile.Equals(application.Path, StringComparison.OrdinalIgnoreCase))
-                {
-                    survivors.Add((Path.Combine(profile, application.Layout.IdentifyingFile), PartitionFileReason));
-                }
+                survivors.AddRange(ChromiumFolderSurvivors.OfProfile(application, profile));
 
                 var (walk, sparing) = walks[profile];
                 var spares = await sparing.ConfigureAwait(false);

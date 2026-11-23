@@ -127,6 +127,9 @@ public sealed class PuppeteerBrowsersProvider : CleanupProviderBase
             ]
             : [];
 
+    /// <summary>Every root above is the cache or a browser folder inside it, and finding the cache reads only the variable.</summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(ResolveRoot());
+
     /// <summary>
     /// Each browser folder, where the builds are, in the cache the variable names and in the default
     /// cache, because the variable can be unset again after a duplicate search has read it. Never the

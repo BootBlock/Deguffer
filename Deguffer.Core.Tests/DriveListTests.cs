@@ -395,7 +395,7 @@ public sealed class DriveListTests
         var health = new HealthByVolume();
         var drive = new DriveDescription(new DriveKey("a"), 0, "System SSD");
         health.Record(new DriveVolumes(drive.Key, "C:", [@"C:\"]));
-        health.Record(new DriveHealth(drive.Key, drive.Name, DriveVerdict.Failing, "summary", null, [], [], [], false));
+        health.Record(new DriveHealth(drive.Key, drive.Name, DriveVerdict.Failing, "summary", null, [], [], null, [], false));
 
         var drives = new DriveList(new FakeVolumeInventory().With(@"C:\").With(@"D:\"), new ManualTimeProvider(), NetworkDrives.Offered, health);
         await Refresh(drives);
@@ -420,14 +420,14 @@ public sealed class DriveListTests
         var changes = WatchRow(row);
 
         health.Record(new DriveVolumes(drive.Key, "C:", [@"C:\"]));
-        health.Record(new DriveHealth(drive.Key, drive.Name, DriveVerdict.Watch, "summary", null, [], [], [], false));
+        health.Record(new DriveHealth(drive.Key, drive.Name, DriveVerdict.Watch, "summary", null, [], [], null, [], false));
 
         Assert.Same(row, drives.Entries[0]);
         Assert.True(row.HasHealthConcern);
         Assert.Contains(nameof(DriveEntry.HasHealthConcern), changes);
         Assert.Contains(nameof(DriveEntry.Description), changes);
 
-        health.Record(new DriveHealth(drive.Key, drive.Name, DriveVerdict.Good, "summary", null, [], [], [], false));
+        health.Record(new DriveHealth(drive.Key, drive.Name, DriveVerdict.Good, "summary", null, [], [], null, [], false));
 
         Assert.False(row.HasHealthConcern);
         Assert.Null(row.Health);

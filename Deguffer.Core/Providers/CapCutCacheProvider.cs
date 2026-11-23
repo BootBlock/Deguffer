@@ -75,6 +75,10 @@ public sealed class CapCutCacheProvider : CleanupProviderBase
     public override IReadOnlyList<ToolRoot> ToolRoots =>
         [.. CapCutLayout.Editions.SelectMany(edition => CapCutLayout.CacheRoots(Environment, edition))];
 
+    /// <summary>Each edition's own folder, which holds the three levels declared for it. Nothing moves them.</summary>
+    public override ToolRootScope ToolRootScope =>
+        ToolRootScope.Under(CapCutLayout.Editions.Select(edition => CapCutLayout.FolderIn(Environment, edition)));
+
     /// <summary>
     /// While an editor runs, each cache folder this provider would remove, as a root recognising
     /// nothing. A declaration that ages, which is why it is here rather than in <see cref="ToolRoots"/>.
