@@ -1190,6 +1190,8 @@ public sealed class CleanupPlannerTests
 
         public IReadOnlyList<ToolRoot> ToolRoots => [];
 
+        public ToolRootScope ToolRootScope => ToolRootScope.None;
+
         public Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<ToolRoot>>([]);
 

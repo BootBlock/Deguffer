@@ -140,6 +140,9 @@ public sealed partial class LmStudioRuntimeProvider : CleanupProviderBase
             static _ => false),
     ];
 
+    /// <summary>LM Studio's own folder, which holds the runtimes too, and which no variable moves.</summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(Root);
+
     /// <summary>
     /// The runtimes folder, whole: LM Studio's remove command takes a runtime's folder and also the
     /// shared libraries in <c>vendor</c> that only that runtime used. Never LM Studio's own folder

@@ -107,6 +107,12 @@ public sealed class ComposerCacheProvider : CleanupProviderBase
         ToolRoot.Of(DefaultCache, CacheReason, CacheParts),
     ];
 
+    /// <summary>
+    /// The two default folders, which are every root declared here. The folders Composer reports are
+    /// declared only by <see cref="DiscoverToolRootsAsync"/>, which this scope does not bound.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(DefaultHome, DefaultCache);
+
     public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
     {
         if (Environment.FindExecutable("composer") is not { } composer

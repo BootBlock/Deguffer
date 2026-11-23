@@ -140,6 +140,12 @@ public sealed partial class SquirrelDiscovery
     public string? StagingRoot { get; }
 
     /// <summary>
+    /// The folder every installation <see cref="Look"/> finds sits directly under, named without
+    /// touching the disk.
+    /// </summary>
+    public string InstallationsRoot => _environment.LocalAppData;
+
+    /// <summary>
     /// One look at <c>%LOCALAPPDATA%</c>, memoised for the life of a planning pass (G4). Two
     /// providers, their presence probes and their §5.2 declarations all ask this same question of
     /// the same directory, and this is the one sweep behind all of them.
@@ -170,7 +176,7 @@ public sealed partial class SquirrelDiscovery
     /// </summary>
     private SquirrelSweep Find(CancellationToken ct)
     {
-        var scan = ChildDirectories.Under(_environment.LocalAppData);
+        var scan = ChildDirectories.Under(InstallationsRoot);
 
         if (scan.Unreadable)
         {

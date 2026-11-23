@@ -96,6 +96,15 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
     private const string NotACacheReason =
         "Not one of NuGet's caches, so NuGet's own command leaves it alone.";
 
+    /// <summary>NuGet's folder in the profile, which holds the packages folder beside its configuration.</summary>
+    private string ProfileFolder => Path.Combine(Environment.UserProfile, ".nuget");
+
+    /// <summary>NuGet's folder in the local application data, which holds its HTTP and plugin caches.</summary>
+    private string LocalFolder => Path.Combine(Environment.LocalAppData, "NuGet");
+
+    /// <summary>The user's NuGet configuration, which may hold credentials for private feeds.</summary>
+    private string UserConfiguration => Path.Combine(Environment.RoamingAppData, "NuGet", "NuGet.Config");
+
     /// <summary>
     /// §5.2 as §7.1 needs it read from outside. <c>.nuget</c> mixes cache with configuration:
     /// <c>NuGet.Config</c> and the credential-provider plugins under <c>plugins</c> sit beside the
@@ -110,24 +119,30 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
     public override IReadOnlyList<ToolRoot> ToolRoots =>
     [
         ToolRoot.Folders(
-            Path.Combine(Environment.UserProfile, ".nuget"),
+            ProfileFolder,
             "This is NuGet's own folder. Deguffer clears the downloaded packages inside it and "
             + "nothing else, because the NuGet.Config beside them may hold credentials for your "
             + "private feeds, and the plugins beside them sign in to those feeds.",
             ProfileCacheNames.Contains),
 
         ToolRoot.Folders(
-            Path.Combine(Environment.LocalAppData, "NuGet"),
+            LocalFolder,
             "This is NuGet's own folder. Deguffer clears the HTTP and plugin caches inside it and "
             + "nothing else, because nothing else in it is one of NuGet's caches.",
             LocalCacheNames.Contains),
 
         new ToolRoot(
-            Path.Combine(Environment.RoamingAppData, "NuGet", "NuGet.Config"),
+            UserConfiguration,
             "This is your NuGet configuration, and it may hold credentials for your private feeds. "
             + "Deguffer never removes it.",
             static _ => false),
     ];
+
+    /// <summary>
+    /// The three roots themselves, all at documented defaults. The locals NuGet reports are never
+    /// roots, so its answer is not needed to bound them.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(ProfileFolder, LocalFolder, UserConfiguration);
 
     /// <summary>
     /// Every local <c>dotnet nuget locals all --clear</c> empties: each one <c>--list</c> reports, and
@@ -303,12 +318,12 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
     /// </summary>
     private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(IReadOnlyList<string> locals, CancellationToken ct)
     {
-        var profile = Path.Combine(Environment.UserProfile, ".nuget");
-        var local = Path.Combine(Environment.LocalAppData, "NuGet");
+        var profile = ProfileFolder;
+        var local = LocalFolder;
 
         return ProtectAsync(
         [
-            (Path.Combine(Environment.RoamingAppData, "NuGet", "NuGet.Config"),
+            (UserConfiguration,
                 "User NuGet configuration, which may hold private feed credentials."),
             (Path.Combine(profile, "NuGet.Config"),
                 "The alternative NuGet.Config location — §5.2 says probe both."),
@@ -375,9 +390,9 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
     /// <summary>Documented defaults, used only when NuGet declines to tell us.</summary>
     private IReadOnlyList<string> DefaultLocals() =>
     [
-        Path.Combine(Environment.UserProfile, ".nuget", "packages"),
-        Path.Combine(Environment.LocalAppData, "NuGet", "v3-cache"),
-        Path.Combine(Environment.LocalAppData, "NuGet", "plugins-cache"),
+        Path.Combine(ProfileFolder, "packages"),
+        Path.Combine(LocalFolder, "v3-cache"),
+        Path.Combine(LocalFolder, "plugins-cache"),
         Path.Combine(Environment.TempPath, "NuGetScratch"),
     ];
 }

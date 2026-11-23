@@ -112,6 +112,12 @@ public sealed class UvCacheProvider : CleanupProviderBase
     ];
 
     /// <summary>
+    /// uv's two profile folders, the two roots above. The folders uv reports are declared only by
+    /// <see cref="DiscoverToolRootsAsync"/>, which this scope does not bound.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(LocalRoot, RoamingRoot);
+
+    /// <summary>
     /// The tool and interpreter folders uv reports, where <c>UV_TOOL_DIR</c> or
     /// <c>UV_PYTHON_INSTALL_DIR</c> can have moved them out of <see cref="RoamingRoot"/>.
     /// </summary>

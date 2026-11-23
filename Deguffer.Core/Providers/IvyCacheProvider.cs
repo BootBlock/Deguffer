@@ -99,6 +99,9 @@ public sealed class IvyCacheProvider : CleanupProviderBase
 
     public override IReadOnlyList<ToolRoot> ToolRoots => [ToolRoot.Of(Home, HomeReason, Children)];
 
+    /// <summary>The home, which is the one root: this row reads no setting that moves it.</summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(Home);
+
     public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<CleanedPlace>>(
             [.. Children.DisposableNames.Select(child => CleanedPlace.Whole(Path.Combine(Home, child)))]);

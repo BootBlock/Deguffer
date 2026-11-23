@@ -128,6 +128,12 @@ public sealed class YarnBerryCacheProvider : CleanupProviderBase
     /// <summary>§5.2 as §7.1 reads it: the global folder recognises its cache alone, and the cache its archives alone.</summary>
     public override IReadOnlyList<ToolRoot> ToolRoots => RootsOf(DefaultGlobalFolder);
 
+    /// <summary>
+    /// The default global folder, which holds both roots above. A folder Berry reports is declared only
+    /// by <see cref="DiscoverToolRootsAsync"/>, which this scope does not bound.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(DefaultGlobalFolder);
+
     /// <summary>The global folder Berry reports, where it is not the default.</summary>
     public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
         ReportedFolder(await RememberedAsync(ct).ConfigureAwait(false)) is { Accepted: { } folder } ? RootsOf(folder) : [];

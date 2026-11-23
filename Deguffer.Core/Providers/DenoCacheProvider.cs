@@ -192,6 +192,16 @@ public sealed class DenoCacheProvider : CleanupProviderBase
             : [];
 
     /// <summary>
+    /// The default folder and what each variable names, taken as it stands: the checks that decline a
+    /// folder read the disk. The cache home is covered whole rather than its <c>deno</c> folder, which
+    /// is only wider.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(
+        Environment.GetEnvironmentVariable(DirectoryVariable),
+        Environment.GetEnvironmentVariable(XdgCacheVariable),
+        DefaultRoot);
+
+    /// <summary>
     /// A folder a variable names but this declines is still where Deno keeps what its programs saved
     /// and the REPL history, so Explore refuses those there and nothing else. Declared here rather
     /// than in <see cref="ToolRoots"/> because a declaration made here only ever adds a refusal. See

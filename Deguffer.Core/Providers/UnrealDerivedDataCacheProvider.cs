@@ -147,6 +147,16 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
     ];
 
     /// <summary>
+    /// Unreal's own folder and the folder each default Zen store is placed in. A folder a setting names
+    /// is declared nowhere above, so neither a variable nor the registry moves this.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(
+    [
+        UnrealCacheLocations.EngineRoot(Environment),
+        .. UnrealCacheLocations.DefaultStores(Environment, _system).Select(store => store.Root),
+    ]);
+
+    /// <summary>
     /// Every cache that is there and may hold a live store, as a root recognising nothing, while a
     /// Zen server runs. A declaration that ages, which is why it is here rather than in
     /// <see cref="ToolRoots"/>.
@@ -310,9 +320,9 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
                 [
                     (Path.Combine("Common", "Zen", "Install"),
                         "The Zen server Unreal Engine 5.4 and later start with the editor."),
-                    .. EngineVersionFolders(engine),
-                    .. Neighbours(engine, "Common", "DerivedDataCache", "Zen"),
-                    .. Neighbours(engine, Path.Combine("Common", "Zen"), "Data", "Install"),
+                    .. UnrealCacheNeighbours.EngineVersionFolders(engine),
+                    .. UnrealCacheNeighbours.Of(engine, "Common", "DerivedDataCache", "Zen"),
+                    .. UnrealCacheNeighbours.Of(engine, Path.Combine("Common", "Zen"), "Data", "Install"),
                 ]),
             new DeclaredRoot(
                 programData,
@@ -327,7 +337,7 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
                     (Path.Combine("UnrealEngineLauncher", "LauncherInstalled.dat"),
                         "The machine's record of where its Epic games and engines are installed."),
                     ("EpicOnlineServices", "The services Epic games sign in and play online through."),
-                    .. Neighbours(programData, "Zen", "Data", "Install"),
+                    .. UnrealCacheNeighbours.Of(programData, "Zen", "Data", "Install"),
                 ]),
             .. stores
                 .Where(store => store.IsConfigured)
@@ -413,60 +423,6 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
         {
             return false;
         }
-    }
-
-    /// <summary>
-    /// Every engine version's folder beside <c>Common</c>, and the settings inside it, for §5.6.
-    ///
-    /// <para>Listed, which a declared root otherwise never is, because the version names are the
-    /// user's installed engines and cannot be written down in advance. The listing names survivors
-    /// and nothing else: no entry found here can become a target.</para>
-    /// </summary>
-    private static IEnumerable<(string RelativePath, string Reason)> EngineVersionFolders(string engine)
-    {
-        var children = ChildDirectories.Under(engine);
-
-        return children.Directories.Concat(children.Links)
-            .Select(child => child.Name)
-            .Where(name => !name.Equals("Common", StringComparison.OrdinalIgnoreCase))
-            .SelectMany(name => new[]
-            {
-                (name, $"Unreal Engine {name}'s own folder, with its settings and crash reports."),
-                (Path.Combine(name, "Saved", "Config"), $"Your editor settings for Unreal Engine {name}."),
-            });
-    }
-
-    /// <summary>
-    /// Every entry in <paramref name="folder"/> other than those <paramref name="named"/> elsewhere,
-    /// for §5.6: the unrecognised neighbours of a cache, which an over-broad rule would take with it.
-    /// Listed for the reason <see cref="EngineVersionFolders"/> is, and never targeted. A folder that
-    /// is not there, or will not be listed, names nothing.
-    /// </summary>
-    private static IEnumerable<(string RelativePath, string Reason)> Neighbours(
-        string root,
-        string folder,
-        params string[] named)
-    {
-        List<string> entries;
-
-        try
-        {
-            entries =
-            [
-                .. new DirectoryInfo(LongPath.Extended(Path.Combine(root, folder)))
-                    .EnumerateFileSystemInfos()
-                    .Select(entry => entry.Name)
-                    .Where(name => !named.Contains(name, StringComparer.OrdinalIgnoreCase)),
-            ];
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
-        {
-            return [];
-        }
-
-        return entries.Select(name => (
-            Path.Combine(folder, name),
-            $"'{name}' sits beside Unreal's cache and is not recognised as part of it, so it is left alone."));
     }
 
     private bool ZenServerIsRunning() => Inspector.FindRunning(ZenServerNames).Count > 0;

@@ -135,6 +135,13 @@ public sealed class SccacheProvider : CleanupProviderBase
         .. Roots().Select(root => ToolRoot.Of(root, ToolRootReason, Children)),
     ];
 
+    /// <summary>
+    /// The default cache and whatever the variable holds, unjudged: judging a value asks the disk, and a
+    /// value this declines only drops a root.
+    /// </summary>
+    public override ToolRootScope ToolRootScope =>
+        ToolRootScope.Under(DefaultRoot, Environment.GetEnvironmentVariable(CacheVariable));
+
     /// <summary>The recognised children of the cache in use and of the default cache.</summary>
     public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<CleanedPlace>>(

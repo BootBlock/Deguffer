@@ -180,6 +180,12 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
     ];
 
     /// <summary>
+    /// The two profile directories, which are the roots above. The clone and a moved cache are declared
+    /// only by <see cref="DiscoverToolRootsAsync"/>, which this scope does not bound.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(_discovery.ProfileDirectories);
+
+    /// <summary>
     /// The clone, and the directory holding any cache a variable has moved out of the profile. These
     /// are the paths <see cref="Declare"/> gives §5.6 and <see cref="ToolRoots"/> cannot: finding
     /// them reads <c>VCPKG_ROOT</c>, <c>VCPKG_DEFAULT_BINARY_CACHE</c> and <c>VCPKG_DOWNLOADS</c>,
@@ -281,7 +287,7 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
         if (scan.FoundNothing)
         {
             var why = refused.Count > 0 ? refused[0]
-                : located.UnmarkedRoot is { } nothingFound ? UnmarkedRootSentence(nothingFound)
+                : located.UnmarkedRoot is { } nothingFound ? VcpkgPlanNotes.UnmarkedRoot(nothingFound)
                 : null;
 
             if (located is { UnreachedRoot: null, UnreadIntegrationFile: null })
@@ -290,7 +296,7 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
             }
 
             // Never "cached nothing": the clone may hold the most of anything vcpkg keeps.
-            var unreached = UnreachedNotes(located).ToList();
+            var unreached = VcpkgPlanNotes.Unreached(located).ToList();
 
             if (why is not null)
             {
@@ -315,10 +321,10 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
             // sends them looking for a mistake they did not make.
             if (located.UnmarkedRoot is { } declined)
             {
-                notes.Add(new PlanNote(PlanNoteSeverity.Information, UnmarkedRootSentence(declined)));
+                notes.Add(new PlanNote(PlanNoteSeverity.Information, VcpkgPlanNotes.UnmarkedRoot(declined)));
             }
 
-            notes.AddRange(UnreachedNotes(located));
+            notes.AddRange(VcpkgPlanNotes.Unreached(located));
 
             if (located is { UnmarkedRoot: null, UnreachedRoot: null, UnreadIntegrationFile: null })
             {
@@ -369,59 +375,6 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
 
     private const string DeclinedReason =
         "A vcpkg variable names this folder as a cache, and it is not one Deguffer removes, so it must survive.";
-
-    /// <summary>
-    /// What the user is told when a variable named vcpkg's own directory, or something in it, rather
-    /// than a cache.
-    /// </summary>
-    private static string RefusedSentence(string path) =>
-        $"Leaving '{path}' alone: that is vcpkg's own directory, or something inside it Deguffer "
-        + "never removes, rather than a cache. A variable can say where a cache is. It cannot ask "
-        + "for the directory holding the tool.";
-
-    /// <summary>The warnings for the clone and the integration file, where either could not be read.</summary>
-    private static IEnumerable<PlanNote> UnreachedNotes(VcpkgLocations located)
-    {
-        if (located.UnreachedRoot is { } unreached)
-        {
-            yield return UnreachedRootNote(unreached);
-        }
-
-        if (located.UnreadIntegrationFile is { } file)
-        {
-            yield return UnreadIntegrationFileNote(file);
-        }
-    }
-
-    /// <summary>What the user is told when the integration file could not be read.</summary>
-    private static PlanNote UnreadIntegrationFileNote(UnreadFile file) => new(
-        PlanNoteSeverity.Warning,
-        file.Opening("vcpkg's record of the clone it integrated with Visual Studio")
-        + ", so that clone may not have been found. The buildtrees, downloads and packages directories "
-        + "of a clone that was not found were neither cleared nor ruled out.");
-
-    /// <summary>
-    /// What the user is told when something named a clone that Windows would not describe. It does
-    /// not say the marker is missing, which nothing established, and it gives no advice to set a
-    /// variable, which may be exactly what named it.
-    /// </summary>
-    private static PlanNote UnreachedRootNote(string unreached) => new(
-        PlanNoteSeverity.Warning,
-        $"Something on this machine names '{unreached}' as vcpkg's own directory, and Windows would not "
-        + "say what is there, so Deguffer could not check it or look inside it. A link Windows will not "
-        + "follow, a folder this account may not read and a drive that is not connected all do that. The "
-        + "buildtrees, downloads and packages directories of a vcpkg clone were neither cleared nor "
-        + "ruled out.");
-
-    /// <summary>
-    /// What the user is told when something named a clone and Deguffer declined it. It names the
-    /// directory and the marker, because "could not find it" would be untrue and the advice that
-    /// sentence goes on to give has already been taken.
-    /// </summary>
-    private static string UnmarkedRootSentence(string declined) =>
-        $"Deguffer found {declined} but it does not hold vcpkg's own '{VcpkgDiscovery.RootMarker}' "
-        + "marker, so it did not look inside it. The buildtrees, downloads and packages directories of "
-        + "a vcpkg clone are not covered here.";
 
     /// <summary>
     /// The declarations this machine's layout produces: up to three roots, because the binary cache,
@@ -532,8 +485,8 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
             // cache fails the evidence too, and "nothing in it is a package" would send the user
             // looking in the wrong place.
             refused?.Add(IsToolsOwn(path, located)
-                ? RefusedSentence(path)
-                : located.Declined.FirstOrDefault(d => d.Path == path).Sentence ?? RefusedSentence(path));
+                ? VcpkgPlanNotes.Refused(path)
+                : located.Declined.FirstOrDefault(d => d.Path == path).Sentence ?? VcpkgPlanNotes.Refused(path));
 
             return null;
         }

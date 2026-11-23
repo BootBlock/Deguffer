@@ -93,6 +93,12 @@ public sealed class UnityGiCacheProvider : CleanupProviderBase
     public override IReadOnlyList<ToolRoot> ToolRoots => UnityGiCacheLayout.Roots(Environment);
 
     /// <summary>
+    /// Unity's folder, which holds both roots above. A moved cache is declared only by
+    /// <see cref="DiscoverToolRootsAsync"/>, and only while an Editor runs.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(UnityGiCacheLayout.UnityFolderIn(Environment));
+
+    /// <summary>
     /// While an Editor runs, the default cache and the folder Unity's settings move it to, each as a root
     /// recognising nothing. A declaration that ages, which is why it is here rather than in
     /// <see cref="ToolRoots"/>. The moved folder is otherwise the user's own, and declared nowhere.

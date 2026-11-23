@@ -28,9 +28,14 @@ internal readonly record struct HuggingFaceLocations(string? Home, string? Hub)
     /// <summary>Read for <see cref="HomeVariable"/>'s default, which is its <c>huggingface</c> folder.</summary>
     public const string XdgCacheVariable = "XDG_CACHE_HOME";
 
+    /// <summary>The folder <c>huggingface_hub</c> keeps in the profile's and in <see cref="XdgCacheVariable"/>'s cache folder.</summary>
+    private const string FolderName = "huggingface";
+
+    private static readonly VariableReading[] Readings = [VariableReading.Tool, VariableReading.Current];
+
     /// <summary>Where <c>huggingface_hub</c> keeps everything when no variable moves it.</summary>
     public static string DefaultHome(IUserEnvironment environment) =>
-        Path.Combine(environment.UserProfile, ".cache", "huggingface");
+        Path.Combine(environment.UserProfile, ".cache", FolderName);
 
     /// <summary>Where the hub cache is when no variable moves it.</summary>
     public static string DefaultHub(IUserEnvironment environment) => Path.Combine(DefaultHome(environment), "hub");
@@ -47,7 +52,7 @@ internal readonly record struct HuggingFaceLocations(string? Home, string? Hub)
 
         var home = IsSet(HomeVariable)
             ? ConfiguredFolder.FromVariable(reading, HomeVariable, defaultHome, environment, machine, volumes).Folder
-            : ConfiguredFolder.FromVariable(reading, XdgCacheVariable, defaultHome, environment, machine, volumes, within: "huggingface").Folder;
+            : ConfiguredFolder.FromVariable(reading, XdgCacheVariable, defaultHome, environment, machine, volumes, within: FolderName).Folder;
 
         var hub = IsSet(HubCacheVariable)
             ? ConfiguredFolder.FromVariable(reading, HubCacheVariable, defaultHub, environment, machine, volumes).Folder
@@ -58,5 +63,27 @@ internal readonly record struct HuggingFaceLocations(string? Home, string? Hub)
         return new HuggingFaceLocations(home, hub);
 
         bool IsSet(string variable) => !string.IsNullOrWhiteSpace(ConfiguredFolder.Read(reading, variable, environment));
+    }
+
+    /// <summary>
+    /// Folders that hold every one <see cref="Resolve"/> can name through either reading. Each value is
+    /// read raw, because <see cref="ConfiguredFolder"/> probes the disk to decline one, and a declined
+    /// value names no folder, so naming it here only widens what holds them.
+    /// </summary>
+    public static IEnumerable<string?> Bounds(IUserEnvironment environment)
+    {
+        yield return DefaultHome(environment);
+
+        foreach (var reading in Readings)
+        {
+            yield return ConfiguredFolder.Read(reading, HomeVariable, environment);
+            yield return ConfiguredFolder.Read(reading, HubCacheVariable, environment);
+            yield return ConfiguredFolder.Read(reading, LegacyHubCacheVariable, environment);
+
+            if (LongPath.Configured(ConfiguredFolder.Read(reading, XdgCacheVariable, environment)) is { } xdg)
+            {
+                yield return Path.Combine(xdg, FolderName);
+            }
+        }
     }
 }

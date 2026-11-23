@@ -30,6 +30,10 @@ internal static class PackageContainers
     /// <summary>The folder inside a package that an AppContainer is given as its local application data.</summary>
     public const string ContainerFolderName = "AC";
 
+    /// <summary>Where <see cref="Find"/> looks: every folder it returns lies under this one.</summary>
+    public static string PackagesFolder(IUserEnvironment environment) =>
+        Path.Combine(environment.LocalAppData, PackagesFolderName);
+
     /// <summary>
     /// <paramref name="folderName"/> inside each package's container under
     /// <paramref name="environment"/>'s local application data.
@@ -44,7 +48,7 @@ internal static class PackageContainers
         IReadOnlyList<string> recognised,
         CancellationToken ct)
     {
-        var packages = Path.Combine(environment.LocalAppData, PackagesFolderName);
+        var packages = PackagesFolder(environment);
 
         switch (LongPath.ProbeDirectory(packages, out var packagesIsALink))
         {

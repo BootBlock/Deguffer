@@ -156,6 +156,15 @@ public sealed class VagrantSupersededBoxProvider : CleanupProviderBase
     ];
 
     /// <summary>
+    /// The default home and whatever the variable holds in either reading, unjudged: judging a value
+    /// asks the disk, and a value this declines only drops a root.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(
+        DefaultHome,
+        ConfiguredFolder.Read(VariableReading.Tool, HomeVariable, Environment),
+        ConfiguredFolder.Read(VariableReading.Current, HomeVariable, Environment));
+
+    /// <summary>
     /// A home either reading of the variable names but this declines is still where Vagrant writes, so
     /// Explore refuses what Vagrant keeps there and nothing else (<see cref="ToolRoot.Sparing"/>).
     /// </summary>

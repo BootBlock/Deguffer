@@ -149,6 +149,12 @@ public sealed class JetBrainsSupersededSystemProvider : CleanupProviderBase
                     : _ => false)),
     ];
 
+    /// <summary>
+    /// The two vendor folders in the local application data, since every version folder is a child of
+    /// one. Google's holds Chrome as well, which costs a listing of it, never a missed root.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(_vendors.Select(vendor => vendor.Folder));
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(_vendors.Any(vendor => LongPath.DirectoryMayExist(vendor.Folder)));
 

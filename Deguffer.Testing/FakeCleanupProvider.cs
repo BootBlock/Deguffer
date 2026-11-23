@@ -101,6 +101,12 @@ public sealed class FakeCleanupProvider(string id, SafetyTier tier = SafetyTier.
     /// <summary>The tool roots it declares, as a test states them, which Explore's policy refuses beside.</summary>
     public IReadOnlyList<ToolRoot> ToolRoots { get; set; } = [];
 
+    /// <summary>
+    /// Where <see cref="ToolRoots"/> may lie: anywhere unless a test narrows it, so a test that states
+    /// only roots has them read for every question.
+    /// </summary>
+    public ToolRootScope ToolRootScope { get; set; } = ToolRootScope.Anywhere;
+
     public Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<ToolRoot>>([]);
 
