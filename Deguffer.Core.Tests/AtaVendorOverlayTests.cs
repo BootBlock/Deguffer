@@ -79,12 +79,20 @@ public sealed class AtaVendorOverlayTests
     [InlineData("INTEL SSDSC2BB999G4")]
     [InlineData("INTEL SSDSC2BB099T4")]
     [InlineData("INTEL SSDSC1NB999G401")]
-    public void IntelMediaWearIsReadOnTheDcS3500(string model) =>
+    [InlineData("INTEL SSDSC2BB080G6")]
+    [InlineData("INTEL SSDSC2BB012T6")]
+    [InlineData("INTEL SSDSC2BB150G7")]
+    [InlineData("INTEL SSDSC2BB016T7")]
+    [InlineData("INTEL SSDSCKJB150G7")]
+    public void IntelMediaWearIsReadOnTheDcS3500S3510AndS3520(string model) =>
         Assert.Equal(Read, Reading(233, model));
 
     [Theory]
     [InlineData("INTEL SSDSC2BB999G6")]
     [InlineData("INTEL SSDSC2BB999G7")]
+    [InlineData("INTEL SSDSC2BB240G4R")]
+    [InlineData("INTEL SSDSC2BB240G6R")]
+    [InlineData("SSDSC2BB240G7R")]
     [InlineData("INTEL SSDSC2BW999A4")]
     [InlineData("SOLIDIGM SSDSC2KB999G8")]
     public void IntelMediaWearIsNotReadOutsideIt(string model) =>

@@ -63,8 +63,11 @@ internal enum SmartRawFormat
     /// <summary>Minutes, as wide as the definition's <see cref="RawWidth"/>. FFFFh means the drive has not measured it yet.</summary>
     Minutes,
 
-    /// <summary>The raw value divided by 1024 is a percentage. FFFFh means the drive has not measured it yet.</summary>
-    PercentPer1024,
+    /// <summary>The raw value divided by 1024 is a percentage, cut to three decimal places. FFFFh means the drive has not measured it yet.</summary>
+    PercentPer1024ToThousandths,
+
+    /// <summary>The raw value divided by 1024 is a percentage, cut to two decimal places. FFFFh means the drive has not measured it yet.</summary>
+    PercentPer1024ToHundredths,
 
     /// <summary>The raw value is a whole percentage. FFFFh means the drive has not measured it yet.</summary>
     RawPercent,
@@ -81,7 +84,10 @@ internal enum SmartRawFormat
     /// </summary>
     CapacitorTest,
 
-    /// <summary>How hard the drive is slowing itself to cool down, as a percentage in byte 0, and the times it has done so in bytes 1-4.</summary>
+    /// <summary>
+    /// How hard the drive is slowing itself to cool down, as a percentage in byte 0, and the times it has
+    /// done so in bytes 1-4. A byte 0 above 100 is not a percentage.
+    /// </summary>
     ThrottleStatus,
 
     /// <summary>Manufacturers use these bytes differently, so they are shown as they are and judged by nothing.</summary>

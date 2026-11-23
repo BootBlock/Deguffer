@@ -382,9 +382,10 @@ A reading whose meaning differs from one maker to another is shown as the drive 
 the maker documents it for that model family. Micron and Crucial client SATA drives covered by Micron's
 technical note TN-FD-22 get every attribute the note defines, including the lowest and highest
 temperature recorded and the drive's write amplification. Seagate FireCuda 120 SSDs get the remaining
-life, spare blocks, wear range and data totals that Seagate's product manual defines. Intel DC S3500
-drives get every attribute Intel's product specification defines, including the data written and
-read, the power-loss capacitor test and thermal throttling. Kingston SATA drives named in one of
+life, spare blocks, wear range and data totals that Seagate's product manual defines. Intel DC S3500,
+DC S3510 and DC S3520 drives get the attributes their own Intel product specification defines,
+including the data written and read, the power-loss capacitor test and thermal throttling, and on the
+DC S3510 and DC S3520 everything written to the flash memory. Kingston SATA drives named in one of
 Kingston's SMART attribute documents get the readings that document defines for them, such as
 remaining life, data written and read, and the temperature range. The documents differ from each
 other, so each is read only on the models it names.

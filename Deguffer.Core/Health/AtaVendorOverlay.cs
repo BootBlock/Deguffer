@@ -91,11 +91,10 @@ internal static partial class AtaVendorOverlay
     /// <summary>The overlay's definition for <paramref name="id"/> on <paramref name="drive"/>, if a document covers it.</summary>
     internal static AtaAttributeDefinition? Of(byte id, DeviceDescriptor drive) =>
         MicronClientSata.Covers(drive) ? MicronClientSata.Of(id)
-        : IntelDcS3500.Covers(drive) ? IntelDcS3500.Of(id)
         : SamsungPm863OrSm863().IsMatch(drive.Model) ? SamsungPm863OrSm863Of(id)
         : Samsung845Dc().IsMatch(drive.Model) ? Samsung845DcOf(id)
         : SeagateFireCuda120().IsMatch(drive.Model) ? SeagateFireCuda120Of(id)
-        : KingstonSata.Of(id, drive);
+        : IntelDcSata.Of(id, drive) ?? KingstonSata.Of(id, drive);
 
     /// <summary>
     /// Whether <paramref name="threshold"/> fails its attribute whatever the value. TN-FD-22 table 7 makes
