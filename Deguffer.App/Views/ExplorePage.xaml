@@ -121,7 +121,7 @@
                 <FontIcon Grid.Column="0"
                           FontSize="{StaticResource GlyphSizeBody}"
                           VerticalAlignment="Top"
-                          Margin="0,2,0,0"
+                          Margin="{StaticResource FirstLineOffset}"
                           Glyph="{x:Bind Icon}"
                           AutomationProperties.AccessibilityView="Raw" />
 
@@ -168,7 +168,7 @@
         </DataTemplate>
     </Page.Resources>
 
-    <Grid Padding="20,12,20,16" RowSpacing="10"
+    <Grid Padding="20,12,20,16" RowSpacing="{StaticResource RegionGap}"
           RowDefinitions="Auto,Auto,Auto,Auto,*,Auto">
 
         <!--
@@ -221,12 +221,12 @@
                                     <Setter Property="MaxWidth" Value="560" />
                                 </Style>
                             </Flyout.FlyoutPresenterStyle>
-                            <StackPanel Width="460" Spacing="10">
+                            <StackPanel Width="460" Spacing="{StaticResource ControlGap}">
                                 <!-- The list under the box follows what has been typed: what this
                                      account uses while it is empty, then computers, a computer's
                                      shares, and a share's folders. The chevron opens a tree of the
                                      same places, for a share whose name is not known. -->
-                                <Grid ColumnSpacing="6" ColumnDefinitions="*,Auto">
+                                <Grid ColumnSpacing="{StaticResource ControlGap}" ColumnDefinitions="*,Auto">
                                     <AutoSuggestBox x:Name="TypedBox"
                                                     Header="Folder or network share"
                                                     PlaceholderText="\\server\share"
@@ -241,7 +241,7 @@
                                                     AutomationProperties.Name="Folder or network share to scan">
                                         <AutoSuggestBox.ItemTemplate>
                                             <DataTemplate x:DataType="vm:PathSuggestionRow">
-                                                <Grid ColumnSpacing="10" ColumnDefinitions="Auto,*" Padding="0,4"
+                                                <Grid ColumnSpacing="{StaticResource ControlGap}" ColumnDefinitions="Auto,*" Padding="0,4"
                                                       AutomationProperties.Name="{x:Bind Spoken}">
                                                     <FontIcon Glyph="{x:Bind Glyph}" FontSize="{StaticResource GlyphSizeStandard}" VerticalAlignment="Center" />
                                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
@@ -312,7 +312,7 @@
                  in the status line below, because it is half of the same choice as the drive — and
                  a scope stated somewhere else is a scope people scan past. -->
             <Grid Grid.Column="4"
-                  ColumnSpacing="6"
+                  ColumnSpacing="{StaticResource ControlGap}"
                   VerticalAlignment="Bottom"
                   ColumnDefinitions="Auto,*,Auto"
                   Visibility="{x:Bind ViewModel.Targeting.IsScopedToFolder, Mode=OneWay}">
@@ -460,13 +460,12 @@
                                  reader, which is given the steps themselves and their order. -->
                             <FontIcon Glyph="&#xE76C;"
                                       FontSize="{StaticResource GlyphSizeCompact}"
-                                      Margin="2,0,2,0"
                                       Visibility="{x:Bind FollowsAnother}"
                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                       AutomationProperties.AccessibilityView="Raw" />
 
                             <HyperlinkButton Content="{x:Bind Name}"
-                                             Padding="4,2"
+                                             Padding="{StaticResource LinkPadding}"
                                              Click="OnCrumbClicked" />
                         </StackPanel>
                     </DataTemplate>
@@ -539,13 +538,18 @@
                       AutomationProperties.Name="Not written for at least"
                       AutomationProperties.HelpText="By the last write. Windows does not keep last-access times by default, so Deguffer does not use them." />
 
-            <TextBlock Grid.Column="5"
-                       VerticalAlignment="Bottom"
-                       Margin="4,0,0,6"
-                       Text="{x:Bind ViewModel.Files.Summary, Mode=OneWay}"
-                       Style="{StaticResource SecondaryText}"
-                       TextWrapping="Wrap"
-                       AutomationProperties.LiveSetting="Polite" />
+            <!-- As tall as the boxes beside it and centred in that height, so one line of the count
+                 reads level with their text, and a wrapped count grows upwards over their headers. -->
+            <Border Grid.Column="5"
+                    VerticalAlignment="Bottom"
+                    MinHeight="32"
+                    Padding="4,0,0,0">
+                <TextBlock VerticalAlignment="Center"
+                           Text="{x:Bind ViewModel.Files.Summary, Mode=OneWay}"
+                           Style="{StaticResource SecondaryText}"
+                           TextWrapping="Wrap"
+                           AutomationProperties.LiveSetting="Polite" />
+            </Border>
         </Grid>
 
         <!--
@@ -560,7 +564,7 @@
             over the one action that cannot be undone. The menu below names all five, which is where
             somebody looks for them.
         -->
-        <Grid Grid.Row="4" ColumnSpacing="10" ColumnDefinitions="*,Auto">
+        <Grid Grid.Row="4" ColumnSpacing="{StaticResource ControlGap}" ColumnDefinitions="*,Auto">
         <Border Grid.Column="0"
                 Background="{ThemeResource LayerFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -820,7 +824,7 @@
                                 across the map at all times, and took thirty pixels off the list for
                                 nothing. Collapsed, they cost the spacing as well as the height.
                             -->
-                            <StackPanel Spacing="6">
+                            <StackPanel Spacing="{StaticResource ControlGap}">
                                 <!-- §7.1: a refusal is stated with its reason rather than by greying something
                                      out. Said as soon as something is selected, because a menu item that does
                                      nothing teaches nothing. -->
@@ -973,7 +977,7 @@
                          on it can be picked, and the selection does nothing until it is back (§7.1).
                          With animation effects off the scrubber has only its two ends. -->
                     <StackPanel Grid.Row="3"
-                                Spacing="2"
+                                Spacing="{StaticResource LabelGap}"
                                 Visibility="{x:Bind ViewModel.Replay.IsOffered, Mode=OneWay}">
                         <Grid ColumnSpacing="8" ColumnDefinitions="Auto,*">
                             <Button Command="{x:Bind ViewModel.Replay.PlayCommand}"
@@ -1018,17 +1022,19 @@
                                           AutomationProperties.Name="Used space at each kept scan">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>
-                                        <StackPanel Orientation="Horizontal" Spacing="2" />
+                                        <StackPanel Orientation="Horizontal" />
                                     </ItemsPanelTemplate>
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="vm:UsedSpaceBar">
-                                        <!-- Transparent and full height, so the tooltip is reached
-                                             over the whole column rather than only over the bar. -->
-                                        <Grid Width="10" Height="32" Background="Transparent"
+                                        <!-- Transparent across the whole column, the gap beside the
+                                             bar included, so the tooltip is reached anywhere over it
+                                             rather than only over the bar. The bar stands a hairline in
+                                             from each side, which draws the gap between bars. -->
+                                        <Grid Width="12" Height="32" Background="Transparent"
                                               ToolTipService.ToolTip="{x:Bind Description}"
                                               AutomationProperties.Name="{x:Bind Description}">
-                                            <controls:ColumnBar Value="{x:Bind Share}" />
+                                            <controls:ColumnBar Value="{x:Bind Share}" Margin="1,0" />
                                         </Grid>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
@@ -1150,7 +1156,7 @@
                               AutomationProperties.Name="Kinds of file in this folder, largest first">
                         <ListView.ItemTemplate>
                             <DataTemplate x:DataType="vm:ExploreTypeRow">
-                                <Grid ColumnSpacing="8" RowSpacing="2" Padding="0,4"
+                                <Grid ColumnSpacing="8" RowSpacing="{StaticResource LabelGap}" Padding="0,4"
                                       Background="Transparent"
                                       ColumnDefinitions="Auto,*,Auto"
                                       RowDefinitions="Auto,Auto,Auto"
@@ -1256,7 +1262,7 @@
                               AutomationProperties.Name="Broken shortcuts and links in the Start menu, on the desktop and in the Startup folders">
                         <ListView.ItemTemplate>
                             <DataTemplate x:DataType="vm:ShortcutFolderRow">
-                                <Grid ColumnSpacing="8" Padding="0,6"
+                                <Grid ColumnSpacing="8" Padding="0,4"
                                       ColumnDefinitions="*,Auto,Auto"
                                       AutomationProperties.Name="{x:Bind Description}">
                                     <StackPanel Grid.Column="0" Spacing="1">
@@ -1299,7 +1305,7 @@
             </Border>
         </Grid>
 
-        <StackPanel Grid.Row="5" Spacing="6">
+        <StackPanel Grid.Row="5" Spacing="{StaticResource ControlGap}">
             <!-- What the pointer is over. A status line rather than a floating tooltip: over tens
                  of thousands of rectangles a popup that follows the pointer never settles.
 
@@ -1377,7 +1383,7 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:ExploreLegendBand">
-                        <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,0,12,0"
+                        <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,0"
                                     AutomationProperties.Name="{x:Bind Label}">
                             <Border Width="12" Height="12" CornerRadius="2"
                                     VerticalAlignment="Center"

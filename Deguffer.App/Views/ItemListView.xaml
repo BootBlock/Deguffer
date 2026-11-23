@@ -28,13 +28,13 @@
         <controls:WidthGroup x:Key="FigureWidths" />
 
         <ItemsPanelTemplate x:Key="FacetCells">
-            <StackPanel Orientation="Horizontal" Spacing="10" />
+            <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}" />
         </ItemsPanelTemplate>
 
         <!-- One item. §7 makes age a first-class column for this kind of data, and the facets are
              the provider's own columns beside it: the project, the version, the browser. -->
         <DataTemplate x:Key="ItemRow" x:DataType="vm:StepViewModel">
-            <Grid ColumnSpacing="10" Padding="12,8" ColumnDefinitions="Auto,*,Auto,Auto">
+            <Grid ColumnSpacing="{StaticResource ControlGap}" Padding="{StaticResource RowPadding}" ColumnDefinitions="Auto,*,Auto,Auto">
 
                 <!-- Every item gets a checkbox: the list is offered only for a row whose steps are
                      chosen one by one. See FindingViewModel.OffersItems. -->
@@ -46,7 +46,7 @@
                           IsEnabled="{x:Bind CanBeSelected, Mode=OneWay}"
                           AutomationProperties.Name="{x:Bind Description}" />
 
-                <StackPanel Grid.Column="1" Spacing="2">
+                <StackPanel Grid.Column="1" Spacing="{StaticResource LabelGap}">
                     <TextBlock Text="{x:Bind Description}"
                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                TextWrapping="Wrap"
@@ -66,8 +66,7 @@
                             IsEnabled="{x:Bind CanChangeKeepList, Mode=OneWay}"
                             Tag="{x:Bind}"
                             Click="OnKeepClicked"
-                            Padding="10,2"
-                            Margin="0,2,0,0"
+                            Padding="8,4"
                             AutomationProperties.Name="{x:Bind KeepActionName, Mode=OneWay}" />
 
                     <TextBlock Text="Needs administrator rights — use the Elevate button"
@@ -118,11 +117,11 @@
         <Grid Grid.Row="0" Padding="16,0" ColumnSpacing="12" ColumnDefinitions="Auto,Auto,Auto,*,Auto">
             <!-- A link, because going back changes nothing. Escape does the same. -->
             <HyperlinkButton Grid.Column="0"
-                             Padding="0,2"
+                             Padding="{StaticResource InlineLinkPadding}"
                              VerticalAlignment="Center"
                              Click="OnBackClicked"
                              AutomationProperties.Name="Back to every location">
-                <StackPanel Orientation="Horizontal" Spacing="6">
+                <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
                     <FontIcon Glyph="&#xE72B;" FontSize="{StaticResource GlyphSizeCaption}" AutomationProperties.AccessibilityView="Raw" />
                     <TextBlock Text="All locations" />
                 </StackPanel>
@@ -181,7 +180,7 @@
 
         <!-- The column headings, laid out on the item row's own columns so each heading stands over
              its values. -->
-        <Grid Grid.Row="3" Padding="12,0" ColumnSpacing="10" ColumnDefinitions="Auto,*,Auto,Auto">
+        <Grid Grid.Row="3" Padding="12,0" ColumnSpacing="{StaticResource ControlGap}" ColumnDefinitions="Auto,*,Auto,Auto">
             <CheckBox Grid.Column="0"
                       MinWidth="0"
                       IsChecked="{x:Bind ViewModel.AllShownState, Mode=OneWay}"
@@ -247,7 +246,7 @@
                                 <!-- The heading's checkbox covers the items under it that the search
                                      shows, and a click on a mixed one clears them. See
                                      ItemSelection.ValueForClick. -->
-                                <Grid ColumnSpacing="10" ColumnDefinitions="Auto,*,Auto">
+                                <Grid ColumnSpacing="{StaticResource ControlGap}" ColumnDefinitions="Auto,*,Auto">
                                     <CheckBox Grid.Column="0"
                                               MinWidth="0"
                                               IsChecked="{x:Bind State, Mode=OneWay}"

@@ -23,7 +23,7 @@ public sealed class ContentDialogDuplicateConfirmation(XamlRoot xamlRoot, Elemen
         // opened, leaving a modal up that the cancel path can no longer take down.
         ct.ThrowIfCancellationRequested();
 
-        var content = new StackPanel { Spacing = 10 };
+        var content = new StackPanel { Spacing = 12 };
         content.Children.Add(new TextBlock { Text = confirmation.Summary, TextWrapping = TextWrapping.WrapWholeWords });
 
         foreach (var warning in confirmation.Warnings)

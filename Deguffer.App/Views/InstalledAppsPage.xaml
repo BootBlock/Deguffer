@@ -25,11 +25,11 @@
                     <ColumnDefinition Width="Auto" MinWidth="80" />
                 </Grid.ColumnDefinitions>
 
-                <Grid ColumnSpacing="12" RowSpacing="2" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                <Grid ColumnSpacing="12" RowSpacing="{StaticResource LabelGap}" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
                     <TextBlock Text="{x:Bind Name, Mode=OneWay}" Style="{StaticResource BodyStrongTextBlockStyle}"
                                TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
 
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="{StaticResource ControlGap}" VerticalAlignment="Center">
                         <FontIcon Glyph="&#xEA18;" FontSize="{StaticResource GlyphSizeBody}" VerticalAlignment="Center"
                                   Foreground="{ThemeResource SystemFillColorCautionBrush}"
                                   Visibility="{x:Bind HasShield, Mode=OneWay}"
@@ -87,7 +87,7 @@
         </Style>
     </Page.Resources>
 
-    <Grid Padding="20,12,20,16" RowSpacing="10" RowDefinitions="Auto,Auto,Auto,*">
+    <Grid Padding="20,12,20,16" RowSpacing="{StaticResource RegionGap}" RowDefinitions="Auto,Auto,Auto,*">
 
         <Grid Grid.Row="0" ColumnSpacing="12" ColumnDefinitions="*,Auto,Auto,Auto">
             <StackPanel Spacing="4">
@@ -197,7 +197,7 @@
                               ItemsSource="{x:Bind ViewModel.Actions.Backups}">
                         <ListView.ItemTemplate>
                             <DataTemplate x:DataType="vm:BackupRow">
-                                <StackPanel Padding="0,6" Spacing="2" AutomationProperties.Name="{x:Bind Title}">
+                                <StackPanel Padding="0,4" Spacing="{StaticResource LabelGap}" AutomationProperties.Name="{x:Bind Title}">
                                     <TextBlock Text="{x:Bind Title}" TextTrimming="CharacterEllipsis" />
                                     <TextBlock Text="{x:Bind Detail}" Style="{StaticResource SecondaryText}"
                                                TextTrimming="CharacterEllipsis" />

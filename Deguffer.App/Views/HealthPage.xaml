@@ -26,7 +26,7 @@
              a chip saying so beside its standing, as a researched row does on Clean, so it is never
              taken for one Deguffer documents (#751). -->
         <DataTemplate x:Key="AttributeTemplate" x:DataType="health:HealthAttribute">
-            <Grid Padding="0,8" ColumnSpacing="12" RowSpacing="2" ColumnDefinitions="*,200,Auto" RowDefinitions="Auto,Auto,Auto"
+            <Grid Padding="0,8" ColumnSpacing="12" RowSpacing="{StaticResource LabelGap}" ColumnDefinitions="*,200,Auto" RowDefinitions="Auto,Auto,Auto"
                   BorderThickness="0,0,0,1" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                   AutomationProperties.Name="{x:Bind Name}"
                   AutomationProperties.HelpText="{x:Bind Meaning}">
@@ -62,7 +62,7 @@
         </Style>
     </Page.Resources>
 
-    <Grid Padding="20,12,20,16" RowSpacing="10" RowDefinitions="Auto,Auto,Auto,*">
+    <Grid Padding="20,12,20,16" RowSpacing="{StaticResource RegionGap}" RowDefinitions="Auto,Auto,Auto,*">
 
         <Grid ColumnSpacing="12" ColumnDefinitions="*,Auto,Auto,Auto">
             <StackPanel Spacing="4">
@@ -104,8 +104,8 @@
                       ItemContainerStyle="{StaticResource DriveContainer}" />
 
             <!-- A star row for the attributes, so the list is given a height and stays virtual. -->
-            <Grid Grid.Column="1" RowSpacing="10" RowDefinitions="Auto,Auto,Auto,Auto,*">
-                <StackPanel Spacing="2">
+            <Grid Grid.Column="1" RowSpacing="{StaticResource ControlGap}" RowDefinitions="Auto,Auto,Auto,Auto,*">
+                <StackPanel Spacing="{StaticResource LabelGap}">
                     <TextBlock Text="{x:Bind ViewModel.SelectedDrive.Title, Mode=OneWay}" Style="{StaticResource BodyStrongTextBlockStyle}" />
                     <TextBlock Text="{x:Bind ViewModel.SelectedDrive.Summary, Mode=OneWay}" TextWrapping="Wrap" />
                     <TextBlock Text="{x:Bind ViewModel.SelectedDrive.Volumes, Mode=OneWay}" TextWrapping="Wrap"
