@@ -186,9 +186,9 @@ public sealed class ReportTests
     /// no tree say nothing of snapshots they cannot take.
     /// </summary>
     [Theory]
-    [InlineData("Explore", true, "2048 KiB reads, 8 in flight, parsed on 3 threads, 24 list reads in flight, snapshots on")]
-    [InlineData("ExploreFolder", false, "2048 KiB reads, 8 in flight, parsed on 3 threads, 24 list reads in flight, snapshots off")]
-    [InlineData("Table", true, "2048 KiB reads, 8 in flight, parsed on 3 threads, 24 list reads in flight")]
+    [InlineData("Explore", true, "2048 KiB reads, 8 in flight, parsed on 3 threads, 24 list reads in flight after the first pass, snapshots on")]
+    [InlineData("ExploreFolder", false, "2048 KiB reads, 8 in flight, parsed on 3 threads, 24 list reads in flight after the first pass, snapshots off")]
+    [InlineData("Table", true, "2048 KiB reads, 8 in flight, parsed on 3 threads, 24 list reads in flight after the first pass")]
     public void AnExploreReadSaysWhetherItTookSnapshots(string route, bool snapshots, string expected) =>
         Assert.Equal(
             expected,
@@ -224,13 +224,16 @@ public sealed class ReportTests
 
     /// <summary>
     /// The same for a table route, whose values are the reads, the parse threads and the reads of the
-    /// attribute lists kept outside the table.
+    /// attribute lists kept outside the table, and when those are read.
     /// </summary>
-    [Fact]
-    public void ATableRoutesValuesAreTheOnesItRanWith() =>
+    [Theory]
+    [InlineData(AttributeListReads.AfterFirstPass, "after the first pass")]
+    [InlineData(AttributeListReads.BesideFirstPass, "beside the first pass in batches of 4096")]
+    public void ATableRoutesValuesAreTheOnesItRanWith(AttributeListReads listReads, string when) =>
         Assert.Equal(
-            "2048 KiB reads, 8 in flight, parsed on 3 threads, 24 list reads in flight",
-            Deguffer.Benchmark.Tuning.Describe(Route.Index, WalkTuning.Default, new TableTuning(2048 * 1024, 8, 3, 24), snapshots: true, LinkRead.Name, BenchmarkRequest.DefaultTree, trees: 1));
+            $"2048 KiB reads, 8 in flight, parsed on 3 threads, 24 list reads in flight {when}",
+            Deguffer.Benchmark.Tuning.Describe(
+                Route.Index, WalkTuning.Default, new TableTuning(2048 * 1024, 8, 3, 24, listReads), snapshots: true, LinkRead.Name, BenchmarkRequest.DefaultTree, trees: 1));
 
     /// <summary>
     /// A race names the priority its build read at, because a result read at one priority says

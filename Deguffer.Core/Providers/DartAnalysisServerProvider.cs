@@ -110,6 +110,9 @@ public sealed class DartAnalysisServerProvider : CleanupProviderBase
             DisposableChildren),
     ];
 
+    /// <summary>The server's folder, which is the one root above. Nothing moves it.</summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(_root);
+
     /// <summary>
     /// The two disposable children of the store and nothing beside them, because <c>.prompts</c>
     /// and the server's other state share the folder with them.

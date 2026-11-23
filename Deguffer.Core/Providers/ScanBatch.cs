@@ -47,6 +47,18 @@ public sealed record ScanBatch(
     IReadOnlyList<DateTime?> LastWritten,
     IReadOnlyList<bool?> FileKept)
 {
+    /// <summary>The measurements of a plan's paths, in their order, as one batch.</summary>
+    public static ScanBatch Of(IReadOnlyList<ScanResult> results) => new(
+        [.. results.Select(r => r.Size)],
+        // Paths in one plan can sit on different volumes and so take different routes; the
+        // first reason with something to say is the one the user is shown.
+        results.Aggregate(FallbackReason.None, (fallback, r) => FallbackReasonText.Prevailing(fallback, r.Fallback)),
+        [.. results.Select(r => r.WithheldRecent)],
+        [.. results.Select(r => r.MailStores)],
+        [.. results.Select(r => r.WasReached)],
+        [.. results.Select(r => r.LastWritten)],
+        [.. results.Select(r => r.FileKept)]);
+
     public ScanSize Total => TotalOf(..);
 
     /// <summary>

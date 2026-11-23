@@ -198,6 +198,16 @@ public interface ICleanupProvider
     IReadOnlyList<ToolRoot> ToolRoots { get; }
 
     /// <summary>
+    /// The folders every root in <see cref="ToolRoots"/> lies at or under, stated without touching the
+    /// disk, so <see cref="RowDeclarations"/> reads this row only for a question about a folder its
+    /// roots can be at. See <see cref="Providers.ToolRootScope"/>.
+    ///
+    /// <para>A provider that declares <see cref="ToolRoots"/> states this beside them, and
+    /// <c>ToolRootScopeTests</c> holds the two together.</para>
+    /// </summary>
+    ToolRootScope ToolRootScope { get; }
+
+    /// <summary>
     /// The same declaration for what this provider can only protect once it has asked the machine.
     /// Empty for a provider whose <see cref="ToolRoots"/> are the whole of what it owns.
     ///

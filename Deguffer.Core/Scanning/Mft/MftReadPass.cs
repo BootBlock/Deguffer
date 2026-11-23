@@ -74,7 +74,7 @@ internal sealed class MftReadPass : IDisposable
         int count,
         TableTuning tuning,
         MftBitmap? bitmap,
-        MftRecordHandler onRecord,
+        MftRecordHandOff records,
         Action<long>? onProgress,
         CancellationToken ct)
     {
@@ -84,7 +84,7 @@ internal sealed class MftReadPass : IDisposable
         _readsAllowed = tuning.ReadsInFlight;
         _ct = ct;
         _cancelReads = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        _records = new MftRecordHandOff(count, bitmap, onRecord);
+        _records = records;
         _progress = new MftPassProgress(onProgress, () => Stopping);
         _crew = new WorkerCrew(tuning.ParseThreads, () => ParseArrived, () => !_arrived.IsEmpty);
         _readyToLook = () => !_arrived.IsEmpty || IsOver();

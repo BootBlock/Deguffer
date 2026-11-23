@@ -229,6 +229,12 @@ public abstract class CleanupProviderBase : ICleanupProvider
     public virtual IReadOnlyList<ToolRoot> ToolRoots => [];
 
     /// <summary>
+    /// Nowhere, matching the empty <see cref="ToolRoots"/> above. A provider that overrides one
+    /// overrides both.
+    /// </summary>
+    public virtual ToolRootScope ToolRootScope => ToolRootScope.None;
+
+    /// <summary>
     /// Nothing, for the majority whose <see cref="ToolRoots"/> already say everything they own. A
     /// provider whose location a subprocess reports, or one that holds a path back because
     /// something is using it, overrides this.
@@ -559,7 +565,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         // are recorded once.
         Record(path, measured.Whole);
 
-        return (Batch([measured.Whole]), Batch([measured.Aged]));
+        return (ScanBatch.Of([measured.Whole]), ScanBatch.Of([measured.Aged]));
     }
 
     /// <summary>Each path as a question about its whole tree, root included.</summary>
@@ -580,7 +586,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
             Record(question.Path, measured);
         }
 
-        return Batch(results);
+        return ScanBatch.Of(results);
     }
 
     /// <summary>
@@ -599,18 +605,6 @@ public abstract class CleanupProviderBase : ICleanupProvider
             UnreachedMeasurements.Value?.Add((path, measured.Root));
         }
     }
-
-    /// <summary>The measurements of a plan's paths, in their order, as one batch.</summary>
-    private static ScanBatch Batch(IReadOnlyList<ScanResult> results) => new(
-        [.. results.Select(r => r.Size)],
-        // Paths in one plan can sit on different volumes and so take different routes; the
-        // first reason with something to say is the one the user is shown.
-        results.Aggregate(FallbackReason.None, (fallback, r) => FallbackReasonText.Prevailing(fallback, r.Fallback)),
-        [.. results.Select(r => r.WithheldRecent)],
-        [.. results.Select(r => r.MailStores)],
-        [.. results.Select(r => r.WasReached)],
-        [.. results.Select(r => r.LastWritten)],
-        [.. results.Select(r => r.FileKept)]);
 
     /// <summary>
     /// Measure every target and turn it into the step that will delete it.

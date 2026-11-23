@@ -142,6 +142,14 @@ public sealed class PipenvCacheProvider : CleanupProviderBase
     ];
 
     /// <summary>
+    /// The folder the variable names, as it is set, and the default cache. The variable is read raw
+    /// rather than through <see cref="ResolveRoot"/>, which probes the disk to decline a folder: a
+    /// declined one is never a root, so naming it only widens the scope.
+    /// </summary>
+    public override ToolRootScope ToolRootScope =>
+        ToolRootScope.Under(ConfiguredFolder.Read(VariableReading.Current, CacheVariable, Environment), DefaultRoot);
+
+    /// <summary>
     /// The recognised children of the cache in use and of the default cache, whichever route clears
     /// them, because both routes clear the same folders.
     /// </summary>

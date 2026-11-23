@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -30,66 +29,8 @@ namespace Deguffer.Core.Providers;
 /// update-self and check-for-update. The only thing that clears either location is an update
 /// running to completion, which is not a command Deguffer can issue on the user's behalf.</para>
 /// </summary>
-public sealed partial class SquirrelStagingProvider : CleanupProviderBase
+public sealed class SquirrelStagingProvider : CleanupProviderBase
 {
-    /// <summary>
-    /// A staging directory Squirrel made: the literal prefix it writes, then <b>exactly one</b>
-    /// character from the alphabet its name generator draws on — lowercase Latin, then Greek and
-    /// Coptic, then Cyrillic, 360 characters in all.
-    ///
-    /// <para><b>One character rather than one or more, and that difference is the whole of §5.2
-    /// here.</b> One character is the shortest suffix the generator can emit, and it hands out the
-    /// first free name — so it produces one until 360 staging directories exist at once, which is
-    /// what the framework's own bug reports show and what the measured machine held. This is
-    /// therefore the narrowest pattern that still recognises every name a real machine holds, and
-    /// narrowest is what §5.2 asks for. Past the 360th the generator starts producing longer names,
-    /// and those are left alone: a longer run of Latin letters cannot be told from an ordinary word,
-    /// so <c>temp</c> followed by one <em>or more</em> also claims <c>templates</c>,
-    /// <c>temporary</c> and <c>tempdata</c>. Under the default root that would cost nothing, because
-    /// nothing else writes there; under a <c>SQUIRREL_TEMP</c> pointed at a folder shared with
-    /// anything else it would offer somebody's directory as a pre-selected Tier 1 row.</para>
-    ///
-    /// <para><b>It does not follow that no English word matches, and the code is right rather than
-    /// the tempting reading.</b> <c>tempo</c>, <c>tempi</c>, <c>tempt</c> and <c>temps</c> are all
-    /// matched, because <c>o</c>, <c>i</c>, <c>t</c> and <c>s</c> are genuinely characters the
-    /// generator emits — excluding them would fail to recognise a directory Squirrel really made,
-    /// which is the wrong direction. What the narrowing buys is the <em>bound</em>, not a word
-    /// list.</para>
-    ///
-    /// <para>Case-sensitive, deliberately. Squirrel generates these names in lowercase and Windows
-    /// keeps the case a directory was created with, so matching case exactly recognises every folder
-    /// Squirrel made and nothing else.</para>
-    /// </summary>
-    [GeneratedRegex(@"\Atemp[a-z\u03B0-\u03FE\u0400-\u04FE]\z", RegexOptions.CultureInvariant)]
-    private static partial Regex StagingDirectory();
-
-    private const string StagingReason =
-        "An install or an update the Squirrel updater unpacked here and did not clear away "
-        + "afterwards. Nothing reads it once the update has finished.";
-
-    private const string StagingRootReason =
-        "The staging folder itself must survive — only the directories Squirrel unpacked into it "
-        + "are removed, and every Squirrel application on this machine shares it.";
-
-    /// <summary>
-    /// The files Squirrel and its bootstrapper leave in the staging folder, named in full rather
-    /// than sampled.
-    ///
-    /// <para>Named at all because child classification enumerates directories, so anything that is a
-    /// file is never seen, never classified and never asserted unless a provider names it. This
-    /// provider removes directories from the folder those files sit in, so an assertion that the
-    /// folder survived would pass with every one of them gone.</para>
-    ///
-    /// <para>Whichever is absent records itself as nothing to preserve rather than as a pass, so
-    /// naming all three costs nothing on a machine that holds one.</para>
-    /// </summary>
-    private static readonly (string Name, string Reason)[] StagingRootFiles =
-    [
-        ("SquirrelSetup.log", "The record of what the updater installed on this machine, and when."),
-        ("Squirrel-Install.log", "The record of what the updater installed on this machine, and when."),
-        ("setup.json", "What an installer was told to run. It is not something the updater unpacked."),
-    ];
-
     private readonly SquirrelDiscovery _discovery;
     private readonly ILiveTreeInspector _liveTrees;
 
@@ -167,6 +108,12 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
     public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots.Get(Declare);
 
     /// <summary>
+    /// Every root above is the staging folder, wherever <see cref="SquirrelDiscovery.StagingVariable"/>
+    /// puts it, or the packages folder of an installation the discovery found under its one root.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(_discovery.InstallationsRoot, _discovery.StagingRoot);
+
+    /// <summary>
     /// Each staging directory an application is installing or updating through right now, as a root
     /// that recognises no child.
     ///
@@ -222,7 +169,7 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
         // staging directory to either route, and asking the process table about the far side would
         // answer about a directory this provider never targets.
         var candidates = scan.Directories
-            .Where(child => StagingDirectory().IsMatch(child.Name))
+            .Where(child => SquirrelStagingLayout.IsStagingDirectory(child.Name))
             .Select(child => new RecognisedBuildDirectory(LongPath.Display(child.FullName), root))
             .ToList();
 
@@ -429,8 +376,8 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
             return new Collected([], Unreadable: false, Declined: 1);
         }
 
-        survivors.Add((root, StagingRootReason));
-        survivors.AddRange(StagingRootFiles.Select(f => (Path.Combine(root, f.Name), f.Reason)));
+        survivors.Add((root, SquirrelStagingLayout.RootReason));
+        survivors.AddRange(SquirrelStagingLayout.RootFiles.Select(f => (Path.Combine(root, f.Name), f.Reason)));
 
         var scan = ChildDirectories.Under(root);
 
@@ -459,7 +406,7 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
 
             var path = LongPath.Display(child.FullName);
 
-            if (StagingDirectory().IsMatch(child.Name))
+            if (SquirrelStagingLayout.IsStagingDirectory(child.Name))
             {
                 candidates.Add(new RecognisedBuildDirectory(path, root));
             }
@@ -498,7 +445,7 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
             [
                 .. live.Cleared.Select(c => new DeletionTarget(
                     c.Path,
-                    StagingReason,
+                    SquirrelStagingLayout.UnpackedReason,
                     DatedOneLevelDown: true,
                     UseCheck: c.StillUnused)),
             ],
@@ -517,12 +464,7 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
 
         if (_discovery.StagingRoot is { } staging)
         {
-            roots.Add(ToolRoot.Folders(
-                staging,
-                "This is the folder the Squirrel updater unpacks installs and updates into, and "
-                + "every application on this machine that uses Squirrel shares it. Deguffer removes "
-                + "the directories it unpacked and nothing else.",
-                name => StagingDirectory().IsMatch(name)));
+            roots.Add(SquirrelStagingLayout.Root(staging));
         }
 
         roots.AddRange(_discovery.Look().Installations.Select(installation => ToolRoot.Of(

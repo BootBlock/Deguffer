@@ -299,13 +299,13 @@ public sealed class RowDeclarationsTests : IDisposable
     }
 
     /// <summary>
-    /// The first question in a pass reads every row's declaration for whichever row asked, so a
-    /// pass cancelled while the first rows are read starts none of the rest.
+    /// A question reads every row whose scope covers its folder, no more at once than a pass plans,
+    /// so a pass cancelled while the first rows are read starts none of the rest.
     ///
     /// <para>The first rows are as many as are read at once, so none of the rest has started when
     /// the pass is cancelled. The cancellation is then held part-way, as a busy thread can hold it,
     /// while the other first rows end and free their slots: a read that waited for the cancellation
-    /// to reach the parallel loop's own token started the next rows in them.</para>
+    /// to reach a token of its own would start the next rows in them.</para>
     /// </summary>
     [Fact]
     public async Task ACancelledPassStopsReadingTheRows()
@@ -329,7 +329,7 @@ public sealed class RowDeclarationsTests : IDisposable
                 {
                     othersEnded.Wait(patience);
 
-                    // Time for the loop to hand the freed slots to the next rows.
+                    // Time for the reading to hand the freed slots to the next rows.
                     Thread.Sleep(200);
                 });
 

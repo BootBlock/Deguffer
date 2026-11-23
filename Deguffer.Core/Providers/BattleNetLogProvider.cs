@@ -83,6 +83,9 @@ public sealed class BattleNetLogProvider : CleanupProviderBase
     /// <summary>§5.2 as §7.1 needs it read from outside. The declaration is the shared one.</summary>
     public override IReadOnlyList<ToolRoot> ToolRoots => [BattleNetFolder.Root(Environment)];
 
+    /// <summary>The launcher's folder, which is the one root above. Nothing moves it.</summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(BattleNetFolder.PathIn(Environment));
+
     /// <summary>
     /// Presence is the log folder itself being there, not the launcher's folder, which also holds
     /// what this row never removes.

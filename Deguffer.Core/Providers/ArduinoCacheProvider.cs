@@ -157,6 +157,12 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
         new ToolRoot(IdeConfigFolder, IdeConfigReason, static _ => false),
     ];
 
+    /// <summary>
+    /// The three fixed folders above, which are every root declared here. A folder a setting moves is
+    /// declared only by <see cref="DiscoverToolRootsAsync"/>, which this scope does not bound.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(DefaultData, DefaultBuildCache, IdeConfigFolder);
+
     public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
     {
         List<ToolRoot> roots = [];

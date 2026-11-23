@@ -139,6 +139,12 @@ public sealed class VsCodeLogProvider : CleanupProviderBase
         ]);
 
     /// <summary>
+    /// Every root above is an editor's folder, and the discovery finds those only directly under the
+    /// one application-data root it lists.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(_discovery.Root);
+
+    /// <summary>
     /// The log and crash report folders of every editor the same discovery the plan reads finds
     /// holding either. The editor's settings, workspace state and local history beside them are never
     /// reached.
@@ -195,7 +201,7 @@ public sealed class VsCodeLogProvider : CleanupProviderBase
         }
 
         // Every editor is walked, and its survivors asked, before either is awaited: the measurement needs
-        // only the targets, and the first survivors question in a pass reads every row's declarations.
+        // only the targets, and a survivors question reads every row that can declare its folder.
         List<(LevelWalk Walk, Task<IReadOnlyList<(string Path, string Reason)>> Sparing)> walks = [];
 
         foreach (var editor in editors)

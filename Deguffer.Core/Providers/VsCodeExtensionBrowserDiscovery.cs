@@ -57,6 +57,12 @@ internal sealed class VsCodeExtensionBrowserDiscovery(VsCodeUserDataDiscovery ed
     public static readonly string CacheUnderExtension = Path.Combine("puppeteer", ".chromium-browser-snapshots");
 
     /// <summary>
+    /// The folder every cache <see cref="Search"/> finds lies under, named without touching the disk:
+    /// each sits inside an editor's folder, and the editors are found only under this.
+    /// </summary>
+    public string Root => editors.Root;
+
+    /// <summary>
     /// Every cache, each with its survey taken. A link on the way down is named and never followed,
     /// because a path built from constants has passed through no filter that separates links (see
     /// <see cref="DerivedPath"/>).

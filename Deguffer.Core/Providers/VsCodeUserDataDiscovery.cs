@@ -91,6 +91,12 @@ public sealed class VsCodeUserDataDiscovery(IUserEnvironment environment)
     ];
 
     /// <summary>
+    /// The application-data root every folder <see cref="Discover"/> finds sits directly under, named
+    /// without touching the disk.
+    /// </summary>
+    public string Root => environment.RoamingAppData;
+
+    /// <summary>
     /// Every Code - OSS editor user-data folder under <c>%APPDATA%</c>.
     ///
     /// <para>The root holds hundreds of directories, so the order of the two checks is the
@@ -107,12 +113,12 @@ public sealed class VsCodeUserDataDiscovery(IUserEnvironment environment)
     {
         var found = new List<VsCodeUserData>();
 
-        var scan = ChildDirectories.Under(environment.RoamingAppData);
+        var scan = ChildDirectories.Under(Root);
 
         // Set once, from this listing, and never emptied first: a row's declaration and its plan may
         // ask from two threads at once, and an emptied list read between the two writes would say the
         // folder had been read.
-        UnreadableRoots = scan.Unreadable ? [environment.RoamingAppData] : [];
+        UnreadableRoots = scan.Unreadable ? [Root] : [];
 
         if (scan.Unreadable)
         {

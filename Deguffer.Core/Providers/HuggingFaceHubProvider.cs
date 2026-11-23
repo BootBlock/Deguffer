@@ -1,4 +1,3 @@
-using System.Collections.Frozen;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -48,19 +47,6 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 public sealed class HuggingFaceHubProvider : CleanupProviderBase
 {
-    /// <summary>
-    /// What sits at the top of the hub cache beside the repositories, with why each survives:
-    /// <c>huggingface_hub</c>'s own tag, locks and shared store, and the <c>version.txt</c> Transformers
-    /// writes there to record which layout it last moved the cache to.
-    /// </summary>
-    public static readonly FrozenDictionary<string, string> CacheFiles = new Dictionary<string, string>
-    {
-        ["CACHEDIR.TAG"] = "The tag that tells backup tools this folder is a cache.",
-        ["version.txt"] = "The record Transformers keeps of which layout it last moved the cache to.",
-        [".locks"] = "The locks huggingface_hub takes while it downloads.",
-        ["blobs"] = "The shared store of files several repositories link into. Only 'hf cache rm' may remove a file from it.",
-    }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
-
     /// <summary>
     /// The tool's own programs, which write into the cache while they run. The library itself runs
     /// inside Python and is asked about by its files instead.
@@ -161,6 +147,12 @@ public sealed class HuggingFaceHubProvider : CleanupProviderBase
             ];
         }
     }
+
+    /// <summary>
+    /// The default folder and every folder a variable names, through both readings, as they are set.
+    /// A hub cache no variable moves lies inside the Hugging Face folder.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(HuggingFaceLocations.Bounds(Environment));
 
     /// <summary>The hub cache <c>hf</c> reports, and the Hugging Face folder holding its access tokens.</summary>
     public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
@@ -313,7 +305,8 @@ public sealed class HuggingFaceHubProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = await BuildProtectedPathsAsync(hub, reported, entries, unused.Select(item => item.Folder), use.Held, ct)
+            ProtectedPaths = await ProtectAsync(
+                HuggingFaceHubSurvivors.Of(hub, reported, entries, unused.Select(item => item.Folder), use.Held), ct)
                 .ConfigureAwait(false),
             Notes = notes,
         };
@@ -358,57 +351,6 @@ public sealed class HuggingFaceHubProvider : CleanupProviderBase
         }
 
         return located;
-    }
-
-    /// <summary>
-    /// §5.6. Everything in the hub cache beside the repositories offered is the point: the tool's own
-    /// files, the shared store every repository may link into, each repository held back, and anything
-    /// the tool did not list, which has the same shape as the folders removed beside it. Then the
-    /// Hugging Face folder above, where the access tokens are.
-    ///
-    /// <para>The shared store is asserted standing and nothing more. <c>hf cache rm</c> removes the
-    /// files in it that only the removed repository used, and keeps the store.</para>
-    /// </summary>
-    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(
-        string hub,
-        HuggingFaceEnvironment reported,
-        IReadOnlyList<FileSystemInfo> entries,
-        IEnumerable<string> offered,
-        IReadOnlyList<(string Path, string Reason)> held,
-        CancellationToken ct)
-    {
-        var excluded = new HashSet<string>(offered, StringComparer.OrdinalIgnoreCase);
-        var heldReasons = held.ToDictionary(item => item.Path, item => item.Reason, StringComparer.OrdinalIgnoreCase);
-
-        var inCache = entries
-            .Select(entry => LongPath.Display(entry.FullName))
-            .Where(path => !excluded.Contains(path))
-            .Select(path => (path, CacheFiles.GetValueOrDefault(Path.GetFileName(path))
-                ?? heldReasons.GetValueOrDefault(path)
-                ?? "Not a repository Deguffer offers, so it must survive."));
-
-        // The Hugging Face folder is the one the tool keeps its tokens in. Its other children are
-        // asserted only where it holds the hub cache, because a hub cache moved on its own sits beside
-        // folders that are nothing of the tool's.
-        var home = reported.Credentials.Select(Path.GetDirectoryName).OfType<string>().FirstOrDefault();
-        var parent = Path.GetDirectoryName(hub);
-        var besideHub = home is not null && parent is not null && home.Equals(parent, StringComparison.OrdinalIgnoreCase)
-            ? FolderEntries.Of(parent)?
-                .Select(entry => LongPath.Display(entry.FullName))
-                .Where(path => !path.Equals(hub, StringComparison.OrdinalIgnoreCase))
-                .Select(path => (path, "Beside the hub cache in the Hugging Face folder, and nothing removes it."))
-                ?? []
-            : [];
-
-        return ProtectAsync(
-            [
-                (hub, "The Hugging Face hub cache must survive: only the repositories chosen are removed from it."),
-                .. reported.Credentials.Select(file => (file, "Your Hugging Face access tokens.")),
-                .. reported.Assets is { } assets ? [(assets, "Files libraries downloaded for themselves beside the hub cache.")] : Array.Empty<(string, string)>(),
-                .. inCache,
-                .. besideHub,
-            ],
-            ct);
     }
 
     /// <summary>

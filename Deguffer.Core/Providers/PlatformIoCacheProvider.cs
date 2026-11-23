@@ -126,7 +126,13 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
     /// because the report comes from a subprocess and this property is synchronous. The reported
     /// core directory is declared in <see cref="DiscoverToolRootsAsync"/>.</para>
     /// </summary>
-    public override IReadOnlyList<ToolRoot> ToolRoots => Declare(CoreRoot);
+    public override IReadOnlyList<ToolRoot> ToolRoots => PlatformIoCoreLayout.Declare(CoreRoot);
+
+    /// <summary>
+    /// The default core directory, the one root above. A directory PlatformIO reports is declared only
+    /// by <see cref="DiscoverToolRootsAsync"/>, which this scope does not bound.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(CoreRoot);
 
     /// <summary>
     /// The core directory PlatformIO reports, which is the one that matters here: <c>packages</c>
@@ -146,35 +152,14 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
 
         return
         [
-            .. Declare(located.CoreDirectory),
+            .. PlatformIoCoreLayout.Declare(located.CoreDirectory),
 
             // packages_dir is reported independently of core_dir — 6.1.19 reports the core and
             // neither of the other two — so a machine that moved it has the toolchains outside the
-            // root above, where nothing refuses them. It recognises no child at all because it is
-            // never a target, which is the same rule the core root's predicate states.
-            new ToolRoot(
-                located.PackagesDirectory,
-                "These are the toolchains, frameworks and platforms PlatformIO installed. Deguffer "
-                + "removes one only where PlatformIO itself reports that no project needs it, "
-                + "because nothing about the folder says which of your boards still builds.",
-                static _ => false),
+            // root above, where nothing refuses them.
+            PlatformIoCoreLayout.PackagesRoot(located.PackagesDirectory),
         ];
     }
-
-    /// <summary>
-    /// §5.2 over one core directory. <see cref="ToolRoots"/> and
-    /// <see cref="DiscoverToolRootsAsync"/> differ only in which directory they are given.
-    /// </summary>
-    private static IReadOnlyList<ToolRoot> Declare(string core) =>
-    [
-        ToolRoot.Folders(
-            core,
-            "This is PlatformIO's own folder. Deguffer clears the download cache inside it, and "
-            + "removes an installed package only where PlatformIO itself reports that nothing needs "
-            + "it, because the toolchains, the Python that PlatformIO runs on and your global "
-            + "libraries all sit beside that cache.",
-            static name => name.Equals(".cache", StringComparison.OrdinalIgnoreCase)),
-    ];
 
     /// <summary>
     /// The cache <c>prune --cache</c> is sent to and the packages folder the package prune uninstalls
@@ -283,7 +268,7 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = await BuildProtectedPathsAsync(locations, ct).ConfigureAwait(false),
+            ProtectedPaths = await ProtectAsync(PlatformIoCoreLayout.Survivors(locations), ct).ConfigureAwait(false),
             Notes = notes,
             // Two measurements now, combined by the rule ScanBatch already applies within one.
             Fallback = FallbackReasonText.Prevailing(cache.Fallback, packages.Fallback),
@@ -449,40 +434,6 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
             },
             notes,
             probed.Fallback);
-    }
-
-    /// <summary>
-    /// §5.6. The siblings are the whole point here: <c>packages</c> and <c>platforms</c> are the
-    /// installed toolchains that make up nearly all of the core directory's size, <c>penv</c> and
-    /// <c>python3</c> are the interpreter PlatformIO itself runs on, and <c>lib</c> holds globally
-    /// installed user libraries that were never a cache at all.
-    ///
-    /// <para><c>packages</c> stays on this list now that a step may clear part of it, and asserting
-    /// its survival is no weaker a claim than before. Neither prune category removes the directory:
-    /// each uninstalls individual packages inside it, and a current PlatformIO's own core packages
-    /// are never candidates. A run that left <c>packages</c> missing would mean something removed
-    /// the folder itself, which is precisely what §5.6 exists to catch.</para>
-    ///
-    /// <para>Built from the directory PlatformIO reported rather than from <see cref="CoreRoot"/>.
-    /// A relocated core directory would otherwise leave every one of these paths absent, and
-    /// <see cref="ProtectedPath.PresenceBefore"/> would record them as absent — six assertions
-    /// that pass without establishing anything, on exactly the installs where the guess about where
-    /// PlatformIO lives has already been shown to be wrong.</para>
-    /// </summary>
-    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(PlatformIoLocations locations, CancellationToken ct)
-    {
-        var core = locations.CoreDirectory;
-
-        return ProtectAsync(
-            [
-                (core, "PlatformIO's core directory must survive — only the cache and the unused packages within it are cleared."),
-                (locations.PackagesDirectory, "Installed toolchains and frameworks; PlatformIO removes individual unused packages, never the folder."),
-                (Path.Combine(core, "platforms"), "Installed development platform definitions."),
-                (Path.Combine(core, "penv"), "The virtual environment PlatformIO Core itself runs in."),
-                (Path.Combine(core, "python3"), "The bundled Python interpreter backing that environment."),
-                (Path.Combine(core, "lib"), "Globally installed user libraries — never a cache."),
-            ],
-            ct);
     }
 
     /// <summary>

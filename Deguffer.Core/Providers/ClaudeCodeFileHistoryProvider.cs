@@ -155,6 +155,12 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots.Get(Declare);
 
+    /// <summary>
+    /// Every root above is Claude Code's folder or its snapshot folder, and the folder is one of these
+    /// whichever way the variable is set.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(ClaudeCodeHome.Bounds(Environment));
+
     public override void InvalidateCaches()
     {
         _sessions.Invalidate();

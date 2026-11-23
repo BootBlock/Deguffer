@@ -64,7 +64,7 @@ public class MftExploreReaderTests
         Assert.Equal(1024 + 4096, tree.SizeOf(At(tree, CachePath)));
         Assert.Equal(4096 + 2048, tree.SizeOf(At(tree, SiblingPath)));
         Assert.Equal(1024 + 4096 + 4096 + 2048, tree.SizeOf(At(tree, ProfilePath)));
-        Assert.Equal(tree.NodeCount, Reachable(tree).Count);
+        Assert.Equal(tree.NodeCount, TreeNodes.Reachable(tree).Count);
     }
 
     /// <summary>
@@ -90,7 +90,7 @@ public class MftExploreReaderTests
         // The root, the five folders and the file: none of the free records, the blank metadata
         // slots or the orphan.
         Assert.Equal(7, tree.NodeCount);
-        Assert.Equal(tree.NodeCount, Reachable(tree).Count);
+        Assert.Equal(tree.NodeCount, TreeNodes.Reachable(tree).Count);
         Assert.All(Enumerable.Range(0, tree.NodeCount), node => Assert.NotNull(tree.TryPathOf(node)));
         Assert.Equal(4096, tree.SizeOf(At(tree, CachePath + @"\a.tgz")));
     }
@@ -119,7 +119,7 @@ public class MftExploreReaderTests
 
         // First, and bounded: every node is one the root reaches, so the walk to the root below
         // ends for each of them.
-        Assert.Equal(Reachable(tree).Count, tree.NodeCount);
+        Assert.Equal(TreeNodes.Reachable(tree).Count, tree.NodeCount);
 
         var paths = Enumerable.Range(0, tree.NodeCount).Select(tree.PathOf).ToList();
 
@@ -373,7 +373,7 @@ public class MftExploreReaderTests
 
         Assert.Equal(4000, tree.TotalLength);
         Assert.Equal(4000, tree.LengthOf(At(tree, CachePath + @"\a.tgz")));
-        Assert.DoesNotContain("unreachable.tgz", Reachable(tree).Select(tree.NameOf));
+        Assert.DoesNotContain("unreachable.tgz", TreeNodes.Reachable(tree).Select(tree.NameOf));
 
         Assert.True(tree.HasUnknownSizes, "four gigabytes went missing and the total was called exact");
     }
@@ -449,7 +449,7 @@ public class MftExploreReaderTests
         var tree = WholeVolume(source);
 
         Assert.Equal(4000, tree.TotalLength);
-        Assert.DoesNotContain("orphan.tgz", Reachable(tree).Select(tree.NameOf));
+        Assert.DoesNotContain("orphan.tgz", TreeNodes.Reachable(tree).Select(tree.NameOf));
     }
 
     /// <summary>
@@ -665,12 +665,12 @@ public class MftExploreReaderTests
         var tree = MftExploreReader.Read(source, CachePath, CacheComponents, TableTuning.Default, progress: null, default).Tree!;
 
         // First, and bounded, for the reason the test above gives.
-        Assert.Equal(Reachable(tree).Count, tree.NodeCount);
+        Assert.Equal(TreeNodes.Reachable(tree).Count, tree.NodeCount);
 
         Assert.All(
             Enumerable.Range(0, tree.NodeCount),
             node => Assert.StartsWith(CachePath, tree.PathOf(node), StringComparison.Ordinal));
-        Assert.DoesNotContain("settings.json", Reachable(tree).Select(tree.NameOf));
+        Assert.DoesNotContain("settings.json", TreeNodes.Reachable(tree).Select(tree.NameOf));
 
         Assert.Equal(4000, tree.TotalLength);
         Assert.Equal(tree.RootNode, tree.ParentOf(tree.RootNode));
@@ -987,16 +987,13 @@ public class MftExploreReaderTests
         var oneThread = MftExploreReader.Read(source, Root, [], new TableTuning(4 * 1024, 8, 1, 1), progress: null, default).Tree!;
         var fourThreads = MftExploreReader.Read(source, Root, [], new TableTuning(4 * 1024, 8, 4, 1), progress: null, default).Tree!;
 
-        Assert.Equal(Drawn(oneThread), Drawn(fourThreads));
+        Assert.Equal(TreeNodes.Drawn(oneThread), TreeNodes.Drawn(fourThreads));
         Assert.Equal(oneThread.NamesHeld, fourThreads.NamesHeld);
 
         // The empty name, the root's, each folder's, the shared names once, and the rest once each.
         // The root record's own name, which its node does not use because it carries the root's
         // path instead, is one more: a tree of the whole volume keeps the reader's pool (#552).
         Assert.Equal(3 + Folders + FilesPerFolder / 2 + Folders * FilesPerFolder / 2, fourThreads.NamesHeld);
-
-        static string[] Drawn(ExploreTree tree) =>
-            [.. Reachable(tree).Select(node => $"{tree.PathOf(node)}|{tree.SizeOf(node)}|{tree.LengthOf(node)}").Order(StringComparer.Ordinal)];
     }
 
     /// <summary>
@@ -1011,22 +1008,4 @@ public class MftExploreReaderTests
 
     private static CallbackProgress<ExploreProgress> Counting(List<long> done) => new(report => done.Add(report.Done));
 
-    private static List<int> Reachable(ExploreTree tree)
-    {
-        var reached = new List<int>();
-        var pending = new Stack<int>();
-        pending.Push(tree.RootNode);
-
-        while (pending.TryPop(out var node))
-        {
-            reached.Add(node);
-
-            foreach (var child in tree.ChildrenOf(node))
-            {
-                pending.Push(child);
-            }
-        }
-
-        return reached;
-    }
 }

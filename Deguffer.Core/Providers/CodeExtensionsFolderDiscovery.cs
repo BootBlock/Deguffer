@@ -159,6 +159,14 @@ internal static class CodeExtensionsFolderDiscovery
     }
 
     /// <summary>
+    /// The folders every folder <see cref="Search"/> finds lies at or under, named without touching
+    /// the disk: the profile its dot-folders are in, and the value of <see cref="Variable"/> as it
+    /// is set, before the checks that may decline it.
+    /// </summary>
+    public static IEnumerable<string?> Bounds(IUserEnvironment environment) =>
+        [environment.UserProfile, ConfiguredFolder.Read(VariableReading.Current, Variable, environment)];
+
+    /// <summary>
     /// The last name of every location <paramref name="folder"/>'s list names, or null where the folder
     /// holds no list in the editor's shape.
     /// </summary>

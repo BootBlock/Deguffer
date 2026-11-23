@@ -1,9 +1,10 @@
+using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Providers;
 
 /// <summary>
-/// Every row's §5.2 declaration read as one, so a row that classifies the children of a folder can
+/// The §5.2 declarations of the other rows, so a row that classifies the children of a folder can
 /// tell which of the children it spares another row offers.
 ///
 /// <para><b>A child another row offers is not this row's survivor.</b> Two rows may each walk the
@@ -28,19 +29,26 @@ namespace Deguffer.Core.Providers;
 /// a target rather than a survivor. So the question needs no "other than me".</para>
 ///
 /// <para><b>Asked while a plan is assembled, never from a walk or from a declaration.</b> Answering
-/// reads every row's <see cref="ICleanupProvider.ToolRoots"/>, and a row may build those from its own
+/// reads rows' <see cref="ICleanupProvider.ToolRoots"/>, and a row may build those from its own
 /// walk, so a question asked from inside either would ask a row for the declaration it is still
 /// building. <see cref="UnofferedAsync"/> is the one place a plan's spared children meet it.</para>
 ///
-/// <para><b>Asked from several plans at once, and awaited.</b> A pass plans several rows together,
-/// and the first question reads every row's declaration, which takes seconds where a row builds its
-/// own from a walk. That reading runs each row on a thread of the walk's own
-/// (<see cref="DeclaredRoots"/>), so neither the plan that asked first nor one that asks meanwhile
-/// holds a pool thread for it: each awaits the one reading rather than starting a second.</para>
+/// <para><b>Each question reads only the rows that could declare its folder.</b> A row states
+/// where its roots can lie without touching the disk (<see cref="ICleanupProvider.ToolRootScope"/>),
+/// and a question about a folder reads only the rows whose scope covers it. The Gradle row asking
+/// about its own home never waits for the Claude Code conversations row to date its folders or for
+/// the Chromium rows to walk both application-data roots, which together are most of the reading
+/// and can take seconds on a busy drive.</para>
+///
+/// <para><b>Asked from several plans at once, and awaited.</b> Each row is read once per pass, for
+/// whichever question needed it first, and every question that needs it meanwhile awaits that one
+/// reading rather than starting a second. A reading runs its row on a thread of the walk's own
+/// (<see cref="DeclaredRoots"/>), so no plan holds a pool thread for it, and no more rows are read at
+/// once than a pass plans.</para>
 /// </summary>
 public sealed class RowDeclarations
 {
-    private readonly PassMemo<Task<Dictionary<string, List<ToolRoot>>>> _byFolder = new();
+    private readonly PassMemo<Readings> _readings = new();
     private IReadOnlyList<ICleanupProvider> _rows = [];
 
     /// <summary>
@@ -53,28 +61,15 @@ public sealed class RowDeclarations
         ArgumentNullException.ThrowIfNull(rows);
 
         Volatile.Write(ref _rows, rows);
-        _byFolder.Forget();
+        _readings.Forget();
     }
 
     /// <summary>
-    /// Drop the index. The rows rebuild their declarations for each planning pass, so an index kept
-    /// across passes would miss a folder that appeared between them.
+    /// Drop every reading. The rows rebuild their declarations for each planning pass, so a reading
+    /// kept across passes would miss a folder that appeared between them, and a scope read from the
+    /// environment may have moved with a variable.
     /// </summary>
-    public void Invalidate() => _byFolder.Forget();
-
-    /// <summary>
-    /// Whether some row declares <paramref name="folder"/>, a directory that is not a link, as one it
-    /// removes from the directory it sits in.
-    /// </summary>
-    /// <param name="ct">
-    /// Checked before each row is read. A row's declaration cannot be stopped part-way, but
-    /// the first question in a pass reads every row's, for whichever row asked.
-    /// </param>
-    private async Task<bool> OfferedByARowAsync(string folder, CancellationToken ct) =>
-        Path.GetDirectoryName(folder) is { } parent
-        && LongPath.Entry(parent) is { } key
-        && (await ByFolderAsync(ct).ConfigureAwait(false)).TryGetValue(key, out var roots)
-        && roots.Exists(root => root.Recognises(new ToolRootChild(Path.GetFileName(folder), ChildKind.Folder)));
+    public void Invalidate() => _readings.Forget();
 
     /// <summary>
     /// The children in <paramref name="spared"/> that no row declares it removes: what a plan asserts
@@ -84,33 +79,20 @@ public sealed class RowDeclarations
     /// <para>The only way a plan asks, so the sweep rule on awaiting it holds for every row.</para>
     ///
     /// <para><b>Started where the children are known, and awaited where the plan reads them.</b> The
-    /// first question in a pass reads every row's declaration, which takes seconds, and a row that
-    /// awaited it before measuring its own targets would hold its planning slot for that time doing
-    /// nothing. The measurement needs only the targets, so it runs while this is answered.
+    /// first question about a folder in a pass reads every row whose scope covers it, and a row that
+    /// awaited that before measuring its own targets would hold its planning slot doing nothing. The
+    /// measurement needs only the targets, so it runs while this is answered.
     /// <c>CodeRuleSweepTests</c> refuses an <c>await</c> written on the question itself.</para>
     /// </summary>
+    /// <param name="ct">
+    /// Checked before each row is read. A row's declaration cannot be stopped part-way.
+    /// </param>
     public async Task<IReadOnlyList<(string Path, string Reason)>> UnofferedAsync(
         IReadOnlyList<(string Path, string Reason)> spared,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(spared);
 
-        List<(string Path, string Reason)> unoffered = [];
-
-        foreach (var child in spared)
-        {
-            if (!await OfferedByARowAsync(child.Path, ct).ConfigureAwait(false))
-            {
-                unoffered.Add(child);
-            }
-        }
-
-        return unoffered;
-    }
-
-    /// <summary>Built once per planning pass (G4), because a plan asks once per spared child.</summary>
-    private async Task<Dictionary<string, List<ToolRoot>>> ByFolderAsync(CancellationToken ct)
-    {
         // A row whose declaration asked this would wait for the reading it is part of, which never
         // ends and says nothing about why.
         if (DeclaredRoots.IsBeingRead)
@@ -119,42 +101,143 @@ public sealed class RowDeclarations
                 "A row asked what other rows offer while its own declaration was being read.");
         }
 
-        while (true)
+        var readings = _readings.Get(() => new Readings(Volatile.Read(ref _rows)));
+        List<(string Path, string Reason)> unoffered = [];
+
+        // A plan's spared children are nearly always children of one folder, so the rows covering a
+        // folder are found and read once for the run of children that share it.
+        string? folder = null;
+        Dictionary<string, List<ToolRoot>>[] declared = [];
+
+        foreach (var child in spared)
         {
-            var reading = _byFolder.Get(() => IndexAsync(Volatile.Read(ref _rows), ct));
-
-            try
+            if (Path.GetDirectoryName(child.Path) is not { } parent || LongPath.Entry(parent) is not { } key)
             {
-                return await reading.WaitAsync(ct).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-            {
-                // The plan that started the reading was stopped, and this one was not. The memo keeps
-                // no stopped reading, so asking again starts one for this plan.
-            }
-        }
-    }
-
-    private static async Task<Dictionary<string, List<ToolRoot>>> IndexAsync(
-        IReadOnlyList<ICleanupProvider> rows, CancellationToken ct)
-    {
-        var byFolder = new Dictionary<string, List<ToolRoot>>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var root in await DeclaredRoots.ReadAsync(rows, ct).ConfigureAwait(false))
-        {
-            if (LongPath.Configured(root.Path) is not { } key)
-            {
+                unoffered.Add(child);
                 continue;
             }
 
-            if (!byFolder.TryGetValue(key, out var roots))
+            if (!key.Equals(folder, StringComparison.OrdinalIgnoreCase))
             {
-                byFolder[key] = roots = [];
+                declared = await readings.CoveringAsync(key, ct).ConfigureAwait(false);
+                folder = key;
             }
 
-            roots.Add(root);
+            if (!IsOffered(declared, key, Path.GetFileName(child.Path)))
+            {
+                unoffered.Add(child);
+            }
         }
 
-        return byFolder;
+        return unoffered;
+    }
+
+    private static bool IsOffered(Dictionary<string, List<ToolRoot>>[] declared, string folder, string name)
+    {
+        var child = new ToolRootChild(name, ChildKind.Folder);
+
+        foreach (var byFolder in declared)
+        {
+            if (byFolder.TryGetValue(folder, out var roots) && roots.Exists(root => root.Recognises(child)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// One pass's readings: each row's scope, read once, and its declaration, read the first time a
+    /// question covers it (G4).
+    /// </summary>
+    private sealed class Readings
+    {
+        private readonly Row[] _rows;
+
+        // No more rows read at once than a pass plans: each read holds a thread of its own for as long
+        // as its row walks. Never disposed, since a question
+        // cancelled while queued here may still be waiting when the pass is forgotten.
+        private readonly SemaphoreSlim _atOnce = new(CleanupPlanner.ProvidersAtOnce);
+
+        public Readings(IReadOnlyList<ICleanupProvider> rows) =>
+            _rows = [.. rows.Select(row => new Row(row, row.ToolRootScope)).Where(row => !row.Scope.IsEmpty)];
+
+        /// <summary>The declarations, each indexed by folder, of every row whose scope covers <paramref name="folder"/>.</summary>
+        public async Task<Dictionary<string, List<ToolRoot>>[]> CoveringAsync(string folder, CancellationToken ct)
+        {
+            List<Task<Dictionary<string, List<ToolRoot>>>> reading = [];
+
+            // Every covering row is started before any is awaited, so they are read side by side.
+            foreach (var row in _rows)
+            {
+                if (row.Scope.Covers(folder))
+                {
+                    reading.Add(DeclaredAsync(row, ct));
+                }
+            }
+
+            return await Task.WhenAll(reading).ConfigureAwait(false);
+        }
+
+        private async Task<Dictionary<string, List<ToolRoot>>> DeclaredAsync(Row row, CancellationToken ct)
+        {
+            while (true)
+            {
+                var reading = row.Declared.Get(() => ReadAsync(row.Provider, ct));
+
+                try
+                {
+                    return await reading.WaitAsync(ct).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                {
+                    // The plan that started the reading was stopped, and this one was not. The memo keeps
+                    // no stopped reading, so asking again starts one for this plan.
+                }
+            }
+        }
+
+        private async Task<Dictionary<string, List<ToolRoot>>> ReadAsync(ICleanupProvider row, CancellationToken ct)
+        {
+            await _atOnce.WaitAsync(ct).ConfigureAwait(false);
+            IReadOnlyList<ToolRoot> roots;
+
+            try
+            {
+                // DeclaredRoots checks the token again before the row is read, so a slot freed while
+                // the pass is being cancelled starts no row.
+                roots = await DeclaredRoots.ReadAsync(row, ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                _atOnce.Release();
+            }
+
+            var byFolder = new Dictionary<string, List<ToolRoot>>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var root in roots)
+            {
+                if (LongPath.Configured(root.Path) is not { } key)
+                {
+                    continue;
+                }
+
+                if (!byFolder.TryGetValue(key, out var atFolder))
+                {
+                    byFolder[key] = atFolder = [];
+                }
+
+                atFolder.Add(root);
+            }
+
+            return byFolder;
+        }
+    }
+
+    /// <summary>A row with a scope, and its declaration once a question has read it.</summary>
+    private sealed record Row(ICleanupProvider Provider, ToolRootScope Scope)
+    {
+        public PassMemo<Task<Dictionary<string, List<ToolRoot>>>> Declared { get; } = new();
     }
 }

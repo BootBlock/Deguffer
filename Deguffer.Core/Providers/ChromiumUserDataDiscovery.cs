@@ -153,6 +153,16 @@ public sealed partial class ChromiumUserDataDiscovery(
             where reached.Scoped.Reach == FolderReach.Outside
             select reached.Root];
 
+    /// <summary>
+    /// The folders every folder <see cref="Discover"/> finds lies under, named without touching the
+    /// disk: the roots it walks, and the tier each declared host is joined to.
+    /// </summary>
+    public IEnumerable<string?> Bounds =>
+        [.. WalkedRoots, .. ChromiumHost.Declared.Select(host => host.Area.In(environment))];
+
+    /// <summary>The application-data roots the walk looks in.</summary>
+    private string[] WalkedRoots => [environment.RoamingAppData, environment.LocalAppData];
+
     /// <summary>How the scope reaches each application-data root, asked once for the life of this discovery.</summary>
     private Task<IReadOnlyList<(string Root, ScopedFolder Scoped)>> ReachesAsync(CancellationToken ct)
     {
@@ -170,7 +180,7 @@ public sealed partial class ChromiumUserDataDiscovery(
         {
             List<(string Root, ScopedFolder Scoped)> reaches = [];
 
-            foreach (var root in new[] { environment.RoamingAppData, environment.LocalAppData })
+            foreach (var root in WalkedRoots)
             {
                 reaches.Add((root, await _scope.ReachAsync(root, token).ConfigureAwait(false)));
             }

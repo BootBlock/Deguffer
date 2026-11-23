@@ -164,6 +164,17 @@ public sealed class CoursierCacheProvider : CleanupProviderBase
     }
 
     /// <summary>
+    /// Coursier's home, which holds every default, and whatever each cache's variable names, taken as it
+    /// stands: the checks that decline a folder read the disk, and covering a declined one is only wider.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(
+    [
+        CoursierHome,
+        Environment.GetEnvironmentVariable(CacheVariable),
+        .. CoursierKeptCaches.All.Select(cache => Environment.GetEnvironmentVariable(cache.Variable)),
+    ]);
+
+    /// <summary>
     /// A kept cache a variable names in a folder this declines is still where Coursier extracts, so
     /// Explore refuses what it fills there and nothing else. Declared here because a declaration made
     /// here only ever adds a refusal. See <see cref="ToolRoot.Sparing"/>.

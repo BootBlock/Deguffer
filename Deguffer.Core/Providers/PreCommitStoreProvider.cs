@@ -133,6 +133,18 @@ public sealed partial class PreCommitStoreProvider : CleanupProviderBase
     ];
 
     /// <summary>
+    /// The default store and whatever either variable holds in either reading, unjudged: judging a
+    /// value asks the disk, and a value this declines only narrows the roots. The cache home is wider
+    /// than the store inside it, which costs only speed.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(
+        DefaultStore,
+        ConfiguredFolder.Read(VariableReading.Tool, HomeVariable, Environment),
+        ConfiguredFolder.Read(VariableReading.Current, HomeVariable, Environment),
+        ConfiguredFolder.Read(VariableReading.Tool, XdgCacheVariable, Environment),
+        ConfiguredFolder.Read(VariableReading.Current, XdgCacheVariable, Environment));
+
+    /// <summary>
     /// A folder either reading of a variable names but this declines is still where pre-commit keeps its
     /// record, its hook repositories and the changes it stashed, so Explore refuses those there and
     /// nothing else. Built as <see cref="ToolRoot.Sparing"/> builds its root, with a predicate rather than

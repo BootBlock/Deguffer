@@ -125,6 +125,9 @@ public sealed partial class VsCodeCppToolsCacheProvider : CleanupProviderBase
             DisposableChildren),
     ];
 
+    /// <summary>The one root above is the extension's own folder, at a fixed place in the local application data.</summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(_root);
+
     /// <summary>
     /// The precompiled headers, whether or not they are there today, and each workspace's folder the
     /// plan's own test recognises as holding nothing but its browse database. A workspace's folder is

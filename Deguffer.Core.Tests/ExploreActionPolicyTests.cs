@@ -1732,7 +1732,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     private string NvidiaRoot(ProfileArea area) =>
-        GpuShaderCacheProvider.Roots
+        GpuShaderCacheLayout.Roots
             .Single(root => root.DirectoryName == "NVIDIA" && root.Area == area)
             .PathIn(_environment)!;
 

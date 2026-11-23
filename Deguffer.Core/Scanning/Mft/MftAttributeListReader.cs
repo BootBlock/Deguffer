@@ -18,8 +18,10 @@ namespace Deguffer.Core.Scanning.Mft;
 ///
 /// <para><b>Each read in flight has one buffer</b>, kept for the next read made in its place, so a
 /// table with thousands of lists costs no more memory than one with a few, and no buffer is made per
-/// read. No buffer is released while a read is in flight: every way out, a cancellation or a failure
-/// included, first cancels the reads still in flight and waits for them.</para>
+/// read. A caller that reads lists in several batches lends the same buffers to each
+/// (<see cref="MftListReadAhead"/>). No buffer is released while a read is in flight: every way out,
+/// a cancellation or a failure included, first cancels the reads still in flight and waits for
+/// them.</para>
 /// </summary>
 internal sealed class MftAttributeListReader
 {
@@ -36,7 +38,10 @@ internal sealed class MftAttributeListReader
     private readonly IReadOnlyList<MftListRead> _plan;
     private readonly int _clusterBytes;
 
-    /// <summary>The buffer each place for a read in flight keeps, touched only by the read made in it.</summary>
+    /// <summary>
+    /// The buffer each place for a read in flight keeps, touched only by the read made in it, and
+    /// released by whoever made the array, once nothing is in flight.
+    /// </summary>
     private readonly VolumeReadBuffer?[] _buffers;
 
     /// <summary>Each list's entries, from when its read lands until it is handed on.</summary>
@@ -45,13 +50,13 @@ internal sealed class MftAttributeListReader
     private MftAttributeListReader(
         IMftSource source,
         List<(MftDeferredRecord Record, IReadOnlyList<DataRun> Runs, int Length)> lists,
-        int readsInFlight)
+        VolumeReadBuffer?[] buffers)
     {
         _source = source;
         _lists = lists;
         _clusterBytes = source.BytesPerCluster;
         _plan = MftListReadPlanner.Plan(lists.ConvertAll(static l => (l.Runs, l.Length)), _clusterBytes);
-        _buffers = new VolumeReadBuffer?[readsInFlight];
+        _buffers = buffers;
         _entries = new IReadOnlyList<MftAttributeListEntry>?[lists.Count];
     }
 
@@ -70,58 +75,94 @@ internal sealed class MftAttributeListReader
         Func<MftDeferredRecord, IReadOnlyList<MftAttributeListEntry>?, bool> onList,
         CancellationToken ct)
     {
-        var lists = new List<(MftDeferredRecord Record, IReadOnlyList<DataRun> Runs, int Length)>();
+        var buffers = new VolumeReadBuffer?[readsInFlight];
+
+        try
+        {
+            Read(source, deferred, buffers, onList, ct);
+        }
+        finally
+        {
+            Release(buffers);
+        }
+    }
+
+    /// <summary>
+    /// <see cref="Read(IMftSource, IReadOnlyList{MftDeferredRecord}, int, Func{MftDeferredRecord, IReadOnlyList{MftAttributeListEntry}?, bool}, CancellationToken)"/>
+    /// into <paramref name="buffers"/>, one per read in flight, which the caller keeps for its next
+    /// call and releases with <see cref="Release"/>. Nothing is in flight in them once this returns.
+    /// </summary>
+    public static void Read(
+        IMftSource source,
+        IReadOnlyList<MftDeferredRecord> deferred,
+        VolumeReadBuffer?[] buffers,
+        Func<MftDeferredRecord, IReadOnlyList<MftAttributeListEntry>?, bool> onList,
+        CancellationToken ct)
+    {
+        new MftAttributeListReader(source, InReadOrder(deferred), buffers).HandOn(onList, ct);
+    }
+
+    /// <summary>
+    /// The records of <paramref name="deferred"/> whose lists are still pending, with where each list
+    /// is, in the order
+    /// <see cref="Read(IMftSource, IReadOnlyList{MftDeferredRecord}, int, Func{MftDeferredRecord, IReadOnlyList{MftAttributeListEntry}?, bool}, CancellationToken)"/>
+    /// hands them on: by the first cluster of each list.
+    /// </summary>
+    public static List<(MftDeferredRecord Record, IReadOnlyList<DataRun> Runs, int Length)> InReadOrder(
+        IReadOnlyList<MftDeferredRecord> deferred)
+    {
+        var pending = new List<(MftDeferredRecord Record, IReadOnlyList<DataRun> Runs, int Length)>();
 
         foreach (var record in deferred)
         {
             if (record.PendingList is { } list)
             {
-                lists.Add((record, list.Runs, list.Length));
+                pending.Add((record, list.Runs, list.Length));
             }
         }
 
         // A list with no runs is never pending, so every one has a first cluster. Ties are damage,
         // and broken by record so the order is the same on every run.
-        lists.Sort(static (a, b) => a.Runs[0].StartCluster != b.Runs[0].StartCluster
+        pending.Sort(static (a, b) => a.Runs[0].StartCluster != b.Runs[0].StartCluster
             ? a.Runs[0].StartCluster.CompareTo(b.Runs[0].StartCluster)
             : a.Record.Self.Record.CompareTo(b.Record.Self.Record));
 
-        new MftAttributeListReader(source, lists, readsInFlight).HandOn(onList, ct);
+        return pending;
+    }
+
+    /// <summary>Release the buffers lent to every read, once nothing is in flight in them.</summary>
+    public static void Release(VolumeReadBuffer?[] buffers)
+    {
+        for (var i = 0; i < buffers.Length; i++)
+        {
+            ((IDisposable?)buffers[i])?.Dispose();
+            buffers[i] = null;
+        }
     }
 
     private void HandOn(Func<MftDeferredRecord, IReadOnlyList<MftAttributeListEntry>?, bool> onList, CancellationToken ct)
     {
-        try
+        // Disposing the reads waits for every read still in flight, so the buffers are free after it.
+        using var reads = new OrderedReads(_plan.Count, _buffers.Length, _buffers.Length * RoundsAhead, LandAsync, ct);
+
+        for (var read = 0; read < _plan.Count; read++)
         {
-            using var reads = new OrderedReads(_plan.Count, _buffers.Length, _buffers.Length * RoundsAhead, LandAsync, ct);
+            reads.Await(read);
 
-            for (var read = 0; read < _plan.Count; read++)
+            var made = _plan[read];
+
+            for (var i = made.First; i < made.First + made.Count; i++)
             {
-                reads.Await(read);
+                var entries = _entries[i];
+                _entries[i] = null;
 
-                var made = _plan[read];
-
-                for (var i = made.First; i < made.First + made.Count; i++)
+                if (!onList(_lists[i].Record, entries))
                 {
-                    var entries = _entries[i];
-                    _entries[i] = null;
-
-                    if (!onList(_lists[i].Record, entries))
-                    {
-                        return;
-                    }
+                    return;
                 }
+            }
 
-                reads.HandedOn();
-            }
-        }
-        finally
-        {
-            // After the reads are disposed, which waits for every read still in flight.
-            foreach (var buffer in _buffers)
-            {
-                ((IDisposable?)buffer)?.Dispose();
-            }
+            reads.HandedOn();
         }
     }
 
