@@ -147,8 +147,8 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
 
     /// <summary>
     /// What <see cref="ResetLogsHandler"/> clears, declared at the top of the system drive so each
-    /// directory is checked for being a link, dated and measured before Windows is asked, and so the
-    /// drive's own contents are asserted to have survived.
+    /// directory is checked for being a link before Windows is asked about it, dated and measured for
+    /// the step that runs it, and so the drive's own contents are asserted to have survived.
     /// </summary>
     public DeclaredRoot ResetLogs { get; }
 
