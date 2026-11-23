@@ -14,7 +14,7 @@
 
     <Grid x:Name="Column">
         <Border x:Name="Fill"
-                CornerRadius="2,2,0,0"
+                CornerRadius="{StaticResource ColumnCornerRadius}"
                 Background="{ThemeResource AccentFillColorDefaultBrush}" />
     </Grid>
 </UserControl>

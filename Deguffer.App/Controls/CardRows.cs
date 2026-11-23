@@ -8,13 +8,13 @@ namespace Deguffer.App.Controls;
 /// would be built whole; drawn in pieces instead, the heading takes the card's top edge and corners,
 /// each row its sides, and the last row its bottom edge and corners.
 ///
-/// <para>The corner is the app's <c>CardCorner</c> and the padding its <c>CardRowPadding</c> and
-/// <c>ControlGap</c>, read once, so the pieces read as one card beside the page's other cards and
+/// <para>The corner is Fluent's <c>OverlayCornerRadius</c>, which every card wears, and the padding
+/// the app's <c>CardRowPadding</c> and <c>ControlGap</c>, read once, so the pieces read as one card beside the page's other cards and
 /// stay on the spacing scale when it changes.</para>
 /// </summary>
 public static class CardRows
 {
-    private static readonly double Corner = ((CornerRadius)Application.Current.Resources["CardCorner"]).TopLeft;
+    private static readonly double Corner = ((CornerRadius)Application.Current.Resources["OverlayCornerRadius"]).TopLeft;
 
     /// <summary>The card's padding at each side, above the heading and under the last row.</summary>
     private static readonly Thickness Padding = (Thickness)Application.Current.Resources["CardRowPadding"];
