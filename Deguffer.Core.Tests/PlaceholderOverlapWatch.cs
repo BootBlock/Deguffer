@@ -7,11 +7,18 @@ namespace Deguffer.Core.Tests;
 /// Counts the placeholder descriptions in flight, and holds each of the first few that
 /// <paramref name="holds"/> picks until <paramref name="wanted"/> are in flight or
 /// <paramref name="patience"/> has passed, so the overlap a walk allows is observed rather than left
-/// to chance, and overlap it must not allow has the time to show.
+/// to chance. Each then waits up to <paramref name="beyond"/> for one more, so overlap the walk must
+/// not allow has the time to show, apart from the wait that proves the overlap it must allow (#395).
 /// </summary>
-/// <param name="holdsAtMost">How many descriptions are held, each for up to <paramref name="patience"/>.</param>
+/// <param name="beyond">How long a held description waits for one more than <paramref name="wanted"/>, or zero for no wait.</param>
+/// <param name="holdsAtMost">How many descriptions are held.</param>
 internal sealed class PlaceholderOverlapWatch(
-    ICloudFiles inner, Func<string, bool> holds, int wanted, TimeSpan patience, int holdsAtMost = 4) : ICloudFiles
+    ICloudFiles inner,
+    Func<string, bool> holds,
+    int wanted,
+    TimeSpan patience,
+    TimeSpan beyond = default,
+    int holdsAtMost = 4) : ICloudFiles
 {
     private int _inFlight;
     private int _mostAtOnce;
@@ -29,6 +36,7 @@ internal sealed class PlaceholderOverlapWatch(
             if (holds(path) && Interlocked.Increment(ref _held) <= holdsAtMost)
             {
                 SpinWait.SpinUntil(() => MostAtOnce >= wanted, patience);
+                SpinWait.SpinUntil(() => MostAtOnce > wanted, beyond);
             }
 
             return inner.Read(path);

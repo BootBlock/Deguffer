@@ -171,8 +171,8 @@ public sealed class PlaceholderWalkTests
     /// <summary>
     /// Three roots of loose files in one run of two threads: two are read at once, because the run
     /// shares its threads between them, and never three, because it is one walk and not one for each
-    /// root. Walked one after another, as before, each root is read by one thread alone, and one
-    /// placeholder is described at a time.
+    /// root. A walk of each root in turn would read each with one thread alone, and describe one
+    /// placeholder at a time.
     /// </summary>
     [Fact]
     public void RootsInOneRunShareItsThreads()
@@ -190,8 +190,10 @@ public sealed class PlaceholderWalkTests
             }
         }
 
-        // Every description waits for a third to begin, so a third the walk let start is seen.
-        var watch = new PlaceholderOverlapWatch(cloud, static _ => true, wanted: 3, Company);
+        // Each held file waits for a second description, then for a third, so a third the walk let start
+        // is seen. The roots' own pins are read one after another before the walk, so none is held.
+        var watch = new PlaceholderOverlapWatch(
+            cloud, static path => path.EndsWith(".bin", StringComparison.Ordinal), wanted: 2, Patience, beyond: Company);
 
         var found = PlaceholderWalk.Of(watch, roots, MinimumAge.Off, threads: 2, CancellationToken.None);
 

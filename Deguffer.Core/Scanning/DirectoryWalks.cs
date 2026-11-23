@@ -12,8 +12,8 @@ internal readonly record struct DirectoryWalk(WalkTuning Tuning, IReadOnlyList<i
 /// <summary>
 /// Puts the directories a walking scanner measures into walks, and runs them: the walks on each set of
 /// physical disks at the same time as those on every other set, and the walks on one set in turn
-/// (#470). <see cref="ParallelEnumerationScanner"/> and <see cref="SoleLinkWalk"/> both walk
-/// this way, so neither decides it.
+/// (#470). <see cref="ParallelEnumerationScanner"/>, <see cref="SoleLinkWalk"/> and
+/// <see cref="Cloud.PlaceholderWalks"/> all walk this way, so none of them decides it.
 ///
 /// <para><b>Sets by each directory's own disks</b>, by the rules of <see cref="FolderPipelines"/>
 /// (<see cref="FolderPipelines.ByDisks"/>). A walk does not follow a mount point, so it reads only the
@@ -36,7 +36,21 @@ internal static class DirectoryWalks
     /// answer (#1065).</para>
     /// </summary>
     public static IReadOnlyList<IReadOnlyList<DirectoryWalk>> Plan(
-        IReadOnlyList<ScanRequest> asked, IReadOnlyList<int> directories, ScanTuner tuner, PathStorages storages)
+        IReadOnlyList<ScanRequest> asked, IReadOnlyList<int> directories, ScanTuner tuner, PathStorages storages) =>
+        Plan(asked.Count, i => asked[i].Path, directories, tuner, storages);
+
+    /// <summary>
+    /// The walks of every one of <paramref name="paths"/>, one list for each set of disks, for a walk
+    /// whose every path is a directory to walk (<see cref="Cloud.PlaceholderWalks"/>). Asks each volume's
+    /// device the first time it is met, so never call it on the UI thread.
+    /// </summary>
+    public static IReadOnlyList<IReadOnlyList<DirectoryWalk>> Plan(IReadOnlyList<string> paths, ScanTuner tuner) =>
+        Plan(paths.Count, i => paths[i], [.. Enumerable.Range(0, paths.Count)], tuner, tuner.ForOneMeasurement());
+
+    /// <param name="count">How many paths the measurement has, directories or not.</param>
+    /// <param name="pathOf">The path at a slot of the measurement.</param>
+    private static IReadOnlyList<IReadOnlyList<DirectoryWalk>> Plan(
+        int count, Func<int, string> pathOf, IReadOnlyList<int> directories, ScanTuner tuner, PathStorages storages)
     {
         if (directories.Count == 0)
         {
@@ -44,11 +58,11 @@ internal static class DirectoryWalks
         }
 
         // By slot in the measurement, so a directory's answer is found without a lookup.
-        var storage = new VolumeMedia?[asked.Count];
+        var storage = new VolumeMedia?[count];
 
         foreach (var i in directories)
         {
-            storage[i] = storages.Of(asked[i].Path);
+            storage[i] = storages.Of(pathOf(i));
         }
 
         return
