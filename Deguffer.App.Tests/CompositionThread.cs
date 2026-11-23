@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using Microsoft.UI.Composition;
 using Microsoft.UI.Dispatching;
+using Windows.Foundation;
 
 namespace Deguffer.App.Tests;
 
@@ -35,10 +36,63 @@ internal static class CompositionThread
     /// <summary>Run <paramref name="work"/> on the compositor's thread, and return what it returns or rethrow what it threw.</summary>
     public static T Run<T>(Func<T> work)
     {
+        // Queued behind the work doing the asking, so waiting for it here would wait forever.
+        if (Shared.Value.Queue.HasThreadAccess)
+        {
+            throw new InvalidOperationException("Work was handed to the compositor's thread from that thread, where waiting for it never ends.");
+        }
+
         Activate();
 
         return Run(Shared.Value.Queue, work);
     }
+
+    /// <summary>
+    /// Ask the compositor for a commit, and finish once it has made it and the compositor's thread has
+    /// run what the commit handed it, on the thread pool.
+    ///
+    /// <para>What hears the commit is attached on the compositor's thread, in the piece of work that asks
+    /// for it, because the commit is made only once that work has returned. A handler attached from
+    /// another thread, through <c>AsTask</c>, can miss the completion, and a test awaiting it then never
+    /// finishes.</para>
+    ///
+    /// <para>What the commit handed the thread, such as an interaction tracker's reports to its owner,
+    /// runs before this finishes, because each report holds its owner while it runs, and a test that
+    /// asks whether the owner can be collected must not ask while one is running. The finish is queued
+    /// behind that work at a lower priority.</para>
+    ///
+    /// <para>The test resumes on the thread pool rather than inside the compositor's callback: a test that
+    /// has already resumed once has no context to return to, and inside the callback its next
+    /// <see cref="Run"/> would wait on the thread it is itself holding.</para>
+    /// </summary>
+    /// <exception cref="TimeoutException">The compositor did not report the commit within <see cref="CommitPatience"/>.</exception>
+    public static Task CommitAsync()
+    {
+        var committed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        _ = Run(() =>
+        {
+            var commit = Compositor.RequestCommitAsync();
+            commit.Completed = (action, status) =>
+            {
+                if (status != AsyncStatus.Completed)
+                {
+                    committed.TrySetException(new InvalidOperationException($"The compositor's commit ended {status}.", action.ErrorCode));
+                }
+                else if (!Queue.TryEnqueue(DispatcherQueuePriority.Low, () => committed.TrySetResult()))
+                {
+                    committed.TrySetException(new InvalidOperationException("The compositor's thread has stopped taking work."));
+                }
+            };
+
+            return commit;
+        });
+
+        return committed.Task.WaitAsync(CommitPatience);
+    }
+
+    /// <summary>Far longer than a commit takes, so a commit not reported fails its test rather than holding the run.</summary>
+    private static readonly TimeSpan CommitPatience = TimeSpan.FromSeconds(10);
 
     private static (DispatcherQueue, Compositor) Start()
     {
