@@ -36,7 +36,8 @@ largest files inside it:
 
 ## What it does
 
-Besides Settings and About, Deguffer has seven pages:
+Besides Settings and About, Deguffer has seven pages. Its rail groups them into the four about
+drives and the three about programs, and pointing at a page's name says what it is for:
 
 - [Storage](#storage) checks 124 sources of waste, from package-manager and browser caches to
   `Windows.old` and old restore points, and puts each one in a [safety tier](#safety-tiers). You

@@ -40,9 +40,14 @@
 
         <!--
             A rail with its labels showing by default, so nothing has to be opened to find out what
-            is here. Its toggle collapses it to its icons, each named by its tooltip, for a reader who
-            wants the width for a map, and it never overlays the page: the closed rail in Left mode is
-            the compact strip, not a hidden pane. The window remembers which the reader left it as.
+            is here. Its toggle collapses it to its icons for a reader who wants the width for a map,
+            and it never overlays the page: the closed rail in Left mode is the compact strip, not a
+            hidden pane. The window remembers which the reader left it as.
+
+            A one-word label cannot say what question its page answers, and Storage and Explore both
+            sound like disk space. So every item carries that question as its help text, and as a
+            tooltip that leads with the label, because the tooltip is the only name a collapsed item
+            shows. DesignRailTests holds the two to each other.
         -->
         <NavigationView x:Name="Navigation"
                         Grid.Row="1"
@@ -60,9 +65,15 @@
                      elsewhere, so the rail would report two items selected. Each item is routed to
                      its page by the item itself, in MainWindow's Destinations table, not by a Tag. -->
 
-                <!-- The disk: what is on it, what can go, and what state it is in. Storage first,
-                     because it is the task the window exists for and where it opens. -->
-                <NavigationViewItem x:Name="StorageItem" Content="Storage">
+                <!-- The drives: what is on them, what can go, and what state they are in. Storage
+                     first, because it is the task the window exists for and where it opens. A
+                     header's words are hidden with the rail collapsed, which is why the groups are
+                     also parted by a separator. -->
+                <NavigationViewItemHeader Content="Drives" />
+
+                <NavigationViewItem x:Name="StorageItem" Content="Storage"
+                                    ToolTipService.ToolTip="Storage: clean caches and build output that are safe to remove"
+                                    AutomationProperties.HelpText="Clean caches and build output that are safe to remove">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xEDA2;" />
                     </NavigationViewItem.Icon>
@@ -71,7 +82,9 @@
                 <!-- Explore answers "what is using the space"; Storage answers "what is safe to
                      remove". §3 is entirely about those being different questions, so they are
                      different destinations rather than two views of one screen. -->
-                <NavigationViewItem x:Name="ExploreItem" Content="Explore">
+                <NavigationViewItem x:Name="ExploreItem" Content="Explore"
+                                    ToolTipService.ToolTip="Explore: see where the space on a drive went"
+                                    AutomationProperties.HelpText="See where the space on a drive went">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE9D9;" />
                     </NavigationViewItem.Icon>
@@ -81,7 +94,9 @@
                      destination for the reason Explore is one: it ranks and matches, and a match
                      says nothing about whether a copy is safe to remove. It removes only copies the
                      user marked, and every group keeps one. -->
-                <NavigationViewItem x:Name="DuplicatesItem" Content="Duplicates">
+                <NavigationViewItem x:Name="DuplicatesItem" Content="Duplicates"
+                                    ToolTipService.ToolTip="Duplicates: find files that are on a drive more than once"
+                                    AutomationProperties.HelpText="Find files that are on a drive more than once">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE8C8;" />
                     </NavigationViewItem.Icon>
@@ -91,20 +106,25 @@
                      Storage, Explore and Duplicates name a drive of concern from what it read. It
                      reads and explains, and sends a drive nothing that could change it. Built on the
                      first visit, so nothing asks a drive anything until then. -->
-                <NavigationViewItem x:Name="HealthItem" Content="Health">
+                <NavigationViewItem x:Name="HealthItem" Content="Health"
+                                    ToolTipService.ToolTip="Health: see what state each drive reports it is in"
+                                    AutomationProperties.HelpText="See what state each drive reports it is in">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE95E;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
 
-                <!-- The programs: what is installed, what starts at sign-in, and what runs now. A
-                     separator rather than a header, because it reads the same with the rail
-                     collapsed to its icons, where a header's words are hidden. -->
+                <!-- The programs: what is installed, what starts at sign-in, and what runs now. The
+                     separator keeps the two groups apart with the rail collapsed to its icons, where
+                     a header collapses to nothing. -->
                 <NavigationViewItemSeparator />
+                <NavigationViewItemHeader Content="Programs" />
 
                 <!-- Installed apps answers "what does Windows list that is not there", and runs a
                      program's own uninstaller for one that is (§7.3). -->
-                <NavigationViewItem x:Name="InstalledAppsItem" Content="Installed apps">
+                <NavigationViewItem x:Name="InstalledAppsItem" Content="Installed apps"
+                                    ToolTipService.ToolTip="Installed apps: remove entries for programs that are gone, or uninstall one"
+                                    AutomationProperties.HelpText="Remove entries for programs that are gone, or uninstall one">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE71D;" />
                     </NavigationViewItem.Icon>
@@ -113,7 +133,9 @@
                 <!-- Startup answers "what put it there at sign-in", beside Memory because a program
                      closed there comes back at the next sign-in if Windows starts it. It stops an
                      entry starting the way Task Manager does, and removes nothing (§7.5). -->
-                <NavigationViewItem x:Name="StartupItem" Content="Startup">
+                <NavigationViewItem x:Name="StartupItem" Content="Startup"
+                                    ToolTipService.ToolTip="Startup: choose what Windows starts when you sign in"
+                                    AutomationProperties.HelpText="Choose what Windows starts when you sign in">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xEC4A;" />
                     </NavigationViewItem.Icon>
@@ -122,7 +144,9 @@
                 <!-- Memory answers "where is the memory going", which §7.2 makes a question of its
                      own. It shows and explains, and has one action on what it shows: asking a
                      program the user picked to close itself (§7.2.1). -->
-                <NavigationViewItem x:Name="MemoryItem" Content="Memory">
+                <NavigationViewItem x:Name="MemoryItem" Content="Memory"
+                                    ToolTipService.ToolTip="Memory: see where the memory is going"
+                                    AutomationProperties.HelpText="See where the memory is going">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE964;" />
                     </NavigationViewItem.Icon>
@@ -132,12 +156,16 @@
             <!-- Settings and About sit at the foot of the rail: they are where you go once, not
                  part of the task the window exists for. -->
             <NavigationView.FooterMenuItems>
-                <NavigationViewItem x:Name="SettingsItem" Content="Settings">
+                <NavigationViewItem x:Name="SettingsItem" Content="Settings"
+                                    ToolTipService.ToolTip="Settings: choose how Deguffer looks, scans and cleans"
+                                    AutomationProperties.HelpText="Choose how Deguffer looks, scans and cleans">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE713;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem x:Name="AboutItem" Content="About">
+                <NavigationViewItem x:Name="AboutItem" Content="About"
+                                    ToolTipService.ToolTip="About: see the version, how Deguffer scans and what the safety tiers mean"
+                                    AutomationProperties.HelpText="See the version, how Deguffer scans and what the safety tiers mean">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE946;" />
                     </NavigationViewItem.Icon>
