@@ -87,7 +87,7 @@ internal static partial class IntelDcSata
     }));
 
     /// <summary>
-    /// The table that 332211-004US and 334826-001US give word for word. Against 328860 it works E2h to two
+    /// The table that 332211-004US, 334826-001US and 334827-001US give word for word. Against 328860 it works E2h to two
     /// decimal places, a change 332211's revision 002 records, and it adds F3h: everything written to the
     /// flash memory, in units of 65,536 sectors filling all six bytes. It names BEh the case temperature
     /// with the same value as C2h, and also gives its raw value as 100 minus that temperature. Those two
@@ -109,7 +109,8 @@ internal static partial class IntelDcSata
 
     /// <summary>
     /// Intel SSD DC S3520 Series product specification 334826-001US (August 2016), table 24 and section
-    /// 5.4.2, which covers the 2.5-inch and M.2 drives.
+    /// 5.4.2, which covers the 2.5-inch and M.2 drives. It leaves the 2.5-inch 150GB drive to its own
+    /// specification, 334827-001US (August 2016), whose table 15 and section 5.4.2 are the same.
     /// </summary>
     private static readonly AtaAttributeDocument DcS3520 = new(DcS3520Models(), DcS3510AndS3520Attributes);
 
@@ -150,7 +151,7 @@ internal static partial class IntelDcSata
 
     /// <summary>
     /// The DC S3520 part numbers: SSDSC2BB (2.5-inch) with the capacities discontinuance notice 115910
-    /// lists, or SSDSCKJB (M.2) with those the specification names for it, then 7. Dell's own firmware,
+    /// lists, or SSDSCKJB (M.2) with those 334826 names for it, then 7. Dell's own firmware,
     /// SSDSC2BB...G7R, reports a different layout altogether, so a letter straight after is left out. The
     /// DC S3320, which 334826 does not cover, shares the 2.5-inch ordering codes with O1 after them, and
     /// a model name that drops that suffix cannot be told apart.

@@ -5,8 +5,8 @@ namespace Deguffer.Core.Tests;
 
 /// <summary>
 /// §7.6: Intel's DC S3510 specification, 332211-004US table 15, is read on the DC S3510, and its DC S3520
-/// specification, 334826-001US table 24, on the 2.5-inch and M.2 DC S3520. The two tables are the same,
-/// so each reading is checked on every family. Drives just outside each key keep the catalogue's
+/// specification, 334826-001US table 24, on the 2.5-inch and M.2 DC S3520, with 334827-001US table 15 for
+/// the 2.5-inch 150GB. The tables are the same, so each reading is checked on every family. Drives just outside each key keep the catalogue's
 /// reading. The model names are Intel part numbers, one capacity from each part of a key, and every byte
 /// is invented.
 /// </summary>
@@ -17,13 +17,14 @@ public sealed class IntelDcS3510S3520Tests
     private const string DcS3520 = "INTEL SSDSC2BB960G7";
     private const string DcS3520Terabytes = "INTEL SSDSC2BB012T7";
     private const string DcS3520M2 = "INTEL SSDSCKJB760G7";
+    private const string DcS3520Smallest = "INTEL SSDSC2BB150G7";
 
     private static HealthAttribute Row(byte id, string model, ulong raw = 0, byte value = 100) =>
         Assert.Single(AtaAttributeRows.Of([new AtaAttribute(id, false, value, value, raw, null)], AtaDrives.Named(model), logicalSectorBytes: null));
 
     private static string Reading(byte id, ulong raw, string model) => Row(id, model, raw).Reading;
 
-    public static TheoryData<string> Covered => [DcS3510, DcS3510Terabytes, DcS3520, DcS3520Terabytes, DcS3520M2];
+    public static TheoryData<string> Covered => [DcS3510, DcS3510Terabytes, DcS3520, DcS3520Terabytes, DcS3520M2, DcS3520Smallest];
 
     public static TheoryData<byte, string, string> EveryNamedAttribute()
     {

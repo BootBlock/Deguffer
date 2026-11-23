@@ -37,8 +37,8 @@ internal static class AtaRawReading
     private const string NotReported = "Not reported";
     private const string NotMeasured = "Not measured yet";
 
-    /// <summary>Ten to the power of each count of decimal places a percentage is cut to, from none to three.</summary>
-    private static readonly ulong[] PartsPerUnit = [1, 10, 100, 1000];
+    private static readonly DecimalPlaces Hundredths = new(2, 100);
+    private static readonly DecimalPlaces Thousandths = new(3, 1000);
 
     /// <summary>The count, hours or minutes in the raw value, as wide as the definition says the figure is.</summary>
     internal static ulong Figure(AtaAttribute attribute, AtaAttributeDefinition known) =>
@@ -68,8 +68,8 @@ internal static class AtaRawReading
             : $"{HealthText.Count(attribute.Raw)} sectors",
         SmartRawFormat.Units32MiB => HealthText.Size((UInt128)Figure(attribute, known) * SectorsPer32MiB * DriveRequests.SectorBytes),
         SmartRawFormat.Percent or SmartRawFormat.PercentInLowByte => HealthText.Percent(Percentage(attribute, known)),
-        SmartRawFormat.PercentPer1024ToThousandths => Measured(Figure(attribute, known), static raw => Per1024(raw, places: 3)),
-        SmartRawFormat.PercentPer1024ToHundredths => Measured(Figure(attribute, known), static raw => Per1024(raw, places: 2)),
+        SmartRawFormat.PercentPer1024ToThousandths => Measured(Figure(attribute, known), static raw => Per1024(raw, Thousandths)),
+        SmartRawFormat.PercentPer1024ToHundredths => Measured(Figure(attribute, known), static raw => Per1024(raw, Hundredths)),
         SmartRawFormat.RawPercent => Measured(Figure(attribute, known), percent => $"{HealthText.Count(percent)}%"),
         SmartRawFormat.CapacitorTest => CapacitorTest(attribute),
         SmartRawFormat.ThrottleStatus => Throttle(attribute),
@@ -99,16 +99,15 @@ internal static class AtaRawReading
     private static string Measured(ulong figure, Func<ulong, string> state) => figure == NotYetMeasured ? NotMeasured : state(figure);
 
     /// <summary>
-    /// The raw value over 1024 as a percentage, cut to <paramref name="places"/> decimal places, as section
-    /// 5.4.2 of 328860 (three) and of 332211 and 334826 (two) work their examples.
+    /// The raw value over 1024 as a percentage, cut to <paramref name="cut"/>, as section 5.4.2 of 328860
+    /// (three places) and of 332211, 334826 and 334827 (two) work their examples.
     /// </summary>
-    private static string Per1024(ulong raw, int places)
+    private static string Per1024(ulong raw, DecimalPlaces cut)
     {
-        var partsPerUnit = PartsPerUnit[places];
-        var parts = (UInt128)raw * partsPerUnit / RawPerPercent;
-        var fraction = ((ulong)(parts % partsPerUnit)).ToString(CultureInfo.InvariantCulture).PadLeft(places, '0');
+        var parts = (UInt128)raw * cut.PartsPerUnit / RawPerPercent;
+        var fraction = ((ulong)(parts % cut.PartsPerUnit)).ToString(CultureInfo.InvariantCulture).PadLeft(cut.Places, '0');
 
-        return $"{HealthText.Count(parts / partsPerUnit)}.{fraction}%";
+        return $"{HealthText.Count(parts / cut.PartsPerUnit)}.{fraction}%";
     }
 
     private static string CapacitorTest(AtaAttribute attribute)
@@ -141,4 +140,7 @@ internal static class AtaRawReading
             _ => $"Throttling {percent}%, {Counted.Of(events, "time", "times")} in all",
         };
     }
+
+    /// <summary>How many decimal places a percentage is cut to, and the parts of one percent that makes.</summary>
+    private readonly record struct DecimalPlaces(int Places, ulong PartsPerUnit);
 }
