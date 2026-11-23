@@ -6,8 +6,9 @@ namespace Deguffer.Core.Health.Smartmontools;
 /// <param name="Family">The model family, or a marker: <c>VERSION:</c>, <c>DEFAULT</c>, <c>USB:</c> or a leading <c>$</c>.</param>
 /// <param name="ModelPattern">A POSIX extended regular expression the whole model string must match.</param>
 /// <param name="FirmwarePattern">The same for the firmware revision, where empty matches any.</param>
+/// <param name="Warning">A message smartctl prints about the family, such as a firmware fault and its fix, or empty.</param>
 /// <param name="Presets">smartctl options, of which <c>-v</c> describes an attribute.</param>
-internal sealed record DriveDatabaseEntry(string Family, string ModelPattern, string FirmwarePattern, string Presets);
+internal sealed record DriveDatabaseEntry(string Family, string ModelPattern, string FirmwarePattern, string Warning, string Presets);
 
 /// <summary>
 /// Reads the file format smartmontools' <c>drivedb.h</c> and <c>drivedb-add.h</c> share: a C array
@@ -38,8 +39,7 @@ internal static class DriveDatabaseFile
                 return false;
             }
 
-            // The fourth field is a message smartctl prints about a family's firmware, which this page does not show.
-            read.Add(new DriveDatabaseEntry(fields[0], fields[1], fields[2], fields[4]));
+            read.Add(new DriveDatabaseEntry(fields[0], fields[1], fields[2], fields[3], fields[4]));
 
             if (reader.NextToken() is { Kind: not TokenKind.Comma and not TokenKind.End } after)
             {

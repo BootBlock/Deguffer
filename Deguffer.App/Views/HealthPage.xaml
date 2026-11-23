@@ -104,7 +104,7 @@
                       ItemContainerStyle="{StaticResource DriveContainer}" />
 
             <!-- A star row for the attributes, so the list is given a height and stays virtual. -->
-            <Grid Grid.Column="1" RowSpacing="10" RowDefinitions="Auto,Auto,Auto,*">
+            <Grid Grid.Column="1" RowSpacing="10" RowDefinitions="Auto,Auto,Auto,Auto,*">
                 <StackPanel Spacing="2">
                     <TextBlock Text="{x:Bind ViewModel.SelectedDrive.Title, Mode=OneWay}" Style="{StaticResource BodyStrongTextBlockStyle}" />
                     <TextBlock Text="{x:Bind ViewModel.SelectedDrive.Summary, Mode=OneWay}" TextWrapping="Wrap" />
@@ -131,7 +131,28 @@
                     </ItemsRepeater.Layout>
                 </ItemsRepeater>
 
-                <ListView Grid.Row="3" SelectionMode="None"
+                <!-- The drive database's warning about the family its entry names, under the detail
+                     that names the entry, in the database's own words (#1078). It is a third party's
+                     message about a family and not a reading of this drive, so it is never a finding and
+                     never moves the verdict. The text can run to several lines and a link, which the
+                     uniform grid of details cannot hold, so it has a bar of its own, and the reader can
+                     select it to copy the link. -->
+                <InfoBar Grid.Row="3" Severity="Warning" IsClosable="False"
+                         IsOpen="{x:Bind ViewModel.SelectedDrive.HasDatabaseWarning, Mode=OneWay, FallbackValue=False}"
+                         Visibility="{x:Bind ViewModel.SelectedDrive.HasDatabaseWarning, Mode=OneWay, FallbackValue=Collapsed}"
+                         Title="{x:Bind ViewModel.SelectedDrive.DatabaseWarningHeading, Mode=OneWay}"
+                         AutomationProperties.Name="{x:Bind ViewModel.SelectedDrive.DatabaseWarningHeading, Mode=OneWay}">
+                    <InfoBar.Content>
+                        <StackPanel Margin="0,0,16,12" Spacing="4">
+                            <TextBlock Text="{x:Bind ViewModel.SelectedDrive.DatabaseWarningMessage, Mode=OneWay}"
+                                       TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                            <TextBlock TextWrapping="Wrap" Style="{StaticResource SecondaryText}"
+                                       Text="Shown as the database words it. Deguffer has not checked it against this drive, and it does not change the verdict." />
+                        </StackPanel>
+                    </InfoBar.Content>
+                </InfoBar>
+
+                <ListView Grid.Row="4" SelectionMode="None"
                           AutomationProperties.Name="Readings from this drive"
                           ItemsSource="{x:Bind ViewModel.SelectedDrive.Attributes, Mode=OneWay}"
                           ItemTemplate="{StaticResource AttributeTemplate}"

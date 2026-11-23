@@ -34,6 +34,7 @@ public sealed class DriveDatabaseFileTests
         Assert.Equal("Example \"Quoted\" SSDs", entries[1].Family);
         Assert.Equal("EXAMPLE SSD [0-9]+GB", entries[1].ModelPattern);
         Assert.Equal(string.Empty, entries[1].FirmwarePattern);
+        Assert.Equal("A warning\nover two lines", entries[1].Warning);
         Assert.Equal("-v 9,raw48,Power_On_Hours -v 241,raw48,Total_Written", entries[1].Presets);
     }
 
