@@ -116,6 +116,22 @@ public sealed record ScanPreferences
         _ => throw new ArgumentOutOfRangeException(nameof(media), media, null),
     };
 
+    /// <summary>
+    /// How many values the user set rather than left on Auto: the parse threads, and each of the five
+    /// values of every kind of drive. The route is a choice of its own, and not counted.
+    /// </summary>
+    public int ChosenValueCount =>
+        (TableParseThreads is null ? 0 : 1)
+        + Chosen(Nvme) + Chosen(SolidState) + Chosen(Rotational) + Chosen(Removable)
+        + Chosen(Network) + Chosen(Virtual) + Chosen(Unknown);
+
+    private static int Chosen(MediaScanPreferences media) =>
+        (media.WalkThreads is null ? 0 : 1)
+        + (media.ListingBufferKiB is null ? 0 : 1)
+        + (media.TableReadKiB is null ? 0 : 1)
+        + (media.TableReadsInFlight is null ? 0 : 1)
+        + (media.TableListReadsInFlight is null ? 0 : 1);
+
     /// <summary>These preferences with <paramref name="chosen"/> for <paramref name="media"/>.</summary>
     public ScanPreferences With(StorageMedia media, MediaScanPreferences chosen) => media switch
     {

@@ -13,7 +13,7 @@ internal sealed record RetroArchFinding(IReadOnlyList<RetroArchInstall> Installs
 ///
 /// <para><b>Found beside the program, because that is where RetroArch keeps everything.</b> Its Windows
 /// defaults are all relative to the folder <c>retroarch.exe</c> is in, so a path in the profile finds
-/// nothing. A copy is looked for in each folder the user declared under Emulator folders, and in the
+/// nothing. A copy is looked for in each folder the user declared under Where Deguffer looks, and in the
 /// folder Steam's own manifest says it installed RetroArch in. The installer's records are not read:
 /// what it writes to the registry was not established, and a guess about where a program is would be a
 /// guess about what to delete.</para>

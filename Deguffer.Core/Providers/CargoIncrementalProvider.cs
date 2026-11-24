@@ -77,7 +77,7 @@ public sealed class CargoIncrementalProvider : BuildDirectoryProvider
             + "own code. It grows with every build and is often the largest part of a debug build.",
         Recommendation = "Deguffer removes only these folders, from target directories with a "
             + "Cargo.toml beside them and Cargo's cache tag inside, and only inside the folders listed "
-            + "under Settings, Source folders. The rest of each build stays, so the cost is one slower "
+            + "under Settings, Where Deguffer looks. The rest of each build stays, so the cost is one slower "
             + "build of your own code.",
     };
 

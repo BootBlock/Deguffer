@@ -4372,12 +4372,12 @@ switched on.
 folder's Windows default begins `:\`, which RetroArch reads as the folder `retroarch.exe` is in, so
 a location in your profile finds nothing. Deguffer looks:
 
-- in each folder you add under **Emulator folders** in Settings, and
+- in each folder you add under **Where Deguffer looks** in Settings, and
 - where Steam's own record of RetroArch, `appmanifest_1118310.acf` in any Steam library, says it is
   installed.
 
 A folder counts only where `retroarch.exe`, or `retroarch_angle.exe`, is in it. The installer's
-records are not read, so **add the folder of an installed or unpacked copy under Emulator folders**.
+records are not read, so **add the folder of an installed or unpacked copy under Where Deguffer looks** in Settings.
 
 **It reads RetroArch's own settings, in RetroArch's own order.** A `retroarch.cfg` beside the
 program wins whenever it exists. Otherwise it is `%APPDATA%\retroarch.cfg`, with no `RetroArch`
@@ -7675,7 +7675,7 @@ anywhere else.
 
 Every other location in this document belongs to a tool, and Deguffer knows where to find it. These
 are your project folders, and Deguffer has no idea where you keep them — so it does not guess.
-**Settings → Source folders** is the whole of its permission: it searches inside the folders listed
+**Settings → Where Deguffer looks** is the whole of its permission: it searches inside the folders listed
 there and nowhere else, and with the list empty these providers find nothing at all.
 
 That holds even when finding something would be free. On a machine running as administrator,
@@ -8098,7 +8098,7 @@ cache, named with its solution.
 
 | | |
 | --- | --- |
-| **Location** | `.git\lfs\objects` in each Git repository inside a folder listed in **Settings → Source folders**, and each submodule's store in `.git\modules\<name>\lfs\objects` |
+| **Location** | `.git\lfs\objects` in each Git repository inside a folder listed in **Settings → Where Deguffer looks**, and each submodule's store in `.git\modules\<name>\lfs\objects` |
 | **Method** | `git lfs prune --verify-remote`, offered from what `git lfs prune --dry-run --verbose` names |
 | **Typical size** | In a game, art or machine-learning repository, often larger than the checkout itself |
 

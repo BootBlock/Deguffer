@@ -325,12 +325,49 @@ public sealed class ScanTuningTests
 
         Assert.StartsWith("C: (NVMe SSD): ", line, StringComparison.Ordinal);
         Assert.Contains($"{auto.Walk.Threads} threads (Auto)", line, StringComparison.Ordinal);
-        Assert.Contains($"{auto.Walk.ListingBufferBytes / 1024} KiB listing buffer (Auto)", line, StringComparison.Ordinal);
-        Assert.Contains($"{4096:N0} KiB table reads", line, StringComparison.Ordinal);
+        Assert.Contains($"{auto.Walk.ListingBufferBytes / 1024} KB listing buffer (Auto)", line, StringComparison.Ordinal);
+        Assert.Contains($"{4096:N0} KB table reads", line, StringComparison.Ordinal);
         Assert.DoesNotContain("table reads (Auto)", line, StringComparison.Ordinal);
         Assert.Contains($", {auto.Table.ReadsInFlight} in flight (Auto)", line, StringComparison.Ordinal);
         Assert.Contains(", 12 list reads in flight, lists read with the table (Auto),", line, StringComparison.Ordinal);
         Assert.EndsWith("parsed on 3 threads", line, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The folded section's header names the route alone while nothing is tuned, and says how many
+    /// values were set once any is, counting the machine's parse threads and each kind's values apart.
+    /// </summary>
+    [Fact]
+    public void TheSummaryNamesTheRouteAndCountsTheValuesSet()
+    {
+        Assert.Equal("Auto", ScanTuningText.Summary(ScanPreferences.Default));
+        Assert.Equal("Walk folders only", ScanTuningText.Summary(ScanPreferences.Default with { Route = ScanRoute.WalkOnly }));
+
+        var one = ScanPreferences.Default.With(StorageMedia.Rotational, new MediaScanPreferences(WalkThreads: 2));
+        Assert.Equal("Auto, 1 value set", ScanTuningText.Summary(one));
+
+        var several = one.With(StorageMedia.Unknown, new MediaScanPreferences(ListingBufferKiB: 64, TableReadKiB: 512, TableReadsInFlight: 2, TableListReadsInFlight: 4))
+            with { Route = ScanRoute.Table, TableParseThreads = 2 };
+        Assert.Equal("File table first, 6 values set", ScanTuningText.Summary(several));
+    }
+
+    /// <summary>Every kind of drive is counted, so a value set for any of them shows on the folded header.</summary>
+    [Theory]
+    [MemberData(nameof(EveryKindOfDrive))]
+    public void AValueSetForAnyKindOfDriveIsCounted(StorageMedia media) =>
+        Assert.Equal(1, ScanPreferences.Default.With(media, new MediaScanPreferences(TableListReadsInFlight: 8)).ChosenValueCount);
+
+    /// <summary>
+    /// The picker's items are indexed by <see cref="ScanRoute"/>, and the summary names each route as
+    /// the picker does, so the closed header and the open picker never disagree.
+    /// </summary>
+    [Fact]
+    public void TheRouteNamesFollowTheRoutesOrder()
+    {
+        Assert.Equal(Enum.GetValues<ScanRoute>().Length, ScanTuningText.RouteNames.Count);
+        Assert.All(Enum.GetValues<ScanRoute>(), route => Assert.Equal(
+            ScanTuningText.RouteNames[(int)route],
+            ScanTuningText.Summary(ScanPreferences.Default with { Route = route })));
     }
 
     [Fact]

@@ -13,7 +13,6 @@ public sealed partial class SettingsPage : Page
     {
         ViewModel = new SettingsViewModel(
             App.Preferences, App.SourceRoots, App.EmulatorFolders, App.Keeps, VolumeInventory.Current);
-        Scanning = new ScanSettingsViewModel(App.Preferences, App.ScanTuning, VolumeInventory.Current);
         History = new ScanHistorySettingsViewModel(App.ScanHistory);
         Sizes = new SizeHistorySettingsViewModel(App.ProviderSizes);
         InitializeComponent();
@@ -22,7 +21,6 @@ public sealed partial class SettingsPage : Page
         ListAnimation.Play(EmulatorFoldersList, SystemMotion.Current);
         ListAnimation.Play(KeptItemsList, SystemMotion.Current);
         ListAnimation.Play(KeptScansList, SystemMotion.Current);
-        ListAnimation.Play(DrivesList, SystemMotion.Current);
 
         Loaded += OnLoaded;
         Unloaded += (_, _) =>
@@ -40,11 +38,11 @@ public sealed partial class SettingsPage : Page
 
     private void ShowSpacing() => SpacingPreview.Show(MapLook.From(App.Preferences.Current), ExploreView.Treemap);
 
-    /// <summary>The listing of drives for the visit under way, stopped when the page is left.</summary>
+    /// <summary>The reading of the histories for the visit under way, stopped when the page is left.</summary>
     private CancellationTokenSource? _visit;
 
     /// <summary>
-    /// At each visit rather than once, so a drive attached while the app was open is listed.
+    /// At each visit rather than once, so a scan finished since the last visit is listed.
     /// </summary>
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
@@ -57,21 +55,16 @@ public sealed partial class SettingsPage : Page
 
         try
         {
-            await Task.WhenAll(
-                Scanning.RefreshDrivesAsync(_visit.Token),
-                History.RefreshAsync(_visit.Token),
-                Sizes.RefreshAsync(_visit.Token));
+            await Task.WhenAll(History.RefreshAsync(_visit.Token), Sizes.RefreshAsync(_visit.Token));
         }
         catch (OperationCanceledException)
         {
-            // The page was left, or visited again, before every drive had answered. The next
-            // visit lists them afresh.
+            // The page was left, or visited again, before both histories were read. The next visit
+            // reads them afresh.
         }
     }
 
     public SettingsViewModel ViewModel { get; }
-
-    public ScanSettingsViewModel Scanning { get; }
 
     public ScanHistorySettingsViewModel History { get; }
 

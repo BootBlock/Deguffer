@@ -44,7 +44,7 @@ public sealed class RetroArchFixture(FakeUserEnvironment environment, string pro
         File.WriteAllText(ApplicationDataSettings, string.Join("\n", settings) + "\n");
     }
 
-    /// <summary>Tell Deguffer the program's folder under Emulator folders.</summary>
+    /// <summary>Tell Deguffer the program's folder under Where Deguffer looks.</summary>
     public RetroArchFixture Declare()
     {
         Assert.True(new EmulatorFolderStore(environment).Save([Program]));

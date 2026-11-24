@@ -110,7 +110,7 @@ public sealed class VisualStudioSolutionCacheProvider : CleanupProviderBase
         Recommendation = "The rest of the folder is yours: Copilot conversations and file snapshots, "
             + "solution options and window layouts. Deguffer removes only the caches it recognises by "
             + "name and by the files inside them, only beside a solution, and only inside the folders "
-            + "listed under Settings, Source folders.",
+            + "listed under Settings, Where Deguffer looks.",
     };
 
     /// <summary>The roots the user approved. Empty means this provider does nothing.</summary>

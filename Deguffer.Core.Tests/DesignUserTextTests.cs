@@ -51,11 +51,9 @@ public sealed partial class DesignUserTextTests
 
     private static readonly Dictionary<string, int> UnitBaseline = new(StringComparer.Ordinal)
     {
-        ["Deguffer.App/Views/SettingsPage.xaml"] = 4,
         ["Deguffer.Core/Providers/CcacheProvider.cs"] = 1,
         ["Deguffer.Core/Providers/ComposerCacheProvider.cs"] = 1,
         ["Deguffer.Core/Providers/SccacheProvider.cs"] = 1,
-        ["Deguffer.Core/Scanning/ScanTuningText.cs"] = 2,
     };
 
     private static readonly Dictionary<string, int> DatePatternBaseline = new(StringComparer.Ordinal)
