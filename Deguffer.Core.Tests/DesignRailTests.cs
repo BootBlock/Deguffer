@@ -12,9 +12,10 @@ namespace Deguffer.Core.Tests;
 ///
 /// <para>A one-word label cannot say what its page is for, so every item states its question as
 /// help text, for a screen reader, and as a tooltip that leads with the label, because the tooltip
-/// is the only name a collapsed item shows. The markup writes only the help text: the window builds
-/// the tooltip from the destination's name and that help text (<c>DestinationNames.RailTooltip</c>),
-/// so the two cannot drift apart.</para>
+/// is the only name a collapsed item shows. The markup writes neither: the window gives the help
+/// text from <c>DestinationPurposes</c>, the sentence About summarises the page with, and builds the
+/// tooltip from the destination's name and that sentence (<c>DestinationNames.RailTooltip</c>), so
+/// the rail, its tooltips and About cannot describe a page three ways.</para>
 ///
 /// <para>Each rail item is routed to its page by the item itself, so every item is named for the
 /// window's table and none carries a <c>Tag</c>: a string there is a second name that can drift from
@@ -61,18 +62,25 @@ public sealed class DesignRailTests
     }
 
     [Fact]
-    public void EveryRailItemStatesItsQuestionAsHelpTextAndLeavesItsTooltipToTheWindow()
-    {
+    public void EveryRailItemLeavesItsHelpTextAndTooltipToTheWindow() =>
         Assert.All(Items(), item =>
         {
-            var destination = item.Attributes().Single(attribute => attribute.Name.LocalName == "Name").Value[..^"Item".Length];
-            var help = ShellMarkup.Literal(item, "AutomationProperties.HelpText");
-
-            Assert.NotNull(help);
-            Assert.False(string.IsNullOrWhiteSpace(help), $"{destination} has blank help text.");
-            Assert.NotEqual(destination, help.Replace(" ", "", StringComparison.Ordinal), StringComparer.OrdinalIgnoreCase);
+            Assert.Null(item.Attribute("AutomationProperties.HelpText"));
             Assert.Null(item.Attribute("ToolTipService.ToolTip"));
         });
+
+    /// <summary>
+    /// The markup leaves the help text and the tooltip to the window, so the window must give both,
+    /// from the one sentence per page. A WinUI window cannot be built in a test process, so the rule
+    /// reads the constructor's source; that the rail shows them is observed by driving it.
+    /// </summary>
+    [Fact]
+    public void TheWindowGivesEveryRailItemItsPurposeAsHelpTextAndTooltip()
+    {
+        var source = File.ReadAllText(Path.Combine(MarkdownGuide.RepositoryRoot, "Deguffer.App", "MainWindow.xaml.cs"));
+
+        Assert.Contains("AutomationProperties.SetHelpText(item, DestinationPurposes.Of(destination));", source, StringComparison.Ordinal);
+        Assert.Contains("ToolTipService.SetToolTip(item, DestinationNames.RailTooltip(destination));", source, StringComparison.Ordinal);
     }
 
     private static List<XElement> Items() =>

@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using Deguffer.App.Shell;
-using Deguffer.Core.Safety;
 using Deguffer.Core.Viewing;
 using Microsoft.UI.Xaml.Controls;
 using RuntimeArchitecture = System.Runtime.InteropServices.Architecture;
@@ -81,21 +80,26 @@ public sealed partial class AboutPage : Page
         ? "Running as administrator, so Deguffer can read the volume's file table. Locations it accounts for are measured from it instead of being walked; anything it does not account for is walked, and the plan says which happened."
         : "Running without administrator rights, so every location is measured by walking it. The sizes are the same either way — the Storage, Explore and Duplicates pages each offer to restart elevated, and Installed apps offers it for entries that apply to all users.";
 
-    /// <summary>
-    /// §3's four tiers, in the same words the badge on a Storage row explains itself with. The
-    /// page states all four side by side and a badge states one; neither owns the wording, so both
-    /// read it from <see cref="SafetyTierExtensions.ToExplanation"/>.
-    /// </summary>
-    public string RegenerableCacheExplanation { get; } = SafetyTier.RegenerableCache.ToExplanation();
+    /// <inheritdoc cref="AboutStatements.Summary" />
+    public string Summary => AboutStatements.Summary;
 
-    /// <inheritdoc cref="RegenerableCacheExplanation" />
-    public string RegenerableWithCostExplanation { get; } = SafetyTier.RegenerableWithCost.ToExplanation();
+    /// <inheritdoc cref="AboutStatements.PurposesHeading" />
+    public string PurposesHeading => AboutStatements.PurposesHeading;
 
-    /// <inheritdoc cref="RegenerableCacheExplanation" />
-    public string UserDataExplanation { get; } = SafetyTier.UserData.ToExplanation();
+    /// <inheritdoc cref="AboutStatements.Purposes" />
+    public IReadOnlyList<PageStatement> Purposes => AboutStatements.Purposes;
 
-    /// <inheritdoc cref="RegenerableCacheExplanation" />
-    public string DoNotTouchExplanation { get; } = SafetyTier.DoNotTouch.ToExplanation();
+    /// <inheritdoc cref="AboutStatements.TiersIntroduction" />
+    public string TiersIntroduction => AboutStatements.TiersIntroduction;
+
+    /// <inheritdoc cref="AboutStatements.Tiers" />
+    public IReadOnlyList<TierStatement> Tiers => AboutStatements.Tiers;
+
+    /// <inheritdoc cref="AboutStatements.SafeguardsHeading" />
+    public string SafeguardsHeading => AboutStatements.SafeguardsHeading;
+
+    /// <inheritdoc cref="AboutStatements.Safeguards" />
+    public IReadOnlyList<PageStatement> Safeguards => AboutStatements.Safeguards;
 
     private static string ReadStampedBuildDate()
     {
