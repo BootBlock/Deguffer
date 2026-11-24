@@ -59,7 +59,7 @@ public sealed class RailChoiceStoreTests : IDisposable
     /// <summary>A record's equality must not see the old flag, or two equal settings would differ by a key no file carries.</summary>
     [Fact]
     public void TheOldFlagIsNotPartOfTheSettingsValue() =>
-        Assert.Equal(AppPreferences.Default, LoadWritten("""{ "NavigationCollapsed": false }"""));
+        Assert.Equal(AppPreferences.Default with { Rail = RailChoice.Collapsed }, LoadWritten("""{ "NavigationCollapsed": true }"""));
 
     private AppPreferences LoadWritten(string json)
     {
