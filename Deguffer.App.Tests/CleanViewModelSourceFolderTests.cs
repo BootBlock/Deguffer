@@ -151,17 +151,75 @@ public sealed class CleanViewModelSourceFolderTests
         Assert.Contains("Scan to see everything it holds", page.ViewModel.Status, StringComparison.Ordinal);
     }
 
-    /// <summary>The rows cannot ask for a folder while the page is busy, as Scan cannot start.</summary>
+    /// <summary>
+    /// A search the folder started that fails is reported as an error rather than taking the window
+    /// down, as a scan's failure is, and marks the page's work as failed. The folder stays approved.
+    /// </summary>
     [Fact]
-    public void TheActionIsOffWhileThePageIsBusy()
+    public void ASearchThatFailsIsReportedAndLeavesTheFolderApproved()
+    {
+        var builds = new FakeCleanupProvider("builds") { IsPresent = false, IsAwaitingSourceFolders = true };
+        using var page = new StoragePage([builds]);
+        page.Scan();
+        var failures = 0;
+        page.Work.Failed += (_, _) => failures++;
+
+        builds.PlanFailure = new IOException("The device is not ready.");
+        page.SourceFolderPrompt.Picked = Path.Combine(page.Environment.UserProfile, "src");
+
+        page.AddSourceFolder();
+
+        Assert.Single(page.SourceRoots.Current);
+        Assert.Equal(InfoBarSeverity.Error, page.ViewModel.StatusSeverity);
+        Assert.StartsWith("The folder is approved, but Deguffer could not finish searching it", page.ViewModel.Status, StringComparison.Ordinal);
+        Assert.Equal(1, failures);
+        Assert.False(page.ViewModel.IsBusy);
+        Assert.True(page.Work.IsIdle);
+    }
+
+    /// <summary>
+    /// The rows cannot ask for a folder while the page is busy, as Scan cannot start, nor over a
+    /// preview a cancelled scan or re-plan left part-way: the re-plan would put Clean back over plans
+    /// no scan stands behind.
+    /// </summary>
+    [Fact]
+    public void TheActionIsOffWhileThePageIsBusyOrHasNoWholePreview()
     {
         using var page = new StoragePage([new FakeCleanupProvider("builds") { IsPresent = false, IsAwaitingSourceFolders = true }]);
         var command = page.ViewModel.AddSourceFolderCommand;
+
+        Assert.False(command.CanExecute(null));
+
+        page.Scan();
 
         Assert.True(command.CanExecute(null));
 
         page.ViewModel.IsBusy = true;
 
         Assert.False(command.CanExecute(null));
+
+        page.ViewModel.IsBusy = false;
+        page.ViewModel.HasPreview = false;
+
+        Assert.False(command.CanExecute(null));
+    }
+
+    /// <summary>
+    /// The page is busy while the folder is asked for, so no scan or clean can start in the wait for
+    /// the volumes before the warning and then run under the re-plan.
+    /// </summary>
+    [Fact]
+    public void ThePageIsBusyWhileTheFolderIsAskedFor()
+    {
+        using var page = new StoragePage([new FakeCleanupProvider("builds") { IsPresent = false, IsAwaitingSourceFolders = true }]);
+        page.Scan();
+        bool? scanCouldStart = null;
+        page.SourceFolderPrompt.WhilePicking = () => scanCouldStart = page.ViewModel.PreviewCommand.CanExecute(null);
+
+        page.AddSourceFolder();
+
+        Assert.False(scanCouldStart);
+        Assert.False(page.ViewModel.IsBusy);
+        Assert.True(page.ViewModel.PreviewCommand.CanExecute(null));
     }
 }

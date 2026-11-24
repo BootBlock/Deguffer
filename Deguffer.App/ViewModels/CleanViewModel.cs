@@ -410,6 +410,7 @@ public sealed partial class CleanViewModel : ObservableObject
     /// <summary>Whether a preview exists — the only state from which cleaning is offered.</summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(CleanCommand))]
+    [NotifyCanExecuteChangedFor(nameof(AddSourceFolderCommand))]
     [NotifyPropertyChangedFor(nameof(ElevateLabel))]
     public partial bool HasPreview { get; set; }
 
@@ -926,62 +927,61 @@ public sealed partial class CleanViewModel : ObservableObject
     }
 
     /// <summary>
-    /// §7: the rows waiting for a source folder offer to add one where they stand, and once it is
-    /// approved every row it answers is planned again in place (<see cref="SourceFolderChanges"/>), so
-    /// the reader sees what the folder holds on the page where they asked, without a scan.
+    /// §7: the rows waiting for a source folder offer to add one where they stand, and every row the
+    /// approved folder answers is planned again in place (<see cref="SourceFolderChanges"/>), without a scan.
     ///
-    /// <para>The page is busy only once the folder is stored. Until then nothing has changed, and the
-    /// picker and the warning are the user's to close. A save that failed stores nothing, so nothing
-    /// is planned again: the rows would only say the same.</para>
-    ///
-    /// <para>A folder already approved, through Settings since the scan, still plans the rows again,
-    /// because the rows are what is out of date.</para>
+    /// <para>Only over a preview of the whole disk: the re-plan puts the preview back, and over rows a
+    /// cancelled pass left part-way that would turn Clean on over plans no scan stands behind. Busy from
+    /// the start, because the volumes are read again before the warning with no dialog up, and a scan or
+    /// clean started then would run under the re-plan. A failed save plans nothing; a folder already
+    /// approved since the scan still plans the rows, because they are what is out of date.</para>
     /// </summary>
-    [RelayCommand(CanExecute = nameof(CanRun), IncludeCancelCommand = true)]
+    [RelayCommand(CanExecute = nameof(CanAddSourceFolder), IncludeCancelCommand = true)]
     private async Task AddSourceFolderAsync(CancellationToken ct)
     {
-        var added = await _sourceFolderAddition.AddAsync(ct);
-
-        switch (added)
-        {
-            case { Choice: SourceFolderChoice.NotOnDisk }:
-                Report(PickedFolder.NotOnDisk);
-                return;
-            case { Choice: not SourceFolderChoice.Approved }:
-                return;
-            case { Saved: SaveOutcome.Refused }:
-                Report(SettingSave.NoticeMessage, InfoBarSeverity.Error);
-                return;
-        }
-
         IsBusy = true;
-        var work = _work.Begin();
+        BusySpan? work = null;
 
         try
         {
+            switch (await _sourceFolderAddition.AddAsync(ct))
+            {
+                case { Choice: SourceFolderChoice.NotOnDisk }:
+                    Report(PickedFolder.NotOnDisk);
+                    return;
+                case { Choice: not SourceFolderChoice.Approved }:
+                    return;
+                case { Saved: SaveOutcome.Refused }:
+                    Report(SettingSave.NoticeMessage, InfoBarSeverity.Error);
+                    return;
+            }
+
+            work = _work.Begin();
             await ReplanAsync(SourceFolderChanges.Stale([.. Findings.Select(row => row.Finding)]), ct);
             ReportPreviewSummary();
         }
+        catch (OperationCanceledException) when (work is not null)
+        {
+            Report("The folder is approved, but its search was cancelled, so some rows are not up to date. Scan to see everything it holds.", InfoBarSeverity.Warning);
+        }
         catch (OperationCanceledException)
         {
-            Report(
-                "The folder is approved, but its search was cancelled, so some rows are not up to date. Scan to see everything it holds.",
-                InfoBarSeverity.Warning);
+            // Cancelled while the folder was still being asked for, so nothing was stored or changed.
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
         {
             // As a scan's failure is caught, for the same reason: a provider failing must not take the window down.
-            Report(
-                "The folder is approved, but Deguffer could not finish searching it because something in it could not be read. Scan to try again.",
-                InfoBarSeverity.Error);
-            work.Fail();
+            Report("The folder is approved, but Deguffer could not finish searching it because something in it could not be read. Scan to try again.", InfoBarSeverity.Error);
+            work?.Fail();
         }
         finally
         {
             IsBusy = false;
-            work.Dispose();
+            work?.Dispose();
         }
     }
+
+    private bool CanAddSourceFolder() => CanRun() && HasPreview;
 
     /// <summary>
     /// Write one new finding over its row, and bring the page's figures up to date with it at once

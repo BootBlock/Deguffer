@@ -170,7 +170,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
         if (ApprovedRoots.Count == 0)
         {
             return EmptyPlan(
-                "No source folders have been added yet. Add them in Settings and Deguffer will look " +
+                "No source folders have been added yet. Add them on the Storage page or in Settings and Deguffer will look " +
                 "for build output inside them, and nowhere else.");
         }
 

@@ -162,7 +162,7 @@ public sealed class GitLfsObjectProvider : CleanupProviderBase
         if (ApprovedRoots.Count == 0)
         {
             return EmptyPlan(
-                "No source folders have been added yet. Add them in Settings and Deguffer will look for Git "
+                "No source folders have been added yet. Add them on the Storage page or in Settings and Deguffer will look for Git "
                 + "repositories that use Git LFS inside them, and nowhere else.");
         }
 

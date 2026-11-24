@@ -18,7 +18,14 @@ internal sealed class ScriptedSourceFolderPrompt : ISourceFolderPrompt
     /// <summary>Every approval the user was asked to confirm, in order.</summary>
     public List<SourceRootApproval> Asked { get; } = [];
 
-    public Task<string?> PickAsync() => Task.FromResult(Picked);
+    /// <summary>Run as the picker opens, so a test can see what the page allows while it is up.</summary>
+    public Action? WhilePicking { get; set; }
+
+    public Task<string?> PickAsync()
+    {
+        WhilePicking?.Invoke();
+        return Task.FromResult(Picked);
+    }
 
     public Task<bool> AcceptsAsync(SourceRootApproval approval, CancellationToken ct)
     {
