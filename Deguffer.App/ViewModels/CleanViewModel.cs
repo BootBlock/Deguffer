@@ -857,7 +857,7 @@ public sealed partial class CleanViewModel : ObservableObject
 
         // Nothing is ticked on an empty list. Totalled here and again as each row lands, rather than
         // once at the end of the pass: a scan that is cancelled or fails never reaches the end, and
-        // Clean's figure then went on stating the previous scan beside rows that did not hold it.
+        // Clean's figure would state the previous scan beside rows that do not hold it.
         UpdateSelectionTotal();
 
         // Back to what is known before anything is measured, not just reassigned at the end: a

@@ -569,7 +569,7 @@
 
                 <!-- How far through the run, under the line naming which cause is being cleaned.
                      Determinate because a clean knows its own extent before it starts, unlike a
-                     scan, which keeps the ring beside the Selected figure. Shown only while that run
+                     scan, which keeps the ring beside Scan. Shown only while that run
                      is in flight, so nothing here is drawn against a message about anything else.
 
                      The percentage is written out beside it for the same reason the capacity bar
