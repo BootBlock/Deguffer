@@ -70,7 +70,8 @@ public sealed partial class CleanPage : Page
                 App.Running),
             new ScanChoiceViewModel(planner.Providers, App.Preferences),
             App.ProviderSizes,
-            App.DriveHealth);
+            App.DriveHealth,
+            new SourceFolderAddition(App.SourceRoots, VolumeInventory.Current, () => new ContentDialogSourceFolderPrompt(this)));
         ViewModel.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
         ViewModel.Retrim.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
 
@@ -115,8 +116,9 @@ public sealed partial class CleanPage : Page
         // would throw away a preview the user has not acted on yet.
         NavigationCacheMode = NavigationCacheMode.Required;
 
-        // The view-model is this page's own, so the subscription lives exactly as long as both do.
+        // The view-model is this page's own, so the subscriptions live exactly as long as both do.
         ViewModel.PropertyChanged += OnViewModelPropertyChanged;
+        ViewModel.RunResult.PropertyChanged += OnRunResultPropertyChanged;
 
         // Bound to the page being on screen rather than to its construction: the preference only
         // governs a clean started from here, and a subscription to a process-lifetime static event
@@ -318,14 +320,17 @@ public sealed partial class CleanPage : Page
         {
             ShowItemsOrRows();
         }
+    }
 
+    private void OnRunResultPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
         // A new run's card must not say an earlier run's report was copied.
-        if (e.PropertyName == nameof(CleanViewModel.RunStatement))
+        if (e.PropertyName == nameof(CleanRunResultViewModel.RunStatement))
         {
             CopyRunDiagnosticsResult.Text = string.Empty;
         }
 
-        if (e.PropertyName == nameof(CleanViewModel.HasRunResult) && ViewModel.HasRunResult)
+        if (e.PropertyName == nameof(CleanRunResultViewModel.HasRunResult) && ViewModel.RunResult.HasRunResult)
         {
             BringInRunResult();
         }
@@ -358,7 +363,7 @@ public sealed partial class CleanPage : Page
     /// paste it.
     /// </summary>
     private async void OnCopyRunDiagnostics(object sender, RoutedEventArgs e) =>
-        CopyRunDiagnosticsResult.Text = await ClipboardText.PutAsync(ViewModel.RunDiagnostics, CancellationToken.None) ?? "Copied. Paste it into a GitHub issue.";
+        CopyRunDiagnosticsResult.Text = await ClipboardText.PutAsync(ViewModel.RunResult.RunDiagnostics, CancellationToken.None) ?? "Copied. Paste it into a GitHub issue.";
 
     /// <summary>
     /// Put the item list the view-model names on the card, or take it off and give the keyboard back
@@ -399,7 +404,14 @@ public sealed partial class CleanPage : Page
         dialog.HorizontalContentAlignment = HorizontalAlignment.Stretch;
         dialog.VerticalContentAlignment = VerticalAlignment.Stretch;
 
-        // Assigned once the dialog exists, because the content's way to the item list closes it.
+        // Read when the dialog opens. Nothing behind a modal dialog can start the page's work, so a
+        // button enabled now still works when pressed. A scan that ends while the dialog is up leaves
+        // it off until the dialog is opened again.
+        var addFolder = ViewModel.AddSourceFolderCommand;
+        var addsFolder = false;
+
+        // Assigned once the dialog exists, because the content's ways to the item list and to a new
+        // source folder close it.
         dialog.Content = new ProviderInfoView(
             finding,
             row =>
@@ -407,6 +419,13 @@ public sealed partial class CleanPage : Page
                 dialog.Hide();
                 ViewModel.ShowItems(row);
             },
+            addFolder.CanExecute(null)
+                ? () =>
+                {
+                    addsFolder = true;
+                    dialog.Hide();
+                }
+                : null,
             ViewModel.Sizes.HistoryOf(finding));
 
         // Three quarters of the window, in both directions. The dialog's template sizes itself from
@@ -425,6 +444,13 @@ public sealed partial class CleanPage : Page
         dialog.Resources["ContentDialogMaxHeight"] = height;
 
         await ModalDialog.ShowAsync(dialog);
+
+        // Once the dialog has gone rather than as it closes: a warning about the folder is a dialog of
+        // its own, and WinUI opens one at a time.
+        if (addsFolder)
+        {
+            await addFolder.ExecuteAsync(null);
+        }
     }
 
     /// <summary>

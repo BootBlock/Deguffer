@@ -225,7 +225,7 @@ public class CleanViewModelScanTests
 
         Assert.True(group.HasRows);
         Assert.Contains(nameof(group.HasRows), raised);
-        Assert.Equal("2 locations with nothing to search until you add a source folder in Settings.", group.Summary);
+        Assert.Equal("2 locations with nothing to search until you add a source folder.", group.Summary);
         Assert.Empty(page.ViewModel.Listed);
         Assert.False(page.ViewModel.EmptyState.IsShown);
 

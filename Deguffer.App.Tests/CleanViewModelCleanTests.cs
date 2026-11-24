@@ -43,9 +43,9 @@ public class CleanViewModelCleanTests
         var ran = Assert.Single(cache.Executed);
         Assert.Equal([taken.Path], ran.Steps.Select(step => step.SelectionKey));
         Assert.Contains(ran.ProtectedPaths, p => p.Path == unticked.Path);
-        Assert.Equal("All protected paths survived.", page.ViewModel.RunStatement);
-        Assert.False(page.ViewModel.RunVerificationFailed);
-        Assert.Equal("1 KB", page.ViewModel.RemovedLabel);
+        Assert.Equal("All protected paths survived.", page.ViewModel.RunResult.RunStatement);
+        Assert.False(page.ViewModel.RunResult.RunVerificationFailed);
+        Assert.Equal("1 KB", page.ViewModel.RunResult.RemovedLabel);
     }
 
     /// <summary>
@@ -68,9 +68,9 @@ public class CleanViewModelCleanTests
         };
         page.Scan();
         var mayEndAsTheVerdictLands = new List<bool>();
-        page.ViewModel.PropertyChanged += (_, changed) =>
+        page.ViewModel.RunResult.PropertyChanged += (_, changed) =>
         {
-            if (changed.PropertyName == nameof(page.ViewModel.RunStatement) && page.ViewModel.RunStatement.Length > 0)
+            if (changed.PropertyName == nameof(page.ViewModel.RunResult.RunStatement) && page.ViewModel.RunResult.RunStatement.Length > 0)
             {
                 mayEndAsTheVerdictLands.Add(page.Running.MayEndProcess);
             }
@@ -82,7 +82,7 @@ public class CleanViewModelCleanTests
         Assert.False(elevateWhileDeleting);
         Assert.Equal([false], mayEndAsTheVerdictLands);
         Assert.True(page.Running.MayEndProcess);
-        Assert.True(page.ViewModel.HasRunResult);
+        Assert.True(page.ViewModel.RunResult.HasRunResult);
     }
 
     /// <summary>
@@ -129,12 +129,12 @@ public class CleanViewModelCleanTests
         Assert.True(Directory.Exists(untouched.Path));
         Assert.Empty(second.Executed);
 
-        Assert.True(page.ViewModel.HasRunResult);
-        Assert.Equal("4 KB", page.ViewModel.RemovedLabel);
+        Assert.True(page.ViewModel.RunResult.HasRunResult);
+        Assert.Equal("4 KB", page.ViewModel.RunResult.RemovedLabel);
         Assert.Equal(
             "Clean cancelled part-way. Anything already removed stays removed, and all protected paths survived.",
-            page.ViewModel.RunStatement);
-        Assert.Equal(page.ViewModel.RunStatement, page.ViewModel.Status);
+            page.ViewModel.RunResult.RunStatement);
+        Assert.Equal(page.ViewModel.RunResult.RunStatement, page.ViewModel.Status);
         Assert.Equal(InfoBarSeverity.Warning, page.ViewModel.StatusSeverity);
 
         Assert.Equal(2, first.PlanCount);
@@ -229,7 +229,7 @@ public class CleanViewModelCleanTests
         page.Clean();
 
         Assert.False(Directory.Exists(taken.Path));
-        Assert.Equal("All protected paths survived.", page.ViewModel.RunStatement);
+        Assert.Equal("All protected paths survived.", page.ViewModel.RunResult.RunStatement);
         Assert.DoesNotContain("cancelled", page.ViewModel.Status, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(2, cache.PlanCount);
         Assert.True(page.ViewModel.HasPreview);
@@ -257,8 +257,8 @@ public class CleanViewModelCleanTests
         first.AfterCleaning = () => first.WhilePlanning = () => page.ViewModel.CancelCommand.Execute(null);
         page.Clean();
 
-        Assert.True(page.ViewModel.RunVerificationFailed);
-        Assert.Equal(page.ViewModel.RunStatement, page.ViewModel.Status);
+        Assert.True(page.ViewModel.RunResult.RunVerificationFailed);
+        Assert.Equal(page.ViewModel.RunResult.RunStatement, page.ViewModel.Status);
         Assert.Equal(InfoBarSeverity.Error, page.ViewModel.StatusSeverity);
         Assert.False(page.ViewModel.HasPreview);
     }
@@ -278,9 +278,9 @@ public class CleanViewModelCleanTests
 
         page.Clean();
 
-        Assert.Equal(FreeSpace.Format(10_240), page.ViewModel.FreeSpaceChangeLabel);
+        Assert.Equal(FreeSpace.Format(10_240), page.ViewModel.RunResult.FreeSpaceChangeLabel);
         Assert.Equal(410_240, page.ViewModel.FreeSpaceNow);
-        Assert.True(page.ViewModel.HasRunResult);
+        Assert.True(page.ViewModel.RunResult.HasRunResult);
     }
 
     /// <summary>A volume that will not say is a dash, rather than a change worked out from one reading.</summary>
@@ -295,7 +295,7 @@ public class CleanViewModelCleanTests
 
         page.Clean();
 
-        Assert.Equal("—", page.ViewModel.FreeSpaceChangeLabel);
+        Assert.Equal("—", page.ViewModel.RunResult.FreeSpaceChangeLabel);
         Assert.Null(page.ViewModel.FreeSpaceNow);
     }
 
@@ -658,7 +658,7 @@ public class CleanViewModelCleanTests
         Assert.Equal(3, counted.Count);
         Assert.Equal("0 B", counted[0]);
         Assert.NotEqual(counted[1], counted[2]);
-        Assert.Equal(page.ViewModel.RemovedLabel, counted[^1]);
+        Assert.Equal(page.ViewModel.RunResult.RemovedLabel, counted[^1]);
         Assert.Equal([500_000L], free);
     }
 
@@ -838,16 +838,16 @@ public class CleanViewModelCleanTests
 
         page.Clean();
 
-        Assert.True(page.ViewModel.RunVerificationFailed);
+        Assert.True(page.ViewModel.RunResult.RunVerificationFailed);
         Assert.Equal(InfoBarSeverity.Error, page.ViewModel.StatusSeverity);
-        Assert.Equal(page.ViewModel.RunStatement, page.ViewModel.Status);
-        Assert.Contains(page.ViewModel.RunVerificationNotes, check => check.Subject == inside);
+        Assert.Equal(page.ViewModel.RunResult.RunStatement, page.ViewModel.Status);
+        Assert.Contains(page.ViewModel.RunResult.RunVerificationNotes, check => check.Subject == inside);
 
         Assert.Equal("0 B", page.ViewModel.Selection.TotalLabel);
         page.Row("cache").Steps[0].IsSelected = true;
 
         Assert.Equal("1 KB", page.ViewModel.Selection.TotalLabel);
-        Assert.Equal(page.ViewModel.RunStatement, page.ViewModel.Status);
+        Assert.Equal(page.ViewModel.RunResult.RunStatement, page.ViewModel.Status);
         Assert.Equal(InfoBarSeverity.Error, page.ViewModel.StatusSeverity);
     }
 
@@ -869,17 +869,17 @@ public class CleanViewModelCleanTests
 
         page.Clean();
 
-        var report = page.ViewModel.RunDiagnostics;
+        var report = page.ViewModel.RunResult.RunDiagnostics;
 
         Assert.Contains("- Deguffer: 0.0.0-test", report, StringComparison.Ordinal);
         Assert.Contains("- Windows: Windows 11 (10.0.26100), x64, on an ARM64 processor", report, StringComparison.Ordinal);
-        Assert.Contains($"- Outcome: {page.ViewModel.RunStatement}", report, StringComparison.Ordinal);
+        Assert.Contains($"- Outcome: {page.ViewModel.RunResult.RunStatement}", report, StringComparison.Ordinal);
         Assert.Contains("- Failed: `%USERPROFILE%", report, StringComparison.Ordinal);
         Assert.DoesNotContain(page.Environment.UserProfile, report, StringComparison.OrdinalIgnoreCase);
 
         page.Scan();
 
-        Assert.Empty(page.ViewModel.RunDiagnostics);
+        Assert.Empty(page.ViewModel.RunResult.RunDiagnostics);
     }
 
     /// <summary>
