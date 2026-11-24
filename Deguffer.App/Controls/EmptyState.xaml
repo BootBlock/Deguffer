@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!--
     The banner a list or a picture shows in place of its contents: where it has one, a large quiet
-    glyph; a title; where there is one, a sentence saying what to do next; and, where one press undoes
-    what keeps the rows back, a button that does it. One control, so every empty state on every page
+    glyph; a title; where there is one, a sentence saying what to do next; where one press undoes what
+    keeps the rows back, a button that does it; and, where the empty state is where the page's work
+    starts, the page's primary action itself. One control, so every empty state on every page
     looks the same and says why it is empty in the same place. DesignEmptyStateTests holds the pages
     to it.
 
@@ -24,11 +25,16 @@
         <TextBlock Text="{x:Bind Title, Mode=OneWay}" Style="{StaticResource EmptyStateTitle}" />
         <TextBlock x:Name="MessageText" Text="{x:Bind Message, Mode=OneWay}" Style="{StaticResource EmptyStateMessage}" />
 
-        <!-- Never the accent: the page's primary action is elsewhere on it, and this only undoes a
-             choice the reader made, such as a filter. -->
+        <!-- Never the accent: this only undoes a choice the reader made, such as a filter. -->
         <Button x:Name="ActionButton"
                 HorizontalAlignment="Center"
                 Content="{x:Bind ActionLabel, Mode=OneWay}"
                 Command="{x:Bind ActionCommand, Mode=OneWay}" />
+
+        <!-- The page's own controls, accent and all, so the one thing to do is under the words that
+             say to do it rather than in a corner of the window. -->
+        <ContentPresenter x:Name="PrimaryActionHost"
+                          HorizontalAlignment="Center"
+                          Content="{x:Bind PrimaryAction, Mode=OneWay}" />
     </StackPanel>
 </UserControl>

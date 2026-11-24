@@ -25,6 +25,9 @@ internal sealed class StorageListedRows
 {
     private readonly ObservableCollection<FindingViewModel> _findings;
 
+    /// <summary>Which rows the reader chose not to see. Both filters are off until the page applies its preferences.</summary>
+    private PreviewFilter _filter;
+
     /// <param name="findings">Every row of the scan, in the order the list shows them.</param>
     public StorageListedRows(ObservableCollection<FindingViewModel> findings)
     {
@@ -51,6 +54,27 @@ internal sealed class StorageListedRows
 
     /// <summary>What the card says when it draws none of these, told after every update.</summary>
     public StorageEmptyState Empty { get; }
+
+    /// <summary>Where <paramref name="row"/> is drawn, unless a filter the reader left on hides it. See <see cref="PreviewFilter"/>.</summary>
+    public PreviewPlace PlaceOf(FindingViewModel row) => _filter.Place(row.Status);
+
+    /// <summary>
+    /// Place every row again under <paramref name="filter"/>, rather than new ones only, because a
+    /// filter can change under a list that is already built.
+    /// </summary>
+    public void Refilter(PreviewFilter filter)
+    {
+        _filter = filter;
+
+        foreach (var row in _findings)
+        {
+            row.Place = PlaceOf(row);
+        }
+
+        // The findings did not change, so they raise nothing. Without this a filter that empties
+        // the list leaves the empty state collapsed behind it.
+        Show();
+    }
 
     /// <summary>
     /// Bring <see cref="Rows"/> up to the rows the filters let through, in place. Called for a change

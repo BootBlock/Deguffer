@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+    The ways to start a scan of the Storage page: Scan, the Cancel that takes its place while the page
+    is busy, and Elevate and scan beside them. One control, because the page draws them in two places,
+    one at a time: in the empty card before anything has been scanned, where they are the one thing to
+    do, and in the bar under the list after (StorageControls).
+-->
+<UserControl
+    x:Class="Deguffer.App.Views.StorageScanButtons"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Deguffer.App.Controls"
+    IsTabStop="False">
+
+    <UserControl.Resources>
+        <!-- Scan and the Cancel that takes its place while the page is busy. -->
+        <controls:WidthGroup x:Key="ScanSlotWidths" />
+    </UserControl.Resources>
+
+    <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
+        <!-- While the page is busy, Cancel takes Scan's place rather than joining the bar beside
+             it. The two share the wider of their widths (WidthGroup), so the swap does not move
+             the buttons after them. -->
+        <Grid VerticalAlignment="Center">
+            <!-- The primary action, so it keeps the accent a plain Scan button had. The button
+                 scans every location, and the drop-down scans only the ones ticked in it, for a
+                 user who knows what they came to clear and need not measure every cache to clear
+                 it. WinUI ships no accent style for a split button, so its brushes are pointed at
+                 the accent button's own. The empty HighContrast dictionary leaves that theme the
+                 SDK's values, as the Explore page's notes do. Hidden rather than disabled while
+                 the page is busy: see CleanViewModel.IsIdle. -->
+            <SplitButton Content="Scan"
+                         HorizontalAlignment="Stretch"
+                         Visibility="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
+                         Command="{x:Bind ViewModel.PreviewCommand, Mode=OneWay}"
+                         controls:WidthGroup.Group="{StaticResource ScanSlotWidths}"
+                         AutomationProperties.AutomationId="ScanButton"
+                         AutomationProperties.HelpText="Scan every location Deguffer recognises. Open the drop-down to choose the locations to scan on their own.">
+                <SplitButton.Resources>
+                    <ResourceDictionary>
+                        <ResourceDictionary.ThemeDictionaries>
+                            <ResourceDictionary x:Key="Default">
+                                <StaticResource x:Key="SplitButtonBackground" ResourceKey="AccentButtonBackground" />
+                                <StaticResource x:Key="SplitButtonBackgroundPointerOver" ResourceKey="AccentButtonBackgroundPointerOver" />
+                                <StaticResource x:Key="SplitButtonBackgroundPressed" ResourceKey="AccentButtonBackgroundPressed" />
+                                <StaticResource x:Key="SplitButtonBackgroundDisabled" ResourceKey="AccentButtonBackgroundDisabled" />
+                                <StaticResource x:Key="SplitButtonForeground" ResourceKey="AccentButtonForeground" />
+                                <StaticResource x:Key="SplitButtonForegroundPointerOver" ResourceKey="AccentButtonForegroundPointerOver" />
+                                <StaticResource x:Key="SplitButtonForegroundPressed" ResourceKey="AccentButtonForegroundPressed" />
+                                <StaticResource x:Key="SplitButtonForegroundDisabled" ResourceKey="AccentButtonForegroundDisabled" />
+                                <StaticResource x:Key="SplitButtonForegroundSecondary" ResourceKey="AccentButtonForeground" />
+                                <StaticResource x:Key="SplitButtonForegroundSecondaryPressed" ResourceKey="AccentButtonForegroundPressed" />
+                                <StaticResource x:Key="SplitButtonBorderBrush" ResourceKey="AccentButtonBorderBrush" />
+                                <StaticResource x:Key="SplitButtonBorderBrushPointerOver" ResourceKey="AccentButtonBorderBrushPointerOver" />
+                                <StaticResource x:Key="SplitButtonBorderBrushPressed" ResourceKey="AccentButtonBorderBrushPressed" />
+                                <StaticResource x:Key="SplitButtonBorderBrushDisabled" ResourceKey="AccentButtonBorderBrushDisabled" />
+                                <StaticResource x:Key="SplitButtonBorderBrushDivider" ResourceKey="ControlStrokeColorOnAccentDefaultBrush" />
+                            </ResourceDictionary>
+
+                            <ResourceDictionary x:Key="Light">
+                                <StaticResource x:Key="SplitButtonBackground" ResourceKey="AccentButtonBackground" />
+                                <StaticResource x:Key="SplitButtonBackgroundPointerOver" ResourceKey="AccentButtonBackgroundPointerOver" />
+                                <StaticResource x:Key="SplitButtonBackgroundPressed" ResourceKey="AccentButtonBackgroundPressed" />
+                                <StaticResource x:Key="SplitButtonBackgroundDisabled" ResourceKey="AccentButtonBackgroundDisabled" />
+                                <StaticResource x:Key="SplitButtonForeground" ResourceKey="AccentButtonForeground" />
+                                <StaticResource x:Key="SplitButtonForegroundPointerOver" ResourceKey="AccentButtonForegroundPointerOver" />
+                                <StaticResource x:Key="SplitButtonForegroundPressed" ResourceKey="AccentButtonForegroundPressed" />
+                                <StaticResource x:Key="SplitButtonForegroundDisabled" ResourceKey="AccentButtonForegroundDisabled" />
+                                <StaticResource x:Key="SplitButtonForegroundSecondary" ResourceKey="AccentButtonForeground" />
+                                <StaticResource x:Key="SplitButtonForegroundSecondaryPressed" ResourceKey="AccentButtonForegroundPressed" />
+                                <StaticResource x:Key="SplitButtonBorderBrush" ResourceKey="AccentButtonBorderBrush" />
+                                <StaticResource x:Key="SplitButtonBorderBrushPointerOver" ResourceKey="AccentButtonBorderBrushPointerOver" />
+                                <StaticResource x:Key="SplitButtonBorderBrushPressed" ResourceKey="AccentButtonBorderBrushPressed" />
+                                <StaticResource x:Key="SplitButtonBorderBrushDisabled" ResourceKey="AccentButtonBorderBrushDisabled" />
+                                <StaticResource x:Key="SplitButtonBorderBrushDivider" ResourceKey="ControlStrokeColorOnAccentDefaultBrush" />
+                            </ResourceDictionary>
+
+                            <ResourceDictionary x:Key="HighContrast" />
+                        </ResourceDictionary.ThemeDictionaries>
+                    </ResourceDictionary>
+                </SplitButton.Resources>
+
+                <SplitButton.Flyout>
+                    <Flyout x:Name="ScanChoiceFlyout" />
+                </SplitButton.Flyout>
+            </SplitButton>
+
+            <Button Content="{x:Bind ViewModel.CancelLabel, Mode=OneWay}"
+                    HorizontalAlignment="Stretch"
+                    Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
+                    Command="{x:Bind ViewModel.CancelCommand, Mode=OneWay}"
+                    controls:WidthGroup.Group="{StaticResource ScanSlotWidths}"
+                    AutomationProperties.AutomationId="CancelButton" />
+        </Grid>
+
+        <!-- §5.5's remedy for a slow scan, and a way to scan, so it sits with Scan. Offered
+             from the start, so an elevated preview is not reachable only through the
+             unelevated one it replaces, and hidden once a preview has shown that elevating
+             would not help, so it never offers administrator rights for a problem they
+             cannot fix. The wording follows the same state. -->
+        <Button Content="{x:Bind ViewModel.ElevateLabel, Mode=OneWay}" Style="{StaticResource ElevateButtonStyle}"
+                Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
+                Command="{x:Bind ViewModel.ElevateAndRescanCommand, Mode=OneWay}"
+                AutomationProperties.AutomationId="ElevateButton"
+                AutomationProperties.HelpText="Restart Deguffer as administrator and scan, so it can read the volume's file table and carry out steps only an administrator may perform." />
+
+    </StackPanel>
+</UserControl>

@@ -34,16 +34,16 @@ public sealed partial class StorageEmptyState : ObservableObject
 
     /// <summary>
     /// Whether that empty list is the filters' doing rather than an empty machine. The two need
-    /// different words: one says what to press, and the other says why a scan that finished is
-    /// showing nothing, and where to switch it back on.
+    /// different words: one stands over Scan, and the other says why a scan that finished is
+    /// showing nothing, and that both filters are in the bar over the list.
     /// </summary>
     private bool IsHiddenByFilters => _findings.Count > 0 && IsShown;
 
     public string Title => IsHiddenByFilters ? "Every row is hidden" : "Nothing scanned yet";
 
     public string Message => IsHiddenByFilters
-        ? "The scan found locations, and the filters are hiding all of them. Tick “Show items not "
-          + "installed” above, or switch on “Show items that are already clear” in Settings."
+        ? "The scan found locations, and the filters above the list are hiding all of them. Tick "
+          + "“Show items not installed” or “Show items that are already clear” to list them."
         : "A scan looks at the locations Deguffer recognises and reports what each one holds. It "
           + "reads only — nothing is removed until you choose to.";
 
