@@ -109,18 +109,21 @@
         <TextBlock Grid.Row="1" Text="{x:Bind ViewModel.Headline, Mode=OneWay}" TextWrapping="Wrap"
                    Style="{StaticResource SecondaryText}" />
 
-        <Grid Grid.Row="2" ColumnSpacing="16" ColumnDefinitions="*,Auto,Auto">
-            <TextBox PlaceholderText="Filter by name, publisher or command"
+        <!-- A filter box of the width its placeholder reads in, and the two choices after it,
+             wrapping under it on a narrow window rather than squeezing the box to a few letters. -->
+        <controls:FlowRow Grid.Row="2" ColumnSpacing="16" RowSpacing="{StaticResource ControlGap}">
+            <TextBox Width="320"
+                     PlaceholderText="Filter by name, publisher or command"
                      AutomationProperties.Name="Filter the lists"
                      Text="{x:Bind ViewModel.Filter, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
 
-            <CheckBox Grid.Column="1" Content="Show entries Windows hides"
+            <CheckBox Content="Show entries Windows hides"
                       IsChecked="{x:Bind ViewModel.ShowHidden, Mode=TwoWay}" />
 
-            <CheckBox Grid.Column="2" Content="Back up entries before removing them"
+            <CheckBox Content="Back up entries before removing them"
                       IsChecked="{x:Bind ViewModel.Actions.BackUpFirst, Mode=TwoWay}"
                       ToolTipService.ToolTip="{x:Bind ViewModel.Actions.BackupFolder}" />
-        </Grid>
+        </controls:FlowRow>
 
         <InfoBar Grid.Row="3"
                  IsOpen="{x:Bind ViewModel.Actions.HasReport, Mode=OneWay}"

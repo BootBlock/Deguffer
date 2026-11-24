@@ -6,20 +6,25 @@
     to elevate and scan sits beside Scan. What acts on a selection in a page's list sits in a bar
     under that list. One control at one height, so the title and the buttons stay where they were
     as the reader moves between pages.
+
+    On a window too narrow for the title and the buttons side by side, the buttons move to a line of
+    their own under the title, right-aligned as they were, rather than taking the title's width
+    (ReflowRow). A title squeezed beside its buttons would wrap a letter or two to a line.
 -->
 <UserControl
     x:Class="Deguffer.App.Controls.PageHeader"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Deguffer.App.Controls"
     IsTabStop="False"
     MinHeight="40">
 
-    <Grid ColumnSpacing="{StaticResource RegionGap}" ColumnDefinitions="Auto,*">
+    <controls:ReflowRow ColumnSpacing="{StaticResource RegionGap}"
+                        RowSpacing="{StaticResource ControlGap}"
+                        VerticalAlignment="Center">
         <TextBlock Text="{x:Bind Title}" Style="{StaticResource PageTitle}" VerticalAlignment="Center" />
 
-        <ContentPresenter Grid.Column="1"
-                          Content="{x:Bind Actions, Mode=OneWay}"
-                          HorizontalAlignment="Right"
+        <ContentPresenter Content="{x:Bind Actions, Mode=OneWay}"
                           VerticalAlignment="Center" />
-    </Grid>
+    </controls:ReflowRow>
 </UserControl>

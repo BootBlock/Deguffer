@@ -16,7 +16,7 @@ public sealed class WindowBoundsTests
     /// <summary>A 1920x1080 display with a taskbar along the bottom.</summary>
     private static readonly WindowBounds Work = new(0, 0, 1920, 1032);
 
-    private const int MinimumWidth = 880;
+    private const int MinimumWidth = 640;
     private const int MinimumHeight = 520;
 
     [Fact]
