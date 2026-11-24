@@ -308,6 +308,15 @@ public sealed record VerificationResult
             or VerificationOutcome.Unverified)];
 
     /// <summary>
+    /// The checks whose subject was there when the plan was made, so had to survive the action: every
+    /// asserting check but <see cref="VerificationOutcome.NotPresentBefore"/>, which had nothing to
+    /// preserve. What a page counts as the evidence behind its verdict (#861), because a figure that
+    /// included paths that never existed would claim more was protected than was.
+    /// </summary>
+    public IReadOnlyList<VerificationCheck> MustSurvive =>
+        [.. Asserted.Where(c => c.Outcome != VerificationOutcome.NotPresentBefore)];
+
+    /// <summary>
     /// Whether every protected subject is accounted for as still standing. An outside removal is not
     /// a pass: nobody verified that path, and saying otherwise is the overstatement §5.6 exists to
     /// stop.

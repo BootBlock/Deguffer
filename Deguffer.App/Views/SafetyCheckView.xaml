@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    A clean's §5.6 safety check on the Storage page's result card, kept beside the run's figures for
+    as long as they stand. What it says, and when it is a pass, is Core's (RunOutcome). The info bar
+    cannot hold it: a clean re-plans the list immediately afterwards, and every provider that scan
+    checks reports a line of its own into that bar.
+
+    The verdict leads, as a glyph and plain words, because the reader came to free space and needs
+    the outcome before its explanation. The glyph's shape and the words both say it, and the colour
+    only backs them up (§6.5). The count follows as the evidence, then whatever the run left behind.
+-->
+<UserControl
+    x:Class="Deguffer.App.Views.SafetyCheckView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:Deguffer.App.ViewModels"
+    xmlns:views="using:Deguffer.App.Views">
+
+    <StackPanel Spacing="{StaticResource ControlGap}">
+
+        <!-- The help text says what is checked, because "everything Deguffer was told to leave alone"
+             raises the question of what that is, and the answer belongs where the question arises. -->
+        <Grid ColumnSpacing="{StaticResource ControlGap}" ColumnDefinitions="Auto,*,Auto">
+            <FontIcon Grid.Column="0"
+                      VerticalAlignment="Top"
+                      Glyph="{x:Bind vm:SafetyCheckGlyph.Of(Report.Outcome.Verdict), Mode=OneWay}"
+                      Style="{x:Bind Report.Outcome.Verdict, Mode=OneWay, Converter={StaticResource SafetyCheckGlyphStyle}}" />
+
+            <TextBlock x:Name="SafetyCheckHeading"
+                       Grid.Column="1"
+                       Text="{x:Bind Report.Outcome.Heading, Mode=OneWay}"
+                       Style="{x:Bind Report.Outcome.Verdict, Mode=OneWay, Converter={StaticResource SafetyCheckHeadingStyle}}"
+                       IsTextSelectionEnabled="True"
+                       ToolTipService.ToolTip="{x:Bind WhatIsChecked}"
+                       AutomationProperties.HelpText="{x:Bind WhatIsChecked}" />
+
+            <!-- On a pass, the copy of the run waits behind this menu rather than in plain view, where
+                 it would suggest something went wrong. -->
+            <Button x:Name="SafetyCheckMenuButton"
+                    Grid.Column="2"
+                    VerticalAlignment="Top"
+                    Visibility="{x:Bind Report.OffersDiagnosticsMenu, Mode=OneWay}"
+                    ToolTipService.ToolTip="More about this clean"
+                    AutomationProperties.Name="More about this clean">
+                <FontIcon Glyph="&#xE712;" />
+                <Button.Flyout>
+                    <MenuFlyout Placement="BottomEdgeAlignedRight">
+                        <MenuFlyoutItem x:Name="CopyRunDiagnosticsMenuItem"
+                                        Text="Copy diagnostic information"
+                                        ToolTipService.ToolTip="Copies a report of this clean to the clipboard, with your user folder hidden, to paste into a GitHub issue."
+                                        Click="OnCopyDiagnostics">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE8C8;" />
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                    </MenuFlyout>
+                </Button.Flyout>
+            </Button>
+        </Grid>
+
+        <TextBlock Text="{x:Bind Report.Outcome.Evidence, Mode=OneWay}"
+                   Style="{StaticResource SecondaryText}"
+                   IsTextSelectionEnabled="True" />
+
+        <TextBlock Text="{x:Bind Report.Outcome.Detail, Mode=OneWay}"
+                   Style="{StaticResource SecondaryText}"
+                   IsTextSelectionEnabled="True"
+                   Visibility="{x:Bind Report.HasDetail, Mode=OneWay}" />
+
+        <!-- What the verdict is about, named. When it asks the user to report a protected path that
+             did not survive, this is the only thing on the screen that says which path, why it was
+             protected, and what was found in its place. -->
+        <views:VerificationCheckList Checks="{x:Bind Report.Notes}"
+                                    Visibility="{x:Bind Report.HasNotes, Mode=OneWay}" />
+
+        <!-- The run written out for a GitHub issue. The verdict can ask the user to report a fault,
+             and copying the paths above by hand loses which row each belonged to, what each step did
+             and the build it came from. -->
+        <StackPanel Orientation="Horizontal"
+                    Spacing="{StaticResource ControlGap}"
+                    Visibility="{x:Bind Report.ShowsDiagnosticsRow, Mode=OneWay}">
+            <HyperlinkButton x:Name="CopyRunDiagnosticsLink"
+                             Content="Copy diagnostic information"
+                             Padding="0"
+                             Visibility="{x:Bind Report.OffersDiagnosticsLink, Mode=OneWay}"
+                             AutomationProperties.HelpText="Copies a report of this clean to the clipboard, with your user folder hidden, to paste into a GitHub issue."
+                             Click="OnCopyDiagnostics" />
+            <TextBlock VerticalAlignment="Center"
+                       Text="{x:Bind Report.CopyResult, Mode=OneWay}"
+                       Style="{StaticResource SecondaryText}" />
+        </StackPanel>
+    </StackPanel>
+</UserControl>

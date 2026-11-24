@@ -77,7 +77,7 @@ public sealed class WhenCompleteTests
 
         page.Clean();
 
-        Assert.True(page.ViewModel.RunVerificationFailed);
+        Assert.True(page.ViewModel.SafetyCheck.VerificationFailed);
         Assert.Empty(countdowns);
         Assert.Empty(page.Session.Performed);
     }

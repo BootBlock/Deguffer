@@ -48,7 +48,9 @@ public sealed class RunOutcomeTests
         var outcome = RunOutcome.For([Result("npm"), Result("NuGet")]);
 
         Assert.False(outcome.VerificationFailed);
-        Assert.Equal("All protected paths survived.", outcome.Statement);
+        Assert.True(outcome.Passed);
+        Assert.Equal(RunOutcome.HeadingFor(RunVerdict.AllSurvived), outcome.Statement);
+        Assert.Empty(outcome.Detail);
     }
 
     /// <summary>
@@ -63,9 +65,7 @@ public sealed class RunOutcomeTests
         Assert.True(outcome.Cancelled);
         Assert.True(outcome.NeedsReporting);
         Assert.Equal(RunVerdict.AllSurvived, outcome.Verdict);
-        Assert.Equal(
-            "Clean cancelled part-way. Anything already removed stays removed, and all protected paths survived.",
-            outcome.Statement);
+        Assert.Equal("Clean cancelled part-way. Anything already removed stays removed.", outcome.Detail);
     }
 
     /// <summary>A cancelled run that failed verification is still the alarm, and still says it stopped.</summary>
@@ -77,7 +77,7 @@ public sealed class RunOutcomeTests
 
         Assert.True(outcome.VerificationFailed);
         Assert.True(outcome.Cancelled);
-        Assert.StartsWith("Clean cancelled part-way, and verification failed for NuGet.", outcome.Statement);
+        Assert.StartsWith("Clean cancelled part-way, and verification failed for NuGet.", outcome.Detail);
     }
 
     /// <summary>A run that finished is not reported as cancelled, and yields the bar when all is well.</summary>
@@ -197,10 +197,10 @@ public sealed class RunOutcomeTests
     public void StatesTheFoldersWindowsWouldNotLetGoApartFromTheFiles()
     {
         var statement = RunOutcome.For(
-            [Result("Temporary files", folders: new FolderRefusals(InUse: 2, Denied: 1))]).Statement;
+            [Result("Temporary files", folders: new FolderRefusals(InUse: 2, Denied: 1))]).Detail;
 
         Assert.Equal(
-            "All protected paths survived. Another program was using 2 folder(s), so they were left in place. "
+            "Another program was using 2 folder(s), so they were left in place. "
             + "Windows would not let Deguffer remove 1 folder(s).",
             statement);
     }
@@ -216,9 +216,9 @@ public sealed class RunOutcomeTests
         result = result with { Steps = [result.Steps[0] with { Unlisted = 2 }] };
 
         Assert.Equal(
-            "All protected paths survived. Windows would not let Deguffer remove 1 folder(s). "
+            "Windows would not let Deguffer remove 1 folder(s). "
             + "Windows would not let Deguffer look inside 2 folder(s), so they were left in place.",
-            RunOutcome.For([result]).Statement);
+            RunOutcome.For([result]).Detail);
     }
 
     /// <summary>
@@ -240,11 +240,11 @@ public sealed class RunOutcomeTests
     [Fact]
     public void SaysNothingAboutARefusalOrAKeepOfZero()
     {
-        Assert.Equal("All protected paths survived.", RunOutcome.For([Result("npm")]).Statement);
+        Assert.Empty(RunOutcome.For([Result("npm")]).Detail);
 
         Assert.Equal(
-            "All protected paths survived. 6 file(s) changed too recently to remove.",
-            RunOutcome.For([Result("npm", kept: 6)]).Statement);
+            "6 file(s) changed too recently to remove.",
+            RunOutcome.For([Result("npm", kept: 6)]).Detail);
     }
 
     /// <summary>
@@ -261,9 +261,8 @@ public sealed class RunOutcomeTests
         };
 
         Assert.Equal(
-            "All protected paths survived. 2 Outlook data file(s) were left where they were, because "
-            + "Deguffer never removes one.",
-            RunOutcome.For([result]).Statement);
+            "2 Outlook data file(s) were left where they were, because Deguffer never removes one.",
+            RunOutcome.For([result]).Detail);
     }
 
     /// <summary>
@@ -299,7 +298,7 @@ public sealed class RunOutcomeTests
         Assert.Contains(".NET intermediate build output", outcome.Statement, StringComparison.Ordinal);
         Assert.Contains("Scan again", outcome.Statement, StringComparison.Ordinal);
         Assert.DoesNotContain("please report this", outcome.Statement, StringComparison.Ordinal);
-        Assert.DoesNotContain("All protected paths survived", outcome.Statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("Safety check passed", outcome.Statement, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -338,7 +337,7 @@ public sealed class RunOutcomeTests
             "Cleaned. Windows would not describe one protected path for Gradle after the clean, so "
             + "Deguffer could not check that it survived. An access rule, or a link Windows declines to "
             + "follow, is the usual cause.",
-            outcome.Statement);
+            outcome.Detail);
     }
 
     /// <summary>Both grammatical forms, for the reason the outside sentence gives.</summary>
@@ -366,7 +365,7 @@ public sealed class RunOutcomeTests
             [Result("npm", VerificationOutcome.RemovedFromOutside), Result("Gradle", VerificationOutcome.Unverified)]);
 
         Assert.Equal(RunVerdict.RemovedFromOutside, outcome.Verdict);
-        Assert.StartsWith("Cleaned. One protected path for npm went missing", outcome.Statement, StringComparison.Ordinal);
+        Assert.StartsWith("Cleaned. One protected path for npm went missing", outcome.Detail, StringComparison.Ordinal);
         Assert.Contains("one protected path for Gradle after the clean", outcome.Statement, StringComparison.Ordinal);
     }
 
@@ -443,6 +442,94 @@ public sealed class RunOutcomeTests
         Assert.Contains("2 protected paths for npm went missing", several, StringComparison.Ordinal);
         Assert.Contains("nothing in this run took them.", several, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// Each verdict leads with a heading that says in plain words whether the check passed, so the
+    /// outcome reads before its explanation and never by colour alone (§6.5). A pass, a check that
+    /// could not be completed and a failure each read differently, and only a pass says "passed".
+    /// </summary>
+    [Theory]
+    [InlineData(VerificationOutcome.Survived, RunVerdict.AllSurvived, "Safety check passed: ")]
+    [InlineData(VerificationOutcome.Unverified, RunVerdict.Unverified, "Safety check incomplete: ")]
+    [InlineData(VerificationOutcome.RemovedFromOutside, RunVerdict.RemovedFromOutside, "Safety check incomplete: ")]
+    [InlineData(VerificationOutcome.Failed, RunVerdict.VerificationFailed, "Safety check failed: ")]
+    [InlineData(VerificationOutcome.Emptied, RunVerdict.VerificationFailed, "Safety check failed: ")]
+    [InlineData(VerificationOutcome.Entered, RunVerdict.VerificationFailed, "Safety check failed: ")]
+    public void LeadsWithAHeadingThatSaysWhetherTheCheckPassed(
+        VerificationOutcome found,
+        RunVerdict verdict,
+        string opening)
+    {
+        var outcome = RunOutcome.For([Result("npm", found)]);
+
+        Assert.Equal(verdict, outcome.Verdict);
+        Assert.StartsWith(opening, outcome.Heading, StringComparison.Ordinal);
+        Assert.StartsWith(outcome.Heading, outcome.Statement, StringComparison.Ordinal);
+        Assert.Equal(verdict == RunVerdict.AllSurvived, outcome.Passed);
+    }
+
+    /// <summary>Every verdict has a heading of its own, so no two outcomes read alike.</summary>
+    [Fact]
+    public void EveryVerdictHasItsOwnHeading()
+    {
+        var verdicts = Enum.GetValues<RunVerdict>();
+
+        Assert.Equal(verdicts.Length, verdicts.Select(RunOutcome.HeadingFor).Distinct(StringComparer.Ordinal).Count());
+    }
+
+    /// <summary>A verdict nobody named a heading for throws, rather than reading as a pass.</summary>
+    [Fact]
+    public void AVerdictWithNoHeadingIsNeverReadAsAPass() =>
+        Assert.Throws<ArgumentOutOfRangeException>(() => RunOutcome.HeadingFor((RunVerdict)99));
+
+    /// <summary>
+    /// The count behind the verdict covers what had to survive across every provider: a path that was
+    /// not there before the run had nothing to survive, so it is not counted.
+    /// </summary>
+    [Fact]
+    public void CountsWhatHadToSurviveAsTheEvidence()
+    {
+        var outcome = RunOutcome.For(
+            [Result("npm") with { Verification = Checked(VerificationOutcome.Survived, VerificationOutcome.Survived) },
+             Result("NuGet"),
+             Result("pip", VerificationOutcome.NotPresentBefore)]);
+
+        Assert.Equal("Checked 3 items that had to survive.", outcome.Evidence);
+    }
+
+    /// <summary>
+    /// A path Windows would not describe had to survive and was not checked, so the count says how
+    /// many of them were, and never claims more was looked at than was.
+    /// </summary>
+    [Fact]
+    public void CountsAPathThatCouldNotBeCheckedAsNotChecked()
+    {
+        var outcome = RunOutcome.For(
+            [Result("npm"), Result("Gradle", VerificationOutcome.Unverified), Result("pip")]);
+
+        Assert.Equal("Checked 2 of 3 items that had to survive.", outcome.Evidence);
+    }
+
+    [Fact]
+    public void SaysOneItemInTheSingular() =>
+        Assert.Equal("Checked 1 item that had to survive.", RunOutcome.For([Result("npm")]).Evidence);
+
+    /// <summary>A run where nothing protected existed says so, rather than "checked 0 items".</summary>
+    [Fact]
+    public void SaysWhenNothingHadToSurvive() =>
+        Assert.Equal(
+            "Nothing Deguffer was told to leave alone was there to check.",
+            RunOutcome.For([Result("npm", VerificationOutcome.NotPresentBefore)]).Evidence);
+
+    private static VerificationResult Checked(params VerificationOutcome[] outcomes) =>
+        new()
+        {
+            Checks = [.. outcomes.Select((outcome, i) => new VerificationCheck(
+                $@"C:\Users\testuser\.cache\keep{i}",
+                "It must survive.",
+                outcome,
+                "Whatever the check found."))],
+        };
 
     /// <summary>One provider's result carrying <paramref name="count"/> paths taken from outside.</summary>
     private static CleanupResult OutsideRemovals(string name, int count) =>

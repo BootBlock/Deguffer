@@ -57,7 +57,7 @@ public class CleanViewModelKeepTests
 
         Assert.True(Directory.Exists(kept.Subjects[0]));
         Assert.DoesNotContain(Assert.Single(cache.Executed).Steps, step => step.SelectionKey == kept.SelectionKey);
-        Assert.Equal("All protected paths survived.", page.ViewModel.RunStatement);
+        Assert.Equal("Safety check passed: everything Deguffer was told to leave alone is still there.", page.ViewModel.SafetyCheck.Statement);
     }
 
     /// <summary>
