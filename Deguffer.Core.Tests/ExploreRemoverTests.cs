@@ -346,7 +346,7 @@ public sealed class ExploreRemoverTests : IDisposable
                 _policy);
         }
 
-        Assert.Contains("another program had 1 file(s)", Assert.Single(report.Refused).Message, StringComparison.Ordinal);
+        Assert.Contains("another program had 1 file", Assert.Single(report.Refused).Message, StringComparison.Ordinal);
         Assert.True(LongPath.FileExists(file));
     }
 
@@ -374,7 +374,7 @@ public sealed class ExploreRemoverTests : IDisposable
 
         var message = Assert.Single(report.Refused).Message;
 
-        Assert.Contains("Windows would not let Deguffer remove them", message, StringComparison.Ordinal);
+        Assert.Contains("Windows would not let Deguffer remove it", message, StringComparison.Ordinal);
         Assert.DoesNotContain("in use", message, StringComparison.OrdinalIgnoreCase);
         Assert.True(LongPath.FileExists(denied));
     }
@@ -481,7 +481,7 @@ public sealed class ExploreRemoverTests : IDisposable
         }
 
         Assert.Equal(
-            "Partly deleted, 1 folder(s) left in place because another program was using them, so the folder is still there.",
+            "Partly deleted, 1 folder left in place because another program was using it, so the folder is still there.",
             Assert.Single(report.Refused).Message);
         Assert.True(LongPath.DirectoryExists(working));
     }
@@ -617,7 +617,7 @@ public sealed class ExploreRemoverTests : IDisposable
         Assert.False(LongPath.FileExists(notes));
 
         var outcome = Assert.Single(report.Refused);
-        Assert.Contains("1 Outlook data file(s) left alone", outcome.Message, StringComparison.Ordinal);
+        Assert.Contains("1 Outlook data file left alone", outcome.Message, StringComparison.Ordinal);
 
         Assert.Contains(report.Verification.Checks, check =>
             check.Subject.Equals(store, StringComparison.OrdinalIgnoreCase)

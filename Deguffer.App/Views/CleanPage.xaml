@@ -385,6 +385,13 @@
                         </StackPanel>
                     </StackPanel>
 
+                    <!-- §7: free space before and after. The figure the user started from, read from
+                         the volume before the run, against the one above. Its own line, so it wraps
+                         rather than clips on a narrow window. -->
+                    <TextBlock Text="{x:Bind ViewModel.RunResult.FreeSpaceMoveText, Mode=OneWay}"
+                               Style="{StaticResource SecondaryText}"
+                               Visibility="{x:Bind ViewModel.RunResult.HasFreeSpaceMove, Mode=OneWay}" />
+
                     <!-- How full the disk is, at a glance: 40 GB free means nothing until you
                          know whether the volume is 256 GB or 4 TB. The figures beside it say
                          the same thing in words, so nothing is lost if the bar cannot be seen.
@@ -406,98 +413,64 @@
                              AutomationProperties.Name="Drive health" />
                 </StackPanel>
 
-                <!-- §5.4: the two numbers are reported separately and labelled distinctly. They
-                     disagree whenever anything else on the machine writes during the run, and
-                     merging them into one figure is how a user stops trusting the tool. -->
+                <!-- §5.4: what Deguffer removed is reported apart from how the free space moved, which
+                     the line under the hero states. They disagree whenever anything else on the
+                     machine writes during the run, and merging them into one figure is how a user
+                     stops trusting the tool. -->
                 <StackPanel x:Name="RunFiguresPanel"
                             Grid.Row="0"
                             Grid.Column="1"
                             Orientation="Horizontal"
                             Spacing="28"
                             VerticalAlignment="Center"
-                            Visibility="{x:Bind ViewModel.HasRunResult, Mode=OneWay}">
+                            Visibility="{x:Bind ViewModel.RunResult.IsShown, Mode=OneWay}">
                     <Border Width="1"
                             Background="{ThemeResource DividerStrokeColorDefaultBrush}"
                             VerticalAlignment="Stretch" />
 
                     <StackPanel Spacing="{StaticResource LabelGap}" VerticalAlignment="Center">
                         <TextBlock Text="Removed by Deguffer" Style="{StaticResource FieldLabel}" />
-                        <TextBlock Text="{x:Bind ViewModel.RemovedLabel, Mode=OneWay}"
-                                   Style="{StaticResource Figure}" />
-                    </StackPanel>
-
-                    <StackPanel Spacing="{StaticResource LabelGap}" VerticalAlignment="Center">
-                        <TextBlock Text="Free space change" Style="{StaticResource FieldLabel}" />
-                        <TextBlock Text="{x:Bind ViewModel.FreeSpaceChangeLabel, Mode=OneWay}"
+                        <TextBlock Text="{x:Bind ViewModel.RunResult.RemovedLabel, Mode=OneWay}"
                                    Style="{StaticResource Figure}" />
                     </StackPanel>
 
                     <!-- A request rather than a result: the sync app releases these after the run,
-                         so the free space change beside it may not include them yet. -->
+                         so the free space under the hero may not include them yet. -->
                     <StackPanel Spacing="{StaticResource LabelGap}"
                                 VerticalAlignment="Center"
-                                Visibility="{x:Bind ViewModel.HasRequested, Mode=OneWay}"
+                                Visibility="{x:Bind ViewModel.RunResult.HasRequested, Mode=OneWay}"
                                 ToolTipService.ToolTip="Local copies of cloud files your sync app was asked to release. It does that in the background, so free space can keep growing after the clean.">
                         <TextBlock Text="Asked to release" Style="{StaticResource FieldLabel}" />
-                        <TextBlock Text="{x:Bind ViewModel.RequestedLabel, Mode=OneWay}"
+                        <TextBlock Text="{x:Bind ViewModel.RunResult.RequestedLabel, Mode=OneWay}"
                                    Style="{StaticResource Figure}" />
                     </StackPanel>
 
                     <!-- Nothing has gone yet: the program removes these the next time it starts,
-                         so the free space change beside it does not include them. -->
+                         so the free space under the hero does not include them. -->
                     <StackPanel Spacing="{StaticResource LabelGap}"
                                 VerticalAlignment="Center"
-                                Visibility="{x:Bind ViewModel.HasScheduled, Mode=OneWay}"
+                                Visibility="{x:Bind ViewModel.RunResult.HasScheduled, Mode=OneWay}"
                                 ToolTipService.ToolTip="Marked for removal by the program that owns them. It removes them the next time it starts, so free space grows then rather than now.">
                         <TextBlock Text="Removed at next start" Style="{StaticResource FieldLabel}" />
-                        <TextBlock Text="{x:Bind ViewModel.ScheduledLabel, Mode=OneWay}"
+                        <TextBlock Text="{x:Bind ViewModel.RunResult.ScheduledLabel, Mode=OneWay}"
                                    Style="{StaticResource Figure}" />
                     </StackPanel>
                 </StackPanel>
 
-                <!-- §5.6's verdict on the run those two figures describe, and it stays as long
-                     as they do. The info bar below cannot hold it: a clean re-plans the list
-                     immediately afterwards, and every provider that scan checks reports a line
-                     of its own into that bar. A verdict there is gone before it is read.
+                <!-- §5.6's verdict on the run those figures describe, and what each location did,
+                     for as long as they stand. The info bar below cannot hold it: a clean re-plans
+                     the list immediately afterwards, and every provider that scan checks reports a
+                     line of its own into that bar. A verdict there is gone before it is read.
 
-                     The gap above it is this element's margin rather than the grid's
-                     RowSpacing, because row spacing is a property of the rows: it stands
-                     whether or not anything is in them, and before the first clean of a session
-                     that is empty space under the capacity bar. -->
-                <StackPanel x:Name="RunVerdictPanel"
-                            Grid.Row="1"
-                            Grid.Column="0"
-                            Grid.ColumnSpan="2"
-                            Margin="{StaticResource RegionGapAbove}"
-                            Spacing="{StaticResource ControlGap}"
-                            Visibility="{x:Bind ViewModel.HasRunResult, Mode=OneWay}">
-
-                    <TextBlock Text="{x:Bind ViewModel.RunStatement, Mode=OneWay}"
-                               Style="{x:Bind ViewModel.RunVerificationFailed, Mode=OneWay, Converter={StaticResource RunStatementStyle}}" />
-
-                    <!-- What the sentence above is about, named. When it asks the user to report
-                         a protected path that did not survive, this is the only thing on the
-                         screen that says which path, why it was protected, and what was found
-                         in its place — and a request to report a fault with no way to state it
-                         is a dead end. -->
-                    <views:VerificationCheckList Checks="{x:Bind ViewModel.RunVerificationNotes}"
-                                                Visibility="{x:Bind ViewModel.HasRunVerificationNotes, Mode=OneWay}" />
-
-                    <!-- The run written out for a GitHub issue. The sentence above can ask the
-                         user to report a fault, and copying the paths above by hand loses which
-                         row each belonged to, what each step did and the build it came from. -->
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <HyperlinkButton x:Name="CopyRunDiagnosticsLink"
-                                         Content="Copy diagnostic information"
-                                         Padding="0"
-                                         AutomationProperties.HelpText="Copies a report of this clean to the clipboard, with your user folder hidden, to paste into a GitHub issue."
-                                         Click="OnCopyRunDiagnostics" />
-                        <TextBlock x:Name="CopyRunDiagnosticsResult"
-                                   VerticalAlignment="Center"
-                                   Style="{StaticResource SecondaryText}"
-                                   AutomationProperties.LiveSetting="Polite" />
-                    </StackPanel>
-                </StackPanel>
+                     The gap above it is this element's margin rather than the grid's RowSpacing,
+                     because row spacing stands whether or not anything is in the row. -->
+                <views:RunResultView x:Name="RunVerdictPanel"
+                                     Grid.Row="1"
+                                     Grid.Column="0"
+                                     Grid.ColumnSpan="2"
+                                     Margin="{StaticResource RegionGapAbove}"
+                                     Result="{x:Bind ViewModel.RunResult}"
+                                     Visibility="{x:Bind ViewModel.RunResult.IsShown, Mode=OneWay}" />
 
                 <!-- Windows' own retrim, offered where a clean freed a lot on a thin, virtual or
                      solid-state drive, whose storage learns the space is free only when Windows

@@ -253,7 +253,7 @@ public sealed class TemporaryUserWorkTests : IDisposable
 
         Assert.Equal(1, result.UserWorkCount);
         Assert.Equal(0, result.SparedCount);
-        Assert.Contains("never saved", RunOutcome.For([result]).Statement, StringComparison.Ordinal);
+        Assert.Contains(RunRow.Of(result).LeftBehind, said => said.Contains("never saved", StringComparison.Ordinal));
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 

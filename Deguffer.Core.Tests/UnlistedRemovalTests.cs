@@ -120,7 +120,7 @@ public sealed class UnlistedRemovalTests : IDisposable
         Assert.Equal(1, step.Unlisted);
         Assert.Equal(1, result.UnlistedCount);
         Assert.Equal(
-            "Cleared, 1 folder(s) left in place because Windows would not let Deguffer look inside them.",
+            "Cleared, 1 folder left in place because Windows would not let Deguffer look inside it.",
             step.Message);
         Assert.False(File.Exists(free));
         Assert.True(File.Exists(inside), "a file in a folder the clear could not list was removed");
@@ -147,7 +147,7 @@ public sealed class UnlistedRemovalTests : IDisposable
 
         Assert.False(step.Succeeded);
         Assert.Equal(1, step.Unlisted);
-        Assert.Equal("Nothing was removed: Windows would not let Deguffer look inside 1 folder(s).", step.Message);
+        Assert.Equal("Nothing was removed: Windows would not let Deguffer look inside 1 folder.", step.Message);
         Assert.True(File.Exists(inside), "a file in a folder the clear could not list was removed");
     }
 
@@ -171,7 +171,7 @@ public sealed class UnlistedRemovalTests : IDisposable
 
         Assert.False(step.Succeeded);
         Assert.Equal(1, step.Unlisted);
-        Assert.Equal("Nothing was removed: Windows would not let Deguffer look inside 1 folder(s).", step.Message);
+        Assert.Equal("Nothing was removed: Windows would not let Deguffer look inside 1 folder.", step.Message);
         Assert.True(File.Exists(inside), "a file in a folder the clear could not describe was removed");
     }
 
@@ -195,7 +195,7 @@ public sealed class UnlistedRemovalTests : IDisposable
 
         Assert.False(step.Succeeded);
         Assert.Equal(1, step.Unlisted);
-        Assert.Equal("Nothing was removed: Windows would not let Deguffer look inside 1 folder(s).", step.Message);
+        Assert.Equal("Nothing was removed: Windows would not let Deguffer look inside 1 folder.", step.Message);
         Assert.True(File.Exists(inside), "a file in a folder the deletion could not list was removed");
         Assert.True(Directory.Exists(cache));
     }
@@ -224,7 +224,7 @@ public sealed class UnlistedRemovalTests : IDisposable
         }
 
         Assert.Equal(
-            "Nothing was removed: Windows would not let Deguffer look inside 1 folder(s).",
+            "Nothing was removed: Windows would not let Deguffer look inside 1 folder.",
             Assert.Single(report.Refused).Message);
         Assert.True(File.Exists(inside));
     }

@@ -117,6 +117,7 @@ public sealed partial class CleanPage : Page
 
         // The view-model is this page's own, so the subscription lives exactly as long as both do.
         ViewModel.PropertyChanged += OnViewModelPropertyChanged;
+        ViewModel.RunResult.PropertyChanged += OnRunResultPropertyChanged;
 
         // Bound to the page being on screen rather than to its construction: the preference only
         // governs a clean started from here, and a subscription to a process-lifetime static event
@@ -319,13 +320,11 @@ public sealed partial class CleanPage : Page
             ShowItemsOrRows();
         }
 
-        // A new run's card must not say an earlier run's report was copied.
-        if (e.PropertyName == nameof(CleanViewModel.RunStatement))
-        {
-            CopyRunDiagnosticsResult.Text = string.Empty;
-        }
+    }
 
-        if (e.PropertyName == nameof(CleanViewModel.HasRunResult) && ViewModel.HasRunResult)
+    private void OnRunResultPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(RunResultViewModel.IsShown) && ViewModel.RunResult.IsShown)
         {
             BringInRunResult();
         }
@@ -351,14 +350,6 @@ public sealed partial class CleanPage : Page
             _runResultEntrance.Enter(part, played, TimeSpan.Zero);
         }
     }
-
-    /// <summary>
-    /// Put the last run's report on the clipboard, and say on the card whether it went. It stays on
-    /// the clipboard after Deguffer closes, which is when a user filing an issue is most likely to
-    /// paste it.
-    /// </summary>
-    private async void OnCopyRunDiagnostics(object sender, RoutedEventArgs e) =>
-        CopyRunDiagnosticsResult.Text = await ClipboardText.PutAsync(ViewModel.RunDiagnostics, CancellationToken.None) ?? "Copied. Paste it into a GitHub issue.";
 
     /// <summary>
     /// Put the item list the view-model names on the card, or take it off and give the keyboard back

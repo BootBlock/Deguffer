@@ -43,9 +43,10 @@ public class CleanViewModelCleanTests
         var ran = Assert.Single(cache.Executed);
         Assert.Equal([taken.Path], ran.Steps.Select(step => step.SelectionKey));
         Assert.Contains(ran.ProtectedPaths, p => p.Path == unticked.Path);
-        Assert.Equal("All protected paths survived.", page.ViewModel.RunStatement);
-        Assert.False(page.ViewModel.RunVerificationFailed);
-        Assert.Equal("1 KB", page.ViewModel.RemovedLabel);
+        Assert.Equal("All protected paths survived.", page.ViewModel.RunResult.Statement);
+        Assert.False(page.ViewModel.RunResult.VerificationFailed);
+        Assert.Equal("1 KB", page.ViewModel.RunResult.RemovedLabel);
+        Assert.False(page.ViewModel.RunResult.IsDetailsOpen);
     }
 
     /// <summary>
@@ -68,9 +69,9 @@ public class CleanViewModelCleanTests
         };
         page.Scan();
         var mayEndAsTheVerdictLands = new List<bool>();
-        page.ViewModel.PropertyChanged += (_, changed) =>
+        page.ViewModel.RunResult.PropertyChanged += (_, changed) =>
         {
-            if (changed.PropertyName == nameof(page.ViewModel.RunStatement) && page.ViewModel.RunStatement.Length > 0)
+            if (changed.PropertyName == nameof(page.ViewModel.RunResult.Statement) && page.ViewModel.RunResult.Statement.Length > 0)
             {
                 mayEndAsTheVerdictLands.Add(page.Running.MayEndProcess);
             }
@@ -82,7 +83,7 @@ public class CleanViewModelCleanTests
         Assert.False(elevateWhileDeleting);
         Assert.Equal([false], mayEndAsTheVerdictLands);
         Assert.True(page.Running.MayEndProcess);
-        Assert.True(page.ViewModel.HasRunResult);
+        Assert.True(page.ViewModel.RunResult.IsShown);
     }
 
     /// <summary>
@@ -129,12 +130,12 @@ public class CleanViewModelCleanTests
         Assert.True(Directory.Exists(untouched.Path));
         Assert.Empty(second.Executed);
 
-        Assert.True(page.ViewModel.HasRunResult);
-        Assert.Equal("4 KB", page.ViewModel.RemovedLabel);
+        Assert.True(page.ViewModel.RunResult.IsShown);
+        Assert.Equal("4 KB", page.ViewModel.RunResult.RemovedLabel);
         Assert.Equal(
             "Clean cancelled part-way. Anything already removed stays removed, and all protected paths survived.",
-            page.ViewModel.RunStatement);
-        Assert.Equal(page.ViewModel.RunStatement, page.ViewModel.Status);
+            page.ViewModel.RunResult.Statement);
+        Assert.Equal(page.ViewModel.RunResult.Statement, page.ViewModel.Status);
         Assert.Equal(InfoBarSeverity.Warning, page.ViewModel.StatusSeverity);
 
         Assert.Equal(2, first.PlanCount);
@@ -229,7 +230,7 @@ public class CleanViewModelCleanTests
         page.Clean();
 
         Assert.False(Directory.Exists(taken.Path));
-        Assert.Equal("All protected paths survived.", page.ViewModel.RunStatement);
+        Assert.Equal("All protected paths survived.", page.ViewModel.RunResult.Statement);
         Assert.DoesNotContain("cancelled", page.ViewModel.Status, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(2, cache.PlanCount);
         Assert.True(page.ViewModel.HasPreview);
@@ -257,18 +258,20 @@ public class CleanViewModelCleanTests
         first.AfterCleaning = () => first.WhilePlanning = () => page.ViewModel.CancelCommand.Execute(null);
         page.Clean();
 
-        Assert.True(page.ViewModel.RunVerificationFailed);
-        Assert.Equal(page.ViewModel.RunStatement, page.ViewModel.Status);
+        Assert.True(page.ViewModel.RunResult.VerificationFailed);
+        Assert.True(page.ViewModel.RunResult.IsDetailsOpen);
+        Assert.Equal(page.ViewModel.RunResult.Statement, page.ViewModel.Status);
         Assert.Equal(InfoBarSeverity.Error, page.ViewModel.StatusSeverity);
         Assert.False(page.ViewModel.HasPreview);
     }
 
     /// <summary>
-    /// §5.4 and §7: what the run removed and how the volume's free space moved are two figures, and the
-    /// second is read from the volume either side of the run.
+    /// §5.4 and §7: the free space either side of the run is read from the volume, not worked out from
+    /// what the run removed. The fake frees ten times what the step removed, so a line derived from the
+    /// removed figure would say "Up 1 KB".
     /// </summary>
     [Fact]
-    public void TheFreeSpaceChangeIsReadFromTheVolumeEitherSideOfTheRun()
+    public void TheFreeSpaceBeforeAndAfterIsReadFromTheVolumeEitherSideOfTheRun()
     {
         var cache = new FakeCleanupProvider("cache");
         using var page = new StoragePage([cache], freeBytes: 400_000);
@@ -278,12 +281,69 @@ public class CleanViewModelCleanTests
 
         page.Clean();
 
-        Assert.Equal(FreeSpace.Format(10_240), page.ViewModel.FreeSpaceChangeLabel);
+        Assert.Equal(
+            $"Up {FreeSpace.Format(10_240)} from {FreeSpace.Format(400_000)} before the clean",
+            page.ViewModel.RunResult.FreeSpaceMoveText);
+        Assert.Equal(FreeSpace.Format(1024), page.ViewModel.RunResult.RemovedLabel);
         Assert.Equal(410_240, page.ViewModel.FreeSpaceNow);
-        Assert.True(page.ViewModel.HasRunResult);
+        Assert.True(page.ViewModel.RunResult.IsShown);
     }
 
-    /// <summary>A volume that will not say is a dash, rather than a change worked out from one reading.</summary>
+    /// <summary>
+    /// The line beside the hero figure is read against whatever the hero shows, so a later reading of
+    /// the volume moves both together rather than leaving the line describing the reading before.
+    /// </summary>
+    [Fact]
+    public void ALaterReadingOfTheVolumeMovesTheLineWithTheHeroFigure()
+    {
+        var cache = new FakeCleanupProvider("cache");
+        using var page = new StoragePage([cache], freeBytes: 400_000);
+        cache.Steps = [page.Cache("a", 1024)];
+        cache.AfterCleaning = () => page.FreeSpaceBecomes(410_240);
+        page.Scan();
+        page.Clean();
+
+        page.ViewModel.FreeSpaceNow = 390_000;
+
+        Assert.Equal(
+            $"Down {FreeSpace.Format(10_000)} from {FreeSpace.Format(400_000)} before the clean",
+            page.ViewModel.RunResult.FreeSpaceMoveText);
+    }
+
+    /// <summary>
+    /// After a clean of two rows, each gets a line of its own under the verdict, and the row whose file
+    /// another program held open names that refusal on its line, never in one paragraph for the run.
+    /// </summary>
+    [Fact]
+    public void EachCleanedRowGetsALineAndTheHeldOneNamesItsRefusal()
+    {
+        var free = new FakeCleanupProvider("free") { Name = "Free cache" };
+        var held = new FakeCleanupProvider("held") { Name = "Held cache" };
+        using var page = new StoragePage([free, held]);
+        free.Steps = [page.Cache("a", 1024)];
+        held.Steps = [page.Cache("b", 4096)];
+        held.Removes = step => new StepOutcome(step.Description, Succeeded: true, 2048, Refusals.One(RefusalReason.InUse, 2048));
+        page.Scan();
+
+        page.Clean();
+
+        var rows = page.ViewModel.RunResult.Rows;
+        Assert.Equal(2, rows.Count);
+        var freed = Assert.Single(rows, row => row.Name == "Free cache");
+        var kept = Assert.Single(rows, row => row.Name == "Held cache");
+        Assert.Equal($"{FreeSpace.Format(1024)} removed", freed.Removed);
+        Assert.Empty(freed.LeftBehind);
+        Assert.Equal($"{FreeSpace.Format(2048)} removed", kept.Removed);
+        Assert.Equal([$"1 file ({FreeSpace.Format(2048)}) left in place because another program had it open."], kept.LeftBehind);
+        Assert.DoesNotContain("another program", page.ViewModel.RunResult.Statement, StringComparison.Ordinal);
+        Assert.Equal("What each of the 2 locations removed, and what 1 of them left behind", page.ViewModel.RunResult.RowsHeading);
+        Assert.True(page.ViewModel.RunResult.HasRowsNote);
+
+        // A refusal is routine, so the details stay folded and the list under the card keeps its room.
+        Assert.False(page.ViewModel.RunResult.IsDetailsOpen);
+    }
+
+    /// <summary>A volume that will not say leaves the move unstated, rather than worked out from one reading.</summary>
     [Fact]
     public void AVolumeThatStopsAnsweringLeavesTheChangeUnstated()
     {
@@ -295,7 +355,8 @@ public class CleanViewModelCleanTests
 
         page.Clean();
 
-        Assert.Equal("—", page.ViewModel.FreeSpaceChangeLabel);
+        Assert.Empty(page.ViewModel.RunResult.FreeSpaceMoveText);
+        Assert.False(page.ViewModel.RunResult.HasFreeSpaceMove);
         Assert.Null(page.ViewModel.FreeSpaceNow);
     }
 
@@ -658,7 +719,7 @@ public class CleanViewModelCleanTests
         Assert.Equal(3, counted.Count);
         Assert.Equal("0 B", counted[0]);
         Assert.NotEqual(counted[1], counted[2]);
-        Assert.Equal(page.ViewModel.RemovedLabel, counted[^1]);
+        Assert.Equal(page.ViewModel.RunResult.RemovedLabel, counted[^1]);
         Assert.Equal([500_000L], free);
     }
 
@@ -838,16 +899,16 @@ public class CleanViewModelCleanTests
 
         page.Clean();
 
-        Assert.True(page.ViewModel.RunVerificationFailed);
+        Assert.True(page.ViewModel.RunResult.VerificationFailed);
         Assert.Equal(InfoBarSeverity.Error, page.ViewModel.StatusSeverity);
-        Assert.Equal(page.ViewModel.RunStatement, page.ViewModel.Status);
-        Assert.Contains(page.ViewModel.RunVerificationNotes, check => check.Subject == inside);
+        Assert.Equal(page.ViewModel.RunResult.Statement, page.ViewModel.Status);
+        Assert.Contains(page.ViewModel.RunResult.Checks, check => check.Subject == inside);
 
         Assert.Equal("0 B", page.ViewModel.Selection.TotalLabel);
         page.Row("cache").Steps[0].IsSelected = true;
 
         Assert.Equal("1 KB", page.ViewModel.Selection.TotalLabel);
-        Assert.Equal(page.ViewModel.RunStatement, page.ViewModel.Status);
+        Assert.Equal(page.ViewModel.RunResult.Statement, page.ViewModel.Status);
         Assert.Equal(InfoBarSeverity.Error, page.ViewModel.StatusSeverity);
     }
 
@@ -869,17 +930,17 @@ public class CleanViewModelCleanTests
 
         page.Clean();
 
-        var report = page.ViewModel.RunDiagnostics;
+        var report = page.ViewModel.RunResult.Diagnostics;
 
         Assert.Contains("- Deguffer: 0.0.0-test", report, StringComparison.Ordinal);
         Assert.Contains("- Windows: Windows 11 (10.0.26100), x64, on an ARM64 processor", report, StringComparison.Ordinal);
-        Assert.Contains($"- Outcome: {page.ViewModel.RunStatement}", report, StringComparison.Ordinal);
+        Assert.Contains($"- Outcome: {page.ViewModel.RunResult.Statement}", report, StringComparison.Ordinal);
         Assert.Contains("- Failed: `%USERPROFILE%", report, StringComparison.Ordinal);
         Assert.DoesNotContain(page.Environment.UserProfile, report, StringComparison.OrdinalIgnoreCase);
 
         page.Scan();
 
-        Assert.Empty(page.ViewModel.RunDiagnostics);
+        Assert.Empty(page.ViewModel.RunResult.Diagnostics);
     }
 
     /// <summary>

@@ -29,7 +29,7 @@ public sealed partial class CleanProgressViewModel : ObservableObject
 
     /// <summary>
     /// What the clean under way has removed so far, as each row's run finishes. Counted from the
-    /// run's own results the way <see cref="CleanViewModel.RemovedLabel"/> is (<see cref="RunFigures"/>),
+    /// run's own results the way <see cref="RunResultViewModel.RemovedLabel"/> is (<see cref="RunFigures"/>),
     /// so it never runs ahead of what was removed and it lands on the figure the card states when the
     /// run ends.
     /// </summary>

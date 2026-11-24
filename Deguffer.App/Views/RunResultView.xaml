@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+    What the Storage page's result card says about the last clean, under its figures: the §5.6 verdict
+    as a heading, and under it, folded, a line for each location with what it removed and what it left
+    behind and why.
+
+    Folded after a run that went to plan, so the card takes one line and the list under it keeps its
+    room. Its header names how many locations it covers and how many left something, so a row that fell
+    short is said while it is closed. Open after a run whose verdict needs reading, so the paths behind
+    the sentence are in view without a click.
+
+    The Storage rows' quiet Expander resources, so this disclosure reads as the page's others do.
+-->
+<UserControl
+    x:Class="Deguffer.App.Views.RunResultView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Deguffer.App.Controls"
+    xmlns:execution="using:Deguffer.Core.Execution"
+    xmlns:views="using:Deguffer.App.Views"
+    IsTabStop="False">
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <views:RowDisclosures />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <StackPanel Spacing="{StaticResource ControlGap}">
+        <TextBlock Text="{x:Bind Result.Statement, Mode=OneWay}"
+                   Style="{x:Bind Result.VerificationFailed, Mode=OneWay, Converter={StaticResource RunStatementStyle}, ConverterParameter=GroupHeading}" />
+
+        <Expander x:Name="RunDetails"
+                  HorizontalAlignment="Stretch"
+                  HorizontalContentAlignment="Stretch"
+                  Background="Transparent"
+                  BorderThickness="0"
+                  Padding="0"
+                  IsExpanded="{x:Bind Result.IsDetailsOpen, Mode=TwoWay}"
+                  AutomationProperties.Name="{x:Bind Result.RowsHeading, Mode=OneWay}">
+            <Expander.Header>
+                <TextBlock Text="{x:Bind Result.RowsHeading, Mode=OneWay}"
+                           Style="{StaticResource SecondaryText}"
+                           Margin="{StaticResource DisclosureBleed}" />
+            </Expander.Header>
+
+            <StackPanel Spacing="{StaticResource ControlGap}">
+                <!-- Bounded and scrolling, as the checks below are: a clean of thirty locations would
+                     otherwise push the list it was chosen from off the screen. -->
+                <ScrollViewer MaxHeight="180" VerticalScrollBarVisibility="Auto">
+                    <ItemsRepeater x:Name="RowsList" ItemsSource="{x:Bind Result.Rows}">
+                        <ItemsRepeater.Layout>
+                            <StackLayout Spacing="{StaticResource ControlGap}" />
+                        </ItemsRepeater.Layout>
+                        <ItemsRepeater.ItemTemplate>
+                            <DataTemplate x:DataType="execution:RunRow">
+                                <StackPanel Spacing="{StaticResource LabelGap}"
+                                            AutomationProperties.Name="{x:Bind Line}">
+                                    <controls:ReflowRow ColumnSpacing="{StaticResource ControlGap}"
+                                                        RowSpacing="{StaticResource LabelGap}">
+                                        <TextBlock Text="{x:Bind Name}"
+                                                   Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Text="{x:Bind Removed}" Style="{StaticResource RowFigure}" />
+                                    </controls:ReflowRow>
+                                    <ItemsControl ItemsSource="{x:Bind LeftBehind}" IsTabStop="False">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="x:String">
+                                                <TextBlock Text="{x:Bind}"
+                                                           Style="{StaticResource SecondaryText}"
+                                                           IsTextSelectionEnabled="True" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsRepeater.ItemTemplate>
+                    </ItemsRepeater>
+                </ScrollViewer>
+
+                <TextBlock Text="{x:Bind Result.RowsNote, Mode=OneWay}"
+                           Style="{StaticResource SecondaryText}"
+                           Visibility="{x:Bind Result.HasRowsNote, Mode=OneWay}" />
+
+                <!-- What the verdict is about, named. When it asks the user to report a protected
+                     path that did not survive, this is the only thing on the screen that says which
+                     path, why it was protected, and what was found in its place. -->
+                <views:VerificationCheckList Checks="{x:Bind Result.Checks}"
+                                             Visibility="{x:Bind Result.HasChecks, Mode=OneWay}" />
+
+                <!-- The run written out for a GitHub issue. Copying the paths above by hand loses which
+                     row each belonged to, what each step did and the build it came from. -->
+                <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
+                    <HyperlinkButton x:Name="CopyRunDiagnosticsLink"
+                                     Content="Copy diagnostic information"
+                                     Padding="0"
+                                     AutomationProperties.HelpText="Copies a report of this clean to the clipboard, with your user folder hidden, to paste into a GitHub issue."
+                                     Click="OnCopyRunDiagnostics" />
+                    <TextBlock x:Name="CopyRunDiagnosticsResult"
+                               VerticalAlignment="Center"
+                               Style="{StaticResource SecondaryText}" />
+                </StackPanel>
+            </StackPanel>
+        </Expander>
+    </StackPanel>
+</UserControl>

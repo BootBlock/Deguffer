@@ -356,7 +356,7 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
         Assert.False(outcome.Succeeded);
         Assert.Equal(0, outcome.BytesReclaimed);
         Assert.DoesNotContain("Removed", outcome.Message!, StringComparison.Ordinal);
-        Assert.Contains("another program had 1 file(s)", outcome.Message!, StringComparison.Ordinal);
+        Assert.Contains("another program had 1 file", outcome.Message!, StringComparison.Ordinal);
         Assert.DoesNotContain("administrator", outcome.Message!, StringComparison.OrdinalIgnoreCase);
         Assert.True(Directory.Exists(cbs));
     }
@@ -382,7 +382,7 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
 
         Assert.False(outcome.Succeeded);
         Assert.Equal(1, result.Refused.Denied.Files);
-        Assert.Contains("Windows would not let Deguffer remove 1 file(s)", outcome.Message!, StringComparison.Ordinal);
+        Assert.Contains("Windows would not let Deguffer remove 1 file", outcome.Message!, StringComparison.Ordinal);
         Assert.DoesNotContain("in use", outcome.Message!, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("another program", outcome.Message!, StringComparison.OrdinalIgnoreCase);
     }
