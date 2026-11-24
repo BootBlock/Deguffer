@@ -12,28 +12,22 @@ internal static class ContentDialogClosePrompt
     /// window open or dismissed the dialog, and null where another dialog was already on screen and
     /// nothing was asked.
     /// </summary>
-    public static async Task<bool?> AskAsync(ClosePrompt prompt, XamlRoot xamlRoot, ElementTheme theme)
+    /// <param name="owner">The window's root element, which the dialog opens over.</param>
+    public static async Task<bool?> AskAsync(ClosePrompt prompt, FrameworkElement owner)
     {
         if (ModalDialog.IsShowing)
         {
             return null;
         }
 
-        var dialog = new ContentDialog
-        {
-            XamlRoot = xamlRoot,
-
-            // The popup layer does not inherit the window root's theme.
-            RequestedTheme = theme,
-            Title = prompt.Title,
-            Content = new TextBlock { Text = prompt.Consequence, TextWrapping = TextWrapping.WrapWholeWords },
-            PrimaryButtonText = prompt.CloseWhenDoneLabel,
-            CloseButtonText = prompt.KeepOpenLabel,
-
-            // Keeping the window open is the default, so one keystroke never commits the user to a
-            // window that later disappears on its own.
-            DefaultButton = ContentDialogButton.Close,
-        };
+        // Keeping the window open is the default button, so one keystroke never commits the user to
+        // a window that later disappears on its own.
+        var dialog = DialogFactory.Question(
+            owner,
+            prompt.Title,
+            DialogFactory.Paragraph(prompt.Consequence),
+            prompt.CloseWhenDoneLabel,
+            prompt.KeepOpenLabel);
 
         return await ModalDialog.ShowAsync(dialog) == ContentDialogResult.Primary;
     }

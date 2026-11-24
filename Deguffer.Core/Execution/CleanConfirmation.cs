@@ -74,6 +74,17 @@ public sealed record CleanConfirmation
     public bool AllRegenerable => PermanentLosses.Count == 0;
 
     /// <summary>
+    /// The question. "Caches" holds only while everything listed rebuilds itself. A user who switches
+    /// the typed phrase off sends Tier 3 here as well, and a Recycle Bin called a cache in the title of
+    /// the dialog that authorises deleting it permanently is the same understatement the body already
+    /// refuses to make.
+    /// </summary>
+    public string Title => AllRegenerable ? "Clean these caches?" : "Delete these items?";
+
+    /// <summary>The button that confirms.</summary>
+    public string ConfirmLabel => "Clean";
+
+    /// <summary>
     /// The sum of <see cref="Items"/> and of nothing else, with space two of them share counted once
     /// (see <see cref="ReclaimPool"/>).
     ///

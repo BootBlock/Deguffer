@@ -21,35 +21,19 @@ internal static class ContentDialogCompletionCountdown
     public static async Task<bool> AskAsync(
         CompletionCountdown countdown,
         RunningActions running,
-        XamlRoot xamlRoot,
-        ElementTheme theme)
+        FrameworkElement owner)
     {
         if (ModalDialog.IsShowing)
         {
             return false;
         }
 
-        var sentence = new TextBlock
-        {
-            Text = countdown.Sentence(running),
-            TextWrapping = TextWrapping.WrapWholeWords,
-        };
+        var sentence = DialogFactory.Paragraph(countdown.Sentence(running));
 
-        var dialog = new ContentDialog
-        {
-            XamlRoot = xamlRoot,
-
-            // The popup layer does not inherit the window root's theme.
-            RequestedTheme = theme,
-            Title = countdown.Title,
-            Content = sentence,
-            PrimaryButtonText = countdown.ActNowLabel,
-            CloseButtonText = countdown.CancelLabel,
-            IsPrimaryButtonEnabled = running.MayEndProcess,
-
-            // Cancel is the default, so a keystroke meant for something else leaves the machine alone.
-            DefaultButton = ContentDialogButton.Close,
-        };
+        // Cancel is the default button, so a keystroke meant for something else leaves the machine
+        // alone.
+        var dialog = DialogFactory.Question(owner, countdown.Title, sentence, countdown.ActNowLabel, countdown.CancelLabel);
+        dialog.IsPrimaryButtonEnabled = running.MayEndProcess;
 
         var due = false;
         var timer = new DispatcherTimer { Interval = OneSecond };

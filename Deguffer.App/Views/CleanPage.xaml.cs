@@ -58,7 +58,7 @@ public sealed partial class CleanPage : Page
             App.Keeps,
             App.Running,
             App.Work,
-            () => new ContentDialogConfirmationPrompt(XamlRoot, ActualTheme),
+            () => new ContentDialogConfirmationPrompt(this),
             AppVersion.Current,
             new WhenCompleteViewModel(App.Preferences, WindowsSession.Current),
             new RetrimViewModel(
@@ -272,35 +272,18 @@ public sealed partial class CleanPage : Page
     /// to warn the user in.
     /// </summary>
     private Task<bool> CountDownAsync(CompletionCountdown countdown) =>
-        App.MainWindow?.Content is FrameworkElement { XamlRoot: { } root } window
-            ? ContentDialogCompletionCountdown.AskAsync(countdown, App.Running, root, window.ActualTheme)
+        App.MainWindow?.Content is FrameworkElement { XamlRoot: not null } window
+            ? ContentDialogCompletionCountdown.AskAsync(countdown, App.Running, window)
             : Task.FromResult(false);
 
+    /// <summary>
+    /// The blanket "are you sure" before a clean. Cancel is the default button: this is the last point
+    /// at which an accidental selection can still be caught.
+    /// </summary>
     private async Task<bool> ConfirmCleanAsync(CleanConfirmation confirmation)
     {
-        var dialog = new ContentDialog
-        {
-            // A dialog built in code inherits no window; without the page's XamlRoot it has
-            // nowhere to open.
-            XamlRoot = XamlRoot,
-
-            // It opens in the popup layer rather than inside this page, so it does not inherit the
-            // theme applied to the window root — without this it renders dark over a light window.
-            RequestedTheme = ActualTheme,
-
-            // "Caches" holds only while everything listed rebuilds itself. A user who switches the
-            // typed phrase off sends Tier 3 here as well, and a Recycle Bin called a cache in the
-            // title of the dialog that authorises deleting it permanently is the same understatement
-            // the body already refuses to make.
-            Title = confirmation.AllRegenerable ? "Clean these caches?" : "Delete these items?",
-            Content = new CleanConfirmationView(confirmation),
-            PrimaryButtonText = "Clean",
-            CloseButtonText = "Cancel",
-
-            // The safe option is the default: this is the last point at which an accidental
-            // selection can still be caught.
-            DefaultButton = ContentDialogButton.Close,
-        };
+        var dialog = DialogFactory.Question(
+            this, confirmation.Title, new CleanConfirmationView(confirmation), confirmation.ConfirmLabel);
 
         return await ModalDialog.ShowAsync(dialog) == ContentDialogResult.Primary;
     }
@@ -409,25 +392,12 @@ public sealed partial class CleanPage : Page
 
     private async Task ShowProviderInfoAsync(FindingViewModel finding)
     {
-        var dialog = new ContentDialog
-        {
-            // A dialog built in code inherits no window; without the page's XamlRoot it has
-            // nowhere to open.
-            XamlRoot = XamlRoot,
+        var dialog = DialogFactory.Statement(this, finding.Name, "Close");
 
-            // It opens in the popup layer rather than inside this page, so it does not inherit the
-            // theme applied to the window root — without this it renders dark over a light window.
-            RequestedTheme = ActualTheme,
-
-            Title = finding.Name,
-            CloseButtonText = "Close",
-            DefaultButton = ContentDialogButton.Close,
-
-            // The pivot has to fill what the sizing below gives it, and a ContentDialog centres
-            // its content at its natural size unless told otherwise.
-            HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            VerticalContentAlignment = VerticalAlignment.Stretch,
-        };
+        // The pivot has to fill what the sizing below gives it, and a ContentDialog centres its
+        // content at its natural size unless told otherwise.
+        dialog.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+        dialog.VerticalContentAlignment = VerticalAlignment.Stretch;
 
         // Assigned once the dialog exists, because the content's way to the item list closes it.
         dialog.Content = new ProviderInfoView(

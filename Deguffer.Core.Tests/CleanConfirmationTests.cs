@@ -147,6 +147,25 @@ public sealed class CleanConfirmationTests
         Assert.Equal("about 4.0 GB", confirmation.TotalLabel);
     }
 
+    /// <summary>
+    /// The title calls the rows caches only while all of them rebuild themselves. A Tier 3 row sent
+    /// here by the preference makes it a deletion, the word the body already uses for that row.
+    /// </summary>
+    [Fact]
+    public void TheTitleCallsTheRowsCachesOnlyWhileEachRebuildsItself()
+    {
+        var caches = CleanConfirmation.For([Plan("npm", SafetyTier.RegenerableCache, Gigabytes(3))]);
+        var mixed = CleanConfirmation.For(
+        [
+            Plan("npm", SafetyTier.RegenerableCache, Gigabytes(3)),
+            Plan("Recycle Bin", SafetyTier.UserData, Gigabytes(9)),
+        ]);
+
+        Assert.Equal("Clean these caches?", caches.Title);
+        Assert.Equal("Delete these items?", mixed.Title);
+        Assert.Equal("Clean", caches.ConfirmLabel);
+    }
+
     private const long BytesPerGigabyte = 1024L * 1024 * 1024;
 
     private static ScanSize Gigabytes(long count) => new(count * BytesPerGigabyte, count * BytesPerGigabyte);

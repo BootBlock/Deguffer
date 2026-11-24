@@ -4,28 +4,17 @@ namespace Deguffer.Core.Tests;
 
 /// <summary>
 /// Every dialog defaults to its safe button, so Enter never confirms a deletion the user has not
-/// read, and every dialog is built in one place. The shell held the first rule everywhere when it
-/// was written, so it has no exceptions. The second is a ratchet: each dialog built by hand repeats
-/// the root, the theme and the default button, and a wording decided in code-behind is one no test
-/// can hold to its title.
+/// read, and every dialog is built by the shell's one factory, <c>DialogFactory</c>. A dialog built
+/// by hand has to repeat the root, the theme and the default button, and one that forgets any of
+/// them has nowhere to open, renders in the wrong theme or confirms on Enter, which nothing else
+/// catches. Its wording comes from a Core prompt, where a test can hold it.
 ///
 /// <para>NN/g on confirmation dialogs, which outranks Fluent's samples here: never make the
 /// destructive answer the default.</para>
 /// </summary>
 public sealed partial class DesignDialogTests
 {
-    private static readonly Dictionary<string, int> ConstructionBaseline = new(StringComparer.Ordinal)
-    {
-        ["Deguffer.App/Shell/ContentDialogClosePrompt.cs"] = 1,
-        ["Deguffer.App/Shell/ContentDialogCompletionCountdown.cs"] = 1,
-        ["Deguffer.App/Shell/ContentDialogConfirmationPrompt.cs"] = 1,
-        ["Deguffer.App/Shell/ContentDialogDuplicateConfirmation.cs"] = 1,
-        ["Deguffer.App/Shell/ContentDialogExploreConfirmation.cs"] = 1,
-        ["Deguffer.App/Shell/ContentDialogInstalledAppsConfirmation.cs"] = 1,
-        ["Deguffer.App/Shell/IMemoryConfirmationPrompt.cs"] = 1,
-        ["Deguffer.App/Views/CleanPage.xaml.cs"] = 2,
-        ["Deguffer.App/Views/SettingsPage.xaml.cs"] = 1,
-    };
+    private const string Factory = "Deguffer.App/Shell/DialogFactory.cs";
 
     [Fact]
     public void EveryDialogDefaultsToItsSafeButton()
@@ -42,11 +31,13 @@ public sealed partial class DesignDialogTests
     [Fact]
     public void DialogsAreBuiltInOnePlace()
     {
-        var found = AppSources().SelectMany(file => file.Code
-            .Where(code => Construction().IsMatch(code.Line))
-            .Select(code => new RuleViolation(file.Name, code.Number, "builds a ContentDialog by hand")));
+        var found = AppSources()
+            .Where(file => file.Name != Factory)
+            .SelectMany(file => file.Code
+                .Where(code => Construction().IsMatch(code.Line))
+                .Select(code => new RuleViolation(file.Name, code.Number, "builds a ContentDialog by hand")));
 
-        RuleBaseline.Hold("a ContentDialog is built by the shell's one dialog factory", found, ConstructionBaseline);
+        RuleBaseline.Hold($"a ContentDialog is built by {Factory}", found, new Dictionary<string, int>());
     }
 
     private static IEnumerable<(string Name, IReadOnlyList<(int Number, string Line)> Code)> AppSources() =>
