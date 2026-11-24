@@ -41,9 +41,9 @@ public sealed partial class FlowRow : Panel
     {
         // Each control is offered a whole line, the most it can have on any line: one wider than
         // that, such as a long breadcrumb step, trims to the line instead of running off the edge.
-        foreach (var child in Children)
+        for (var i = 0; i < Children.Count; i++)
         {
-            child.Measure(availableSize);
+            Children[i].Measure(availableSize);
         }
 
         return Lay(availableSize.Width, arrange: false);

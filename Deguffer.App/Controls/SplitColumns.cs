@@ -60,8 +60,9 @@ public sealed partial class SplitColumns : Panel
             var height = 0.0;
             var used = 0.0;
 
-            foreach (var child in Children)
+            for (var i = 0; i < Children.Count; i++)
             {
+                var child = Children[i];
                 child.Measure(new Size(width, availableSize.Height));
                 height = Math.Max(height, child.DesiredSize.Height);
                 used += child.DesiredSize.Width;
@@ -75,8 +76,9 @@ public sealed partial class SplitColumns : Panel
         var stacked = 0.0;
         var widest = 0.0;
 
-        foreach (var child in Children)
+        for (var i = 0; i < Children.Count; i++)
         {
+            var child = Children[i];
             child.Measure(new Size(availableSize.Width, double.PositiveInfinity));
             stacked += child.DesiredSize.Height;
             widest = Math.Max(widest, child.DesiredSize.Width);
@@ -92,8 +94,9 @@ public sealed partial class SplitColumns : Panel
             var width = Columns.Width(Children.Count, ColumnSpacing, finalSize.Width);
             var left = 0.0;
 
-            foreach (var child in Children)
+            for (var i = 0; i < Children.Count; i++)
             {
+                var child = Children[i];
                 child.Arrange(new Rect(left, 0, width, finalSize.Height));
                 left += width + ColumnSpacing;
             }
@@ -103,8 +106,9 @@ public sealed partial class SplitColumns : Panel
 
         var top = 0.0;
 
-        foreach (var child in Children)
+        for (var i = 0; i < Children.Count; i++)
         {
+            var child = Children[i];
             child.Arrange(new Rect(0, top, finalSize.Width, child.DesiredSize.Height));
             top += child.DesiredSize.Height + RowSpacing;
         }
