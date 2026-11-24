@@ -268,7 +268,7 @@ public sealed partial class MemoryPage : Page
         // map is hidden rather than told to stop, and it draws nothing while it is hidden.
         RowsList.Visibility = Shown(view == ExploreView.List);
         TreeList.Visibility = Shown(view == ExploreView.Tree);
-        Map.Visibility = Shown(view is not (ExploreView.List or ExploreView.Tree));
+        Map.Visibility = Shown(view.DrawsPicture());
 
         ShowCurrentNode();
 

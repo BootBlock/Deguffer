@@ -31,15 +31,15 @@
 
     <!-- The header is a row of its own, outside the scroller, so the starfield in the row below is
          never behind its words, and every other word on the page is on a card. -->
-    <Grid Padding="{StaticResource PagePadding}" RowSpacing="{StaticResource RegionGap}" RowDefinitions="Auto,*">
+    <Grid controls:ReadingColumn.Limit="{StaticResource ReadingWidth}" Padding="{StaticResource PagePadding}" RowSpacing="{StaticResource RegionGap}" RowDefinitions="Auto,*">
 
-        <controls:PageHeader Destination="About" />
+        <controls:PageHeader controls:ReadingColumn.Fills="True" Destination="About" />
 
         <!-- To the page's edges, under the padding the cards keep. -->
-        <controls:Starfield x:Name="Field" Grid.Row="1" Margin="{StaticResource PageBleed}" />
+        <controls:Starfield x:Name="Field" Grid.Row="1" controls:ReadingColumn.Fills="True" Margin="{StaticResource PageBleed}" />
 
-        <ScrollViewer Grid.Row="1">
-            <StackPanel Spacing="{StaticResource RegionGap}" MaxWidth="720" HorizontalAlignment="Left">
+        <ScrollViewer Grid.Row="1" controls:ReadingColumn.Fills="True">
+            <StackPanel Spacing="{StaticResource RegionGap}" MaxWidth="{StaticResource FormReadingWidth}" HorizontalAlignment="Left">
 
                 <!-- Drawn above the cards after it, so the mark passes over them as it flies in out
                      of the stars behind them. -->

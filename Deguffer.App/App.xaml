@@ -119,6 +119,16 @@
             <Thickness x:Key="DisclosureBleed">-16,0,0,0</Thickness>
 
             <!--
+                Reading width: the widest a page's lists, forms and the controls round them grow
+                (Controls/ReadingColumn), so a row's name and its figures stay close enough on a wide
+                window to read as one row. Only the page header, decoration, a scroller with a narrower
+                column of its own, and a map drawing a picture run past it. Form reading
+                width is narrower, for a column of settings rows that are each a title and a sentence.
+            -->
+            <x:Double x:Key="ReadingWidth">1200</x:Double>
+            <x:Double x:Key="FormReadingWidth">720</x:Double>
+
+            <!--
                 The optical corrections, the only values off the grid, each named for the reason it
                 is off it. The box each one shapes is still on the grid; the odd pixels set what is
                 inside it against a glyph, a line of text or a baseline.

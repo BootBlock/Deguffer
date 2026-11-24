@@ -32,11 +32,11 @@ public sealed class ExploreDisplayTests
     {
         Assert.True(Display(Finished, ExploreView.Treemap, ExploreColouring.Age).ShowsLegend);
         Assert.True(Display(Finished, ExploreView.Icicle, ExploreColouring.Growth).ShowsLegend);
-        Assert.True(Display(Finished, ExploreView.Tree, ExploreColouring.Depth).ShowsLegend);
 
         Assert.False(Display(Finished, ExploreView.Treemap, ExploreColouring.Branch).ShowsLegend);
         Assert.False(Display(Finished, ExploreView.List, ExploreColouring.Age).ShowsLegend);
         Assert.False(Display(Finished, ExploreView.Files, ExploreColouring.Age).ShowsLegend);
+        Assert.False(Display(Finished, ExploreView.Tree, ExploreColouring.Depth).ShowsLegend);
         Assert.False(Display(null, ExploreView.Treemap, ExploreColouring.Age).ShowsLegend);
         Assert.False(Display(Finished, ExploreView.Treemap, ExploreColouring.Age, inContrast: true).ShowsLegend);
     }

@@ -311,9 +311,9 @@
 
     <!-- Layout roots stay transparent so the §6.5 material shows through; every surface below
          sits on a Fluent layer brush and reads correctly on a flat solid background too. -->
-    <Grid RowSpacing="{StaticResource RegionGap}" RowDefinitions="Auto,Auto,Auto,*,Auto" Padding="{StaticResource PagePadding}">
+    <Grid controls:ReadingColumn.Limit="{StaticResource ReadingWidth}" RowSpacing="{StaticResource RegionGap}" RowDefinitions="Auto,Auto,Auto,*,Auto" Padding="{StaticResource PagePadding}">
 
-        <controls:PageHeader Destination="Storage">
+        <controls:PageHeader controls:ReadingColumn.Fills="True" Destination="Storage">
             <controls:PageHeader.Actions>
                 <!-- How much of each row to draw. It sits with the list it reshapes rather than in
                      Settings, because it is a way of reading this screen and gets changed while

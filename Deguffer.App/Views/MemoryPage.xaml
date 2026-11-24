@@ -4,15 +4,16 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Deguffer.App.Controls"
+    xmlns:exploring="using:Deguffer.Core.Exploring"
     xmlns:views="using:Deguffer.App.Views"
     xmlns:vm="using:Deguffer.App.ViewModels"
     Background="Transparent">
 
-    <Grid Padding="{StaticResource PagePadding}" RowSpacing="{StaticResource RegionGap}" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto,Auto">
+    <Grid controls:ReadingColumn.Limit="{StaticResource ReadingWidth}" Padding="{StaticResource PagePadding}" RowSpacing="{StaticResource RegionGap}" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto,Auto">
 
         <!-- The reading controls stand before the first reading too, so a reader can turn live update
              off before it lands. -->
-        <controls:PageHeader Destination="Memory">
+        <controls:PageHeader controls:ReadingColumn.Fills="True" Destination="Memory">
             <controls:PageHeader.Actions>
                 <StackPanel Orientation="Horizontal" Spacing="{StaticResource RegionGap}">
                     <CheckBox x:Name="LiveToggle"
@@ -156,7 +157,7 @@
             </ItemsControl.ItemTemplate>
         </ItemsControl>
 
-        <Border Grid.Row="4"
+        <Border Grid.Row="4" controls:ReadingColumn.Fills="{x:Bind exploring:ExploreViewDrawing.DrawsPicture(ViewModel.SelectedView), Mode=OneWay}"
                 Style="{StaticResource CardStyle}"
                 Padding="0">
             <Grid>
