@@ -286,7 +286,7 @@ public sealed partial class CleanViewModel : ObservableObject
     /// The row whose items are listed in place of the rows, or null while the rows are shown.
     ///
     /// <para>On this page rather than in a dialog, because choosing items is the main thing such a row
-    /// is for, and the Selected total and Clean belong beside the choice. What a run takes is still
+    /// is for, and Clean, which states what the ticks total, belongs beside the choice. What a run takes is still
     /// each row's own selection, so a clean started while the list is open is the same clean as one
     /// started from the rows.</para>
     /// </summary>
@@ -307,7 +307,7 @@ public sealed partial class CleanViewModel : ObservableObject
     ///
     /// <para><b>Only for a row still on the page.</b> A row's dialog stays open while a preview replaces
     /// every row, and its button still holds the row it was opened for.
-    /// A list for that row would take ticks the page no longer reads: nothing remembers them, the Selected
+    /// A list for that row would take ticks the page no longer reads: nothing remembers them, Clean's
     /// figure ignores them, and Clean runs the row that replaced it. An item unticked there to keep it out
     /// of the next clean would still be deleted.</para>
     /// </summary>
@@ -857,7 +857,7 @@ public sealed partial class CleanViewModel : ObservableObject
 
         // Nothing is ticked on an empty list. Totalled here and again as each row lands, rather than
         // once at the end of the pass: a scan that is cancelled or fails never reaches the end, and
-        // the Selected figure then went on stating the previous scan beside rows that did not hold it.
+        // Clean's figure then went on stating the previous scan beside rows that did not hold it.
         UpdateSelectionTotal();
 
         // Back to what is known before anything is measured, not just reassigned at the end: a
@@ -1248,9 +1248,9 @@ public sealed partial class CleanViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Whether a scan can start. The Scan split button is disabled as a whole on it, rather than
-    /// through its command, because a command disables only the primary half: the template then
-    /// draws that half's disabled text over the accent it keeps behind it, where it cannot be read.
+    /// Whether a scan can start, and so whether the bar shows Scan or Cancel in its place. Scan is
+    /// hidden rather than disabled while the page is busy: a split button's command disables only its
+    /// primary half, and the template then draws that half's disabled text over the accent.
     /// </summary>
     public bool IsIdle => !IsBusy;
 

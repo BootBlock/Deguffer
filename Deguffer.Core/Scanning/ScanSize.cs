@@ -157,4 +157,11 @@ public readonly record struct ScanSize(
     /// improve on.</para>
     /// </summary>
     public long Reclaimable => Logical;
+
+    /// <summary>
+    /// Whether a removal of what this measures frees anything: bytes, or entries where there are no
+    /// bytes. A leftover of empty folders frees no bytes and is still worth removing, so a test of
+    /// <see cref="Reclaimable"/> alone reads it as nothing to do.
+    /// </summary>
+    public bool FreesSomething => Reclaimable > 0 || Entries > 0;
 }

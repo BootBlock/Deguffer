@@ -29,7 +29,7 @@ public class CleanViewModelScanTests
 
         var row = Assert.Single(page.ViewModel.Findings);
         Assert.True(row.IsSelected);
-        Assert.Equal("2 KB", page.ViewModel.Selection.TotalLabel);
+        Assert.Equal("Clean 2 KB", page.ViewModel.Selection.CleanLabel);
         Assert.True(page.ViewModel.CanClean);
     }
 
@@ -123,7 +123,7 @@ public class CleanViewModelScanTests
         using var page = new StoragePage([cache, broken]);
         cache.Steps = [page.Cache("a", 1024)];
         page.Scan();
-        Assert.Equal("1 KB", page.ViewModel.Selection.TotalLabel);
+        Assert.Equal("Clean 1 KB", page.ViewModel.Selection.CleanLabel);
 
         cache.Steps = [page.Cache("a", 3072)];
         broken.PlanFailure = new IOException("The device is not ready.");
@@ -132,7 +132,7 @@ public class CleanViewModelScanTests
         Assert.StartsWith("Scan failed", page.ViewModel.Status);
         Assert.Equal(InfoBarSeverity.Error, page.ViewModel.StatusSeverity);
         Assert.Single(page.ViewModel.Findings);
-        Assert.Equal("3 KB", page.ViewModel.Selection.TotalLabel);
+        Assert.Equal("Clean 3 KB", page.ViewModel.Selection.CleanLabel);
     }
 
     /// <summary>
@@ -152,7 +152,7 @@ public class CleanViewModelScanTests
 
         Assert.Equal("Scan cancelled. Nothing was changed.", page.ViewModel.Status);
         Assert.Empty(page.ViewModel.Findings);
-        Assert.Equal("0 B", page.ViewModel.Selection.TotalLabel);
+        Assert.Equal("Clean", page.ViewModel.Selection.CleanLabel);
         Assert.False(page.ViewModel.CanClean);
     }
 
@@ -385,7 +385,7 @@ public class CleanViewModelScanTests
         page.Row("cache").Steps[1].IsSelected = false;
 
         Assert.Equal("3 KB can be reclaimed, 1 KB selected. Review the rows, then Clean.", page.ViewModel.Status);
-        Assert.Equal("1 KB", page.ViewModel.Selection.TotalLabel);
+        Assert.Equal("Clean 1 KB", page.ViewModel.Selection.CleanLabel);
     }
 
     /// <summary>A tick is remembered as it is made, so a later scan starts where the user left it.</summary>
@@ -401,7 +401,7 @@ public class CleanViewModelScanTests
         page.Scan();
 
         Assert.Equal([true, false], page.Row("cache").Steps.Select(step => step.IsSelected));
-        Assert.Equal("1 KB", page.ViewModel.Selection.TotalLabel);
+        Assert.Equal("Clean 1 KB", page.ViewModel.Selection.CleanLabel);
     }
 
     /// <summary>The capacity and the free space are the volume's own, read through the seam rather than off this machine.</summary>
