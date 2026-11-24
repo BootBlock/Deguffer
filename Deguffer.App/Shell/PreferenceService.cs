@@ -43,7 +43,7 @@ public sealed class PreferenceService : ICurrentPreferences
         var updated = change(Current);
         if (updated == Current)
         {
-            return SaveOutcome.Unchanged;
+            return SaveOutcome.NotWritten;
         }
 
         if (!_store.Save(updated))

@@ -51,7 +51,7 @@
                      Grid.Row="1"
                      Grid.Column="1"
                      Grid.ColumnSpan="2"
-                     Margin="0,8,0,0"
+                     Margin="{StaticResource ControlGapAbove}"
                      IsClosable="False"
                      Severity="Warning"
                      Title="Not saved"

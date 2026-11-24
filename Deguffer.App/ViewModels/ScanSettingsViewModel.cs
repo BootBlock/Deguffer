@@ -36,18 +36,20 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
     private readonly PreferenceService _preferences;
     private readonly ScanTuner _tuner;
     private readonly IVolumeInventory _volumes;
-    private readonly LatestSave _latest = new();
+    private readonly LatestSave _latest;
 
     /// <summary>The drives present and their kinds, as last found.</summary>
     private IReadOnlyList<DriveKind> _drives = [];
 
     /// <param name="tuner">The tuner the scans run with, so the drives listed are described as they will be scanned.</param>
     /// <param name="volumes">The inventory <paramref name="tuner"/> reads, dropped before each listing so a drive attached since is listed.</param>
-    public ScanSettingsViewModel(PreferenceService preferences, ScanTuner tuner, IVolumeInventory volumes)
+    /// <param name="latest">The page's one notice of a failed save, shared with every form on the page.</param>
+    public ScanSettingsViewModel(PreferenceService preferences, ScanTuner tuner, IVolumeInventory volumes, LatestSave latest)
     {
         _preferences = preferences;
         _tuner = tuner;
         _volumes = volumes;
+        _latest = latest;
     }
 
     public IReadOnlyList<string> KindNames { get; } = (string[])[.. Kinds.Select(ScanTuningText.MediaName)];
@@ -189,8 +191,7 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
 
     /// <summary>
     /// Whether the last change made through each row could not be saved, for that row to say so, as
-    /// the rest of the page does. The section keeps its own <see cref="LatestSave"/>, because it owns
-    /// its view-model.
+    /// the rest of the page does, through the page's one <see cref="LatestSave"/>.
     /// </summary>
     public SettingSave RouteSave { get; } = new();
 

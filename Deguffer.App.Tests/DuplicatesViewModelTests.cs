@@ -159,11 +159,11 @@ public sealed class DuplicatesViewModelTests : DuplicatesPageScene
 
         page.Filters.MatchName = !page.Filters.MatchName;
 
-        Assert.True(page.Filters.SaveFailed);
+        Assert.True(page.Filters.Save.Failed);
 
         page.Filters.MatchName = page.Filters.MatchName;
 
-        Assert.True(page.Filters.SaveFailed);
+        Assert.True(page.Filters.Save.Failed);
     }
 
     /// <summary>

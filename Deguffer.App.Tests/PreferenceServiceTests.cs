@@ -28,18 +28,18 @@ public sealed class PreferenceServiceTests : IDisposable
     }
 
     /// <summary>
-    /// Asking for what already holds is not a save: it is what a control sends when it is put back after
-    /// a refused write, and read as one it told the page the folder had just taken a write.
+    /// Asking for what already holds writes nothing, so it is not a save: it says nothing about whether
+    /// the folder can be written, and it is what a control sends when it is put back after a refused write.
     /// </summary>
     [Fact]
-    public void AChangeToWhatAlreadyHoldsIsUnchangedEvenWhereTheFolderRefusesWrites()
+    public void AChangeToWhatAlreadyHoldsIsNotWrittenEvenWhereTheFolderRefusesWrites()
     {
         var preferences = new PreferenceService(new PreferenceStore(_environment));
         Directory.CreateDirectory(Path.Combine(_environment.LocalAppData, "Deguffer", "preferences.json"));
         var raised = 0;
         preferences.Changed += (_, _) => raised++;
 
-        Assert.Equal(SaveOutcome.Unchanged, preferences.Update(current => current with { BackdropEnabled = current.BackdropEnabled }));
+        Assert.Equal(SaveOutcome.NotWritten, preferences.Update(current => current with { BackdropEnabled = current.BackdropEnabled }));
         Assert.Equal(0, raised);
     }
 

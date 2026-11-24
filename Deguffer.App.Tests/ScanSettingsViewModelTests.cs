@@ -25,7 +25,7 @@ public sealed class ScanSettingsViewModelTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
-    private (ScanSettingsViewModel Section, PreferenceService Preferences, FakeStorageQueries Queries) Section()
+    private (ScanSettingsViewModel Section, PreferenceService Preferences, FakeStorageQueries Queries) Section(LatestSave? latest = null)
     {
         var preferences = new PreferenceService(new PreferenceStore(_environment));
         var queries = new FakeStorageQueries()
@@ -33,7 +33,7 @@ public sealed class ScanSettingsViewModelTests : IDisposable
             .Volume(@"D:\", 0).Disk(0, Sata, seekPenalty: true);
         var tuner = new ScanTuner(preferences, new VolumeMediaCache(queries), _volumes);
 
-        return (new ScanSettingsViewModel(preferences, tuner, _volumes), preferences, queries);
+        return (new ScanSettingsViewModel(preferences, tuner, _volumes, latest ?? new LatestSave()), preferences, queries);
     }
 
     private readonly FakeVolumeInventory _volumes = new FakeVolumeInventory().With(@"C:\").With(@"D:\");

@@ -3,6 +3,8 @@ using Deguffer.App.Shell;
 using Deguffer.App.ViewModels;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Scanning;
+using Deguffer.Core.Scanning.Media;
 using Deguffer.Testing;
 
 namespace Deguffer.App.Tests;
@@ -25,7 +27,7 @@ public sealed class SettingsViewModelTests : IDisposable
 
     private string Settings => Path.Combine(_environment.LocalAppData, "Deguffer");
 
-    private (SettingsViewModel Page, PreferenceService Preferences) Page(KeepService? keeps = null)
+    private (SettingsViewModel Page, PreferenceService Preferences) Page(KeepService? keeps = null, LatestSave? latest = null)
     {
         var preferences = new PreferenceService(new PreferenceStore(_environment));
 
@@ -35,7 +37,8 @@ public sealed class SettingsViewModelTests : IDisposable
                 new SourceRootService(new SourceRootStore(_environment)),
                 new EmulatorFolderService(new EmulatorFolderStore(_environment)),
                 keeps ?? new KeepService(new KeepStore(_environment)),
-                _volumes),
+                _volumes,
+                latest ?? new LatestSave()),
             preferences);
     }
 
@@ -165,6 +168,56 @@ public sealed class SettingsViewModelTests : IDisposable
         page.ThemeIndex = 2;
 
         Assert.Empty(FailedRows.Of(page));
+    }
+
+    /// <summary>
+    /// Adding a folder already listed writes nothing, so it says nothing about the folder Deguffer
+    /// stores its settings in, and the notice of a refused write on another row stays.
+    /// </summary>
+    [Fact]
+    public void AddingAFolderAlreadyListedLeavesAnotherRowsNoticeStanding()
+    {
+        var (page, _) = Page();
+        var folder = Path.Combine(_temp.Path, "Cemu");
+        page.AddEmulatorFolder(folder);
+        Directory.CreateDirectory(Path.Combine(Settings, "preferences.json"));
+
+        page.BackdropEnabled = false;
+        page.AddEmulatorFolder(folder);
+
+        Assert.Equal([nameof(SettingsViewModel.BackdropEnabledSave)], FailedRows.Of(page));
+    }
+
+    /// <summary>
+    /// The scanning section and the rest of the page report to one notice: a refused write in the
+    /// section moves it there, and a save elsewhere on the page clears it, as the folder took a write.
+    /// </summary>
+    [Fact]
+    public void TheScanningSectionAndTheRestOfThePageShareOneNotice()
+    {
+        var latest = new LatestSave();
+        var preferences = new PreferenceService(new PreferenceStore(_environment));
+        var page = new SettingsViewModel(
+            preferences,
+            new SourceRootService(new SourceRootStore(_environment)),
+            new EmulatorFolderService(new EmulatorFolderStore(_environment)),
+            new KeepService(new KeepStore(_environment)),
+            _volumes,
+            latest);
+        var section = new ScanSettingsViewModel(
+            preferences, new ScanTuner(preferences, new VolumeMediaCache(new FakeStorageQueries()), _volumes), _volumes, latest);
+        var refused = Directory.CreateDirectory(Path.Combine(Settings, "preferences.json"));
+
+        page.BackdropEnabled = false;
+        section.WalkThreads = 4;
+
+        Assert.Empty(FailedRows.Of(page));
+        Assert.Equal([nameof(ScanSettingsViewModel.WalkThreadsSave)], FailedRows.Of(section));
+
+        refused.Delete();
+        page.ThemeIndex = 2;
+
+        Assert.Empty(FailedRows.Of(section));
     }
 
     /// <summary>

@@ -51,21 +51,21 @@ public sealed class KeepService
     /// item stays kept.
     ///
     /// <para>The one exception is <see cref="StoredListUnreadable"/>, where the release is applied
-    /// anyway. Nothing this session keeps is in the file then, so the saved keep that refusing would
-    /// protect does not exist, and refusing would only make a keep clicked by mistake impossible to
-    /// undo until a restart.</para>
+    /// anyway and nothing is written, which is <see cref="SaveOutcome.NotWritten"/>. Nothing this
+    /// session keeps is in the file then, so the saved keep that refusing would protect does not exist,
+    /// and refusing would only make a keep clicked by mistake impossible to undo until a restart.</para>
     /// </summary>
-    public bool Release(string providerId, string key)
+    public SaveOutcome Release(string providerId, string key)
     {
         var released = Current.Without(providerId, key);
 
         if (!_store.Save(released) && !_store.RefusesToSave)
         {
-            return false;
+            return SaveOutcome.Refused;
         }
 
         Current = released;
 
-        return !_store.RefusesToSave;
+        return _store.RefusesToSave ? SaveOutcome.NotWritten : SaveOutcome.Saved;
     }
 }

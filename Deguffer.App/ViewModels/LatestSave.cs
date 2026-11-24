@@ -3,12 +3,13 @@ using Deguffer.App.Shell;
 namespace Deguffer.App.ViewModels;
 
 /// <summary>
-/// The outcome of the latest change on a settings form, shown on the row that made it and on no other.
+/// The outcome of the latest change on a settings page, shown on the row that made it and on no other.
+/// Every form on the page reports to the one instance, so the page states one failure once.
 ///
 /// <para>A change that fails moves the notice to its own row, so the page never states one failure in
 /// two places. A change that saves clears it, because the folder took a write, and a notice left on
-/// another row would tell the reader to check a folder that is writable again. A change that asked
-/// for what already holds wrote nothing, so it leaves the notice where it is: it is what the control
+/// another row would tell the reader to check a folder that is writable again. A change that wrote
+/// nothing leaves the notice where it is: it says nothing about the folder, and it is what a control
 /// sends when it is put back after a refused write.</para>
 /// </summary>
 public sealed class LatestSave
@@ -19,7 +20,7 @@ public sealed class LatestSave
     /// <returns><paramref name="outcome"/>, so the caller can go on to read back what holds.</returns>
     public SaveOutcome Report(SettingSave setting, SaveOutcome outcome)
     {
-        if (outcome is SaveOutcome.Unchanged)
+        if (outcome is SaveOutcome.NotWritten)
         {
             return outcome;
         }
@@ -37,8 +38,4 @@ public sealed class LatestSave
 
         return outcome;
     }
-
-    /// <summary>Show whether a list change made through <paramref name="setting"/> was written.</summary>
-    public void Report(SettingSave setting, bool saved) =>
-        Report(setting, saved ? SaveOutcome.Saved : SaveOutcome.Refused);
 }

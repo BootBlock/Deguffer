@@ -23,25 +23,28 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly EmulatorFolderService _emulatorFolders;
     private readonly KeepService _keeps;
     private readonly IVolumeInventory _volumes;
-    private readonly LatestSave _latest = new();
+    private readonly LatestSave _latest;
 
     /// <param name="volumes">
     /// The machine's volumes, so that approving a folder can say what the folder is stored on.
     /// Required rather than defaulted, as <see cref="ExploreViewModel"/> takes it: the page passes
     /// the machine's own and a test passes a fake, and neither is the one to fall back to.
     /// </param>
+    /// <param name="latest">The page's one notice of a failed save, shared with every form on the page.</param>
     public SettingsViewModel(
         PreferenceService preferences,
         SourceRootService sourceRoots,
         EmulatorFolderService emulatorFolders,
         KeepService keeps,
-        IVolumeInventory volumes)
+        IVolumeInventory volumes,
+        LatestSave latest)
     {
         _preferences = preferences;
         _sourceRoots = sourceRoots;
         _emulatorFolders = emulatorFolders;
         _keeps = keeps;
         _volumes = volumes;
+        _latest = latest;
 
         _announcedSpacing = preferences.Current.TreemapSpacing;
         SourceRoots = [.. sourceRoots.Current];
@@ -71,8 +74,8 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// <summary>Stop keeping <paramref name="item"/>, and re-read the list from the service.</summary>
     public void ReleaseKeptItem(KeptItem item)
     {
-        // An unreadable stored list is already stated on the page, and is not a write that failed.
-        _latest.Report(KeptItemsSave, _keeps.Release(item.ProviderId, item.Item.Key) || _keeps.StoredListUnreadable);
+        // An unreadable stored list is already stated on the page, and the release writes nothing to it.
+        _latest.Report(KeptItemsSave, _keeps.Release(item.ProviderId, item.Item.Key));
 
         // Brought up to date rather than emptied and filled: releasing one item costs the list one
         // removal, and the reader's place in the rest of it is where they left it.
@@ -157,7 +160,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// mirroring the requested value here would let this list drift from the folders Deguffer will
     /// really search — the one place that drift is invisible to the user.
     /// </summary>
-    private void Apply(Func<bool> change)
+    private void Apply(Func<SaveOutcome> change)
     {
         _latest.Report(SourceRootsSave, change());
 
@@ -195,8 +198,8 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public void RemoveEmulatorFolder(string folder) => ApplyEmulatorFolders(() => _emulatorFolders.Remove(folder));
 
-    /// <summary>Run a change and re-read the list from the service, for the reason <see cref="Apply(Func{bool})"/> does.</summary>
-    private void ApplyEmulatorFolders(Func<bool> change)
+    /// <summary>Run a change and re-read the list from the service, for the reason <see cref="Apply(Func{SaveOutcome})"/> does.</summary>
+    private void ApplyEmulatorFolders(Func<SaveOutcome> change)
     {
         _latest.Report(EmulatorFoldersSave, change());
 

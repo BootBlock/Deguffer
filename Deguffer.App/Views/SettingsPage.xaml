@@ -496,7 +496,7 @@
                     </views:SettingsRow.Control>
                 </views:SettingsRow>
 
-                <views:ScanSettingsSection />
+                <views:ScanSettingsSection Scanning="{x:Bind Scanning}" />
 
                 <TextBlock Style="{StaticResource Caption}"
                            Margin="4,12,0,0"
