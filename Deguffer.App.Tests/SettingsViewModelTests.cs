@@ -9,8 +9,8 @@ namespace Deguffer.App.Tests;
 
 /// <summary>
 /// How the Settings page holds the stored settings and the controls together: a typed number goes
-/// through the rule that stores it, a failed write says so and puts every control back, and the keep
-/// list is shown in full and in order. What a typed number becomes is Core's, and proven in
+/// through the rule that stores it, a failed write says so on the row that made it and puts every
+/// control back, and the keep list is shown in full and in order. What a typed number becomes is Core's, and proven in
 /// <c>EnteredSettingTests</c>.
 /// </summary>
 public sealed class SettingsViewModelTests : IDisposable
@@ -59,7 +59,7 @@ public sealed class SettingsViewModelTests : IDisposable
         Assert.Equal(1, preferences.Current.MinimumTemporaryFileAgeDays);
         Assert.Equal(1, preferences.Current.KeepFilesChangedWithinHours);
         Assert.Equal(AppPreferences.Default.FileHistoryRetentionDays, preferences.Current.FileHistoryRetentionDays);
-        Assert.False(page.SaveFailed);
+        Assert.Empty(FailedRows.Of(page));
     }
 
     /// <summary>The box's own maximum is the rule's, so the box and the value it produces cannot disagree.</summary>
@@ -107,9 +107,69 @@ public sealed class SettingsViewModelTests : IDisposable
 
         page.BackdropEnabled = false;
 
-        Assert.True(page.SaveFailed);
+        Assert.Equal([nameof(SettingsViewModel.BackdropEnabledSave)], FailedRows.Of(page));
         Assert.True(page.BackdropEnabled);
         Assert.Contains(string.Empty, raised);
+    }
+
+    /// <summary>
+    /// The failure is stated on the row that made the change, so it is read where the value went back:
+    /// a box several screens down the page, such as the File History retention, says so itself rather
+    /// than through a notice scrolled out of view at the top of the page.
+    /// </summary>
+    [Fact]
+    public void AWriteThatFailsIsStatedOnTheRowThatMadeItAndNoOther()
+    {
+        var (page, preferences) = Page();
+        Directory.CreateDirectory(Path.Combine(Settings, "preferences.json"));
+
+        page.FileHistoryRetentionDays = 30;
+
+        Assert.Equal([nameof(SettingsViewModel.FileHistoryRetentionDaysSave)], FailedRows.Of(page));
+        Assert.Equal(AppPreferences.Default.FileHistoryRetentionDays, preferences.Current.FileHistoryRetentionDays);
+    }
+
+    /// <summary>
+    /// One failure is stated once: a later change that fails moves the notice to its own row, and a
+    /// change that saves clears it, because the folder it tells the reader to check took a write.
+    /// </summary>
+    [Fact]
+    public void TheNoticeFollowsTheLatestChangeAndASaveClearsIt()
+    {
+        var (page, _) = Page();
+        var refused = Directory.CreateDirectory(Path.Combine(Settings, "preferences.json"));
+
+        page.BackdropEnabled = false;
+        page.KeepFilesChangedWithinHours = 4;
+
+        Assert.Equal([nameof(SettingsViewModel.KeepFilesChangedWithinHoursSave)], FailedRows.Of(page));
+
+        refused.Delete();
+        page.ThemeIndex = 2;
+
+        Assert.Empty(FailedRows.Of(page));
+    }
+
+    /// <summary>
+    /// A list's add and remove buttons are on its row, so a list that could not be saved says so there,
+    /// whichever list it was.
+    /// </summary>
+    [Fact]
+    public void AListThatCouldNotBeSavedSaysSoOnItsOwnRow()
+    {
+        var (page, _) = Page();
+        Directory.CreateDirectory(Path.Combine(Settings, "emulator-folders.json"));
+
+        page.AddEmulatorFolder(Path.Combine(_temp.Path, "Cemu"));
+
+        Assert.Equal([nameof(SettingsViewModel.EmulatorFoldersSave)], FailedRows.Of(page));
+        Assert.Empty(page.EmulatorFolders);
+
+        Directory.CreateDirectory(Path.Combine(Settings, "source-roots.json"));
+        page.AddSourceRoot(SourceRootApproval.For(_volumes, Path.Combine(_temp.Path, "src")));
+
+        Assert.Equal([nameof(SettingsViewModel.SourceRootsSave)], FailedRows.Of(page));
+        Assert.Empty(page.SourceRoots);
     }
 
     /// <summary>
@@ -140,7 +200,7 @@ public sealed class SettingsViewModelTests : IDisposable
 
         page.BackdropEnabled = false;
 
-        Assert.False(page.SaveFailed);
+        Assert.Empty(FailedRows.Of(page));
         Assert.False(preferences.Current.BackdropEnabled);
         Assert.Equal([nameof(SettingsViewModel.BackdropEnabled)], raised);
     }
@@ -187,7 +247,7 @@ public sealed class SettingsViewModelTests : IDisposable
         page.ReleaseKeptItem(item);
 
         Assert.True(page.KeepListUnreadable);
-        Assert.False(page.SaveFailed);
+        Assert.Empty(FailedRows.Of(page));
         Assert.Equal([NotifyCollectionChangedAction.Remove], told);
     }
 
@@ -204,7 +264,7 @@ public sealed class SettingsViewModelTests : IDisposable
 
         page.ReleaseKeptItem(item);
 
-        Assert.True(page.SaveFailed);
+        Assert.Equal([nameof(SettingsViewModel.KeptItemsSave)], FailedRows.Of(page));
         Assert.Single(page.KeptItems);
     }
 

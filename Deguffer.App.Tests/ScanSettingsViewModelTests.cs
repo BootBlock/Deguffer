@@ -9,7 +9,7 @@ namespace Deguffer.App.Tests;
 
 /// <summary>
 /// How the Scanning section holds the stored scan settings and the controls together: each box sets
-/// the kind of drive the picker names, an emptied box is Auto, a failed write says so, and the drives
+/// the kind of drive the picker names, an emptied box is Auto, a failed write says so on its row, and the drives
 /// present are described as their scans will run. What Auto means and what a typed number becomes
 /// are Core's, and proven in <c>ScanTuningTests</c>.
 /// </summary>
@@ -68,7 +68,7 @@ public sealed class ScanSettingsViewModelTests : IDisposable
 
         Assert.Equal(new MediaScanPreferences(2, 64, 512, 6, 12), preferences.Current.Scanning.Rotational);
         Assert.Equal(MediaScanPreferences.Auto, preferences.Current.Scanning.Nvme);
-        Assert.False(section.SaveFailed);
+        Assert.Empty(FailedRows.Of(section));
     }
 
     /// <summary>Emptying a box is how a person goes back to Auto, and an Auto box reads back empty.</summary>
@@ -199,7 +199,7 @@ public sealed class ScanSettingsViewModelTests : IDisposable
 
         section.WalkThreads = 4;
 
-        Assert.True(section.SaveFailed);
+        Assert.Equal([nameof(ScanSettingsViewModel.WalkThreadsSave)], FailedRows.Of(section));
         Assert.True(double.IsNaN(section.WalkThreads));
         Assert.Contains(string.Empty, raised);
     }
