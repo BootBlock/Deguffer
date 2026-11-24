@@ -5,9 +5,8 @@ namespace Deguffer.Core.Tests;
 
 /// <summary>
 /// Every page with nothing to show yet says so through the one <c>EmptyState</c> control. A page
-/// meets a first-time user in this state before any other, and three pages once drew it in three
-/// styles: a 15 px heading, a 20 px subtitle, and a 44 px glyph over bold text, which read as three
-/// products rather than one (#930). The control takes each part's size from a named style, so the
+/// meets a first-time user in this state before any other, so it is where the app most needs to
+/// look like one product (#930). The control takes each part's size from a named style, so the
 /// pages share one layout and one size per part.
 /// </summary>
 public sealed partial class DesignEmptyStateTests
@@ -42,9 +41,9 @@ public sealed partial class DesignEmptyStateTests
 
     /// <summary>
     /// A banner shown in place of a list, centred where the rows would be, is the control and not a
-    /// copy of it. The copies this rule was written against each bound their visibility to a
-    /// <c>HasNo…</c> property and centred a heading and a sentence of their own. A note that sits
-    /// left-aligned under a list in Settings is a line of the list, not a banner, so it is not one.
+    /// copy of it. A copy is known by its visibility, bound to a <c>HasNo…</c> or <c>…Empty…</c>
+    /// property, and by its centring. A note that sits left-aligned under a list in Settings is a
+    /// line of the list, not a banner, so it is not one.
     /// </summary>
     [Fact]
     public void EveryBannerInPlaceOfAListIsTheSharedControl()
@@ -73,8 +72,8 @@ public sealed partial class DesignEmptyStateTests
         RuleBaseline.Hold("only EmptyState draws its parts", found, new Dictionary<string, int>());
     }
 
-    // A sweep that stopped finding the controls would pass the rule above with nothing to check.
-    // The shell drew seven when this was written.
+    // A sweep that stopped finding the controls would pass the rules above with nothing to check,
+    // so it must find at least one on each page listed above and in each of the two searches' lists.
     [Fact]
     public void TheSweepFindsTheEmptyStates()
     {

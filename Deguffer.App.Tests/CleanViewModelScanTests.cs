@@ -285,6 +285,7 @@ public class CleanViewModelScanTests
 
         // The empty state says what to press, so the status bar does not say it again over it.
         Assert.Empty(page.ViewModel.Status);
+        Assert.False(page.ViewModel.HasStatus);
 
         page.Scan();
 

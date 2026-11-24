@@ -4,9 +4,8 @@ namespace Deguffer.Core.Duplicates;
 /// What the Duplicates page says the search came to: a sentence, drawn over the groups once there
 /// are any, and a title of a few words over that sentence in the page's empty state until then.
 ///
-/// <para>The empty state once drew the sentence as its title, with nothing under it, so the page's
-/// empty state looked like no other page's. Each outcome is named here once, with both parts, so
-/// one cannot be set without the other.</para>
+/// <para>Each outcome is named here once, with both parts, so one cannot be set without the other,
+/// and the empty state has a title over a sentence as every other page's does.</para>
 /// </summary>
 /// <param name="Title">The empty state's title, shown only while no group is listed.</param>
 /// <param name="Sentence">What the search came to, or what to do before one.</param>
@@ -44,12 +43,15 @@ public sealed record DuplicateSearchHeadline(string Title, string Sentence)
     /// <summary>A search that ended, or was stopped after the files to compare were found.</summary>
     public static DuplicateSearchHeadline Finished(bool stopped, bool anyGroup)
     {
-        var found = anyGroup
-            ? "Mark the copies to remove, by hand or with a rule from Mark. Nothing goes until you confirm the list."
-            : "No two files in the locations searched matched.";
+        const string Marking = "Mark the copies to remove, by hand or with a rule from Mark. Nothing goes until you confirm the list.";
 
-        return stopped
-            ? new("Search stopped", $"Stopped. {found}")
-            : new("No duplicates found", found);
+        // A stop leaves files uncompared, so only a search that ran to its end may say none matched.
+        return (stopped, anyGroup) switch
+        {
+            (false, false) => new("No duplicates found", "No two files in the locations searched matched."),
+            (true, false) => new("Search stopped", "Stopped before any duplicates were confirmed."),
+            (false, true) => new("Search finished", Marking),
+            (true, true) => new("Search stopped", $"Stopped. {Marking}"),
+        };
     }
 }

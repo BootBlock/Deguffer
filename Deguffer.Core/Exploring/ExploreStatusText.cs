@@ -14,10 +14,10 @@ public static class ExploreStatusText
     /// is taken off it: nothing. See <see cref="Retargeted"/>.
     ///
     /// <para>Before a scan the page's empty state says what to do, and once one has drawn, the map,
-    /// its readout and its rows say what there is. The line once said the empty state's instruction
-    /// again under it, in other words and another size, which sent the reader to check whether the
-    /// two meant different things. It is kept for what neither says: a refusal, a scan's progress or
-    /// failure, a removal's report.</para>
+    /// its readout and its rows say what there is. The same instruction said again here, in other
+    /// words and at another size, would send the reader to check whether the two meant different
+    /// things. The line is kept for what neither says: a refusal, a scan's progress or failure, a
+    /// removal's report.</para>
     /// </summary>
     public static StatusLine Idle => StatusLine.Empty;
 

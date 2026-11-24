@@ -33,6 +33,10 @@ public sealed class DuplicateSearchHeadlineTests
         Assert.EndsWith(".", headline.Sentence, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Only a search that ran to its end may say no two files matched. A stop leaves files
+    /// uncompared, so it says only that nothing was confirmed.
+    /// </summary>
     [Fact]
     public void ASearchThatFoundNothingSaysSoInTheTitleAndWhyInTheSentence()
     {
@@ -40,7 +44,7 @@ public sealed class DuplicateSearchHeadlineTests
             new DuplicateSearchHeadline("No duplicates found", "No two files in the locations searched matched."),
             DuplicateSearchHeadline.Finished(stopped: false, anyGroup: false));
         Assert.Equal(
-            new DuplicateSearchHeadline("Search stopped", "Stopped. No two files in the locations searched matched."),
+            new DuplicateSearchHeadline("Search stopped", "Stopped before any duplicates were confirmed."),
             DuplicateSearchHeadline.Finished(stopped: true, anyGroup: false));
     }
 

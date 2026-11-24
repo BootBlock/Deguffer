@@ -139,9 +139,6 @@ public sealed partial class CleanPage : Page
 
     public CleanViewModel ViewModel { get; }
 
-    /// <summary>Whether a line has anything in it, for the status bar, which closes rather than stand empty.</summary>
-    public static bool IsSaid(string text) => !string.IsNullOrEmpty(text);
-
     /// <summary>
     /// The view-model asks whether to go ahead by calling the hook; whether it asks at all is the
     /// preference, expressed by leaving the hook unset. Deleting at these sizes has no undo (§8),

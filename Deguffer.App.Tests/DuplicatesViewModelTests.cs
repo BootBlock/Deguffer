@@ -408,8 +408,7 @@ public sealed class DuplicatesViewModelTests : DuplicatesPageScene
 
     /// <summary>
     /// With no group to list, the empty state has a short title over the search's sentence, as every
-    /// other page's does, rather than the sentence drawn as its title: before a search, and after one
-    /// that confirmed nothing.
+    /// other page's does: before a search, and after one that confirmed nothing.
     /// </summary>
     [Fact]
     public void TheEmptyStateHasATitleOverTheSentence() => UiThread.Run(async () =>
