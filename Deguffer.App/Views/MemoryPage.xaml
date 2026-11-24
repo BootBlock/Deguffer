@@ -96,18 +96,21 @@
                           ItemsSource="{x:Bind ViewModel.Trail}"
                           VerticalAlignment="Center"
                           Visibility="{x:Bind ViewModel.HasTree, Mode=OneWay}">
+                <!-- A deep trail wraps onto a further line, and a step too long for a line trims, so
+                     the step the reader is on is never drawn off the edge of a narrow window. -->
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
-                        <StackPanel Orientation="Horizontal" />
+                        <controls:FlowRow />
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:MemoryCrumb">
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Grid ColumnDefinitions="Auto,*" VerticalAlignment="Center">
                             <!-- The separator between two steps, so the trail reads as a path down
                                  into something rather than as a row of links. Raw to a screen
                                  reader, which is given the steps themselves and their order. -->
-                            <FontIcon Glyph="&#xE76C;"
+                            <FontIcon Grid.Column="0"
+                                      Glyph="&#xE76C;"
                                       FontSize="{StaticResource GlyphSizeCompact}"
                                       Visibility="{x:Bind FollowsAnother, Mode=OneWay}"
                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -116,10 +119,15 @@
                             <!-- The crumb itself carries which node it means, because the tree
                                  renumbers its nodes on every reading and a number bound here would
                                  not. -->
-                            <HyperlinkButton Content="{x:Bind Name, Mode=OneWay}"
+                            <HyperlinkButton Grid.Column="1"
                                              Padding="{StaticResource LinkPadding}"
-                                             Click="OnCrumbClicked" />
-                        </StackPanel>
+                                             AutomationProperties.Name="{x:Bind Name, Mode=OneWay}"
+                                             Click="OnCrumbClicked">
+                                <TextBlock Text="{x:Bind Name, Mode=OneWay}"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTipService.ToolTip="{x:Bind Name, Mode=OneWay}" />
+                            </HyperlinkButton>
+                        </Grid>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
