@@ -240,18 +240,18 @@ public sealed class ProviderSizeHistoryTests : IDisposable
             SizeChange.Between(earlier, earlier with { Bytes = 0 })!.Describe(Date));
         Assert.Equal("No change since 2026-09-01", SizeChange.Between(earlier, earlier)!.Describe(Date));
         Assert.Equal(
-            "About +1.0 GB since 2026-09-01",
+            "~+1.0 GB since 2026-09-01",
             SizeChange.Between(earlier, earlier with { Bytes = 2L << 30, Elevated = true })!.Describe(Date));
         Assert.Equal(
-            "About +1.0 GB since 2026-09-01",
+            "~+1.0 GB since 2026-09-01",
             SizeChange.Between(earlier, earlier with { Bytes = 2L << 30, Approximate = true })!.Describe(Date));
         Assert.Equal(
-            "About +1.0 GB since 2026-09-01",
+            "~+1.0 GB since 2026-09-01",
             SizeChange.Between(earlier with { Ceiling = true }, earlier with { Bytes = 2L << 30 })!.Describe(Date));
     }
 
     /// <summary>
-    /// A kept figure is worded as its row worded it: a ceiling says "up to", a prediction "about", and
+    /// A kept figure is worded as its row worded it: a ceiling says "up to", a prediction "~", and
     /// a removal of entries holding no bytes says how many items, because the history keeps each.
     /// </summary>
     [Fact]
@@ -280,7 +280,7 @@ public sealed class ProviderSizeHistoryTests : IDisposable
         Assert.Equal(FreeSpace.Format(ceiling.Reclaim), FreeSpace.Format(Assert.Single(read.Of("ceiling")).Size));
         Assert.StartsWith("up to ", FreeSpace.Format(read.Of("ceiling")[0].Size), StringComparison.Ordinal);
         Assert.Equal("3 items", FreeSpace.Format(Assert.Single(read.Of("empty")).Size));
-        Assert.StartsWith("about ", FreeSpace.Format(Assert.Single(read.Of("predicted")).Size), StringComparison.Ordinal);
+        Assert.StartsWith("~", FreeSpace.Format(Assert.Single(read.Of("predicted")).Size), StringComparison.Ordinal);
     }
 
     /// <summary>A present provider's finding, with one step of <paramref name="bytes"/>.</summary>

@@ -23,7 +23,7 @@ public readonly record struct SizePoint(
 {
     /// <summary>
     /// The figure as the row stated it, for <see cref="FreeSpace.Format(ScanSize)"/> to word, so the
-    /// history says "about", "up to" or a count of items exactly where the row did.
+    /// history says "~", "up to" or a count of items exactly where the row did.
     /// </summary>
     public ScanSize Size => new(Bytes, Bytes, Approximate, Entries, Ceiling);
 

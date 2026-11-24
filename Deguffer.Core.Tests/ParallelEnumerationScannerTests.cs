@@ -62,7 +62,7 @@ public class ParallelEnumerationScannerTests
     /// <see cref="ScanSize.Reclaimable"/> became the logical figure, no longer relevant to the
     /// number anybody reads: the walk sums file lengths and file lengths are what gets reported, to
     /// the byte. §6.3 makes this the ordinary route, so leaving the flag on would have printed
-    /// "about" in front of every size on an unelevated machine — a qualification with nothing
+    /// "~" in front of every size on an unelevated machine — a qualification with nothing
     /// behind it, which is the opposite of what the flag exists for.</para>
     ///
     /// <para>What still carries it is a figure that is a forecast: conda's dry run, and

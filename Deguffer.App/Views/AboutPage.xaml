@@ -43,7 +43,7 @@
 
                 <!-- Drawn above the cards after it, so the mark passes over them as it flies in out
                      of the stars behind them. -->
-                <Border Canvas.ZIndex="1" Style="{StaticResource SolidCardStyle}">
+                <Border Canvas.ZIndex="1" Style="{StaticResource StarfieldCardStyle}">
                     <StackPanel Spacing="{StaticResource ControlGap}">
                         <!-- The version belongs with the build date and the architecture in the card
                              below, not beside the name as well; the same number twice, two lines
@@ -70,7 +70,7 @@
                      nobody scrolls to. The scanning mode is here too: it is diagnostic, the
                      difference between a scan that takes seconds and one that takes minutes, and a
                      bug report needs it with the rest, which Copy details puts on the clipboard. -->
-                <Border Style="{StaticResource SolidCardStyle}">
+                <Border Style="{StaticResource StarfieldCardStyle}">
                     <StackPanel Spacing="16">
                         <Grid ColumnSpacing="20" RowSpacing="8" ColumnDefinitions="Auto,*"
                               RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
@@ -178,7 +178,7 @@
 
                 <!-- One line a page, in the words its rail item states, after the build's details
                      because "which build is this" is asked first. -->
-                <Border Style="{StaticResource SolidCardStyle}">
+                <Border Style="{StaticResource StarfieldCardStyle}">
                     <StackPanel Spacing="{StaticResource ControlGap}">
                         <TextBlock Text="{x:Bind PurposesHeading}" Style="{StaticResource GroupHeading}" />
                         <ItemsControl ItemsSource="{x:Bind Purposes}" IsTabStop="False"
@@ -192,7 +192,7 @@
                     </StackPanel>
                 </Border>
 
-                <Border Style="{StaticResource SolidCardStyle}">
+                <Border Style="{StaticResource StarfieldCardStyle}">
                     <StackPanel Spacing="{StaticResource RegionGap}">
                         <StackPanel Spacing="4">
                             <TextBlock Text="The safety tiers" Style="{StaticResource GroupHeading}" />
@@ -226,7 +226,7 @@
                 <!-- Said page by page, because the pages differ: Storage removes outright, Explore and
                      Duplicates use the Recycle Bin, Installed apps keeps a backup, Startup's Disable
                      is undone by Enable, and the rest change nothing. -->
-                <Border Style="{StaticResource SolidCardStyle}">
+                <Border Style="{StaticResource StarfieldCardStyle}">
                     <StackPanel Spacing="{StaticResource ControlGap}">
                         <TextBlock Text="{x:Bind SafeguardsHeading}" Style="{StaticResource GroupHeading}" />
                         <ItemsControl ItemsSource="{x:Bind Safeguards}" IsTabStop="False"
@@ -243,7 +243,7 @@
                 <!-- The licence, then what ships inside each build under its own: every build is
                      self-contained (§6.3), so .NET and the Windows App SDK are redistributed in it
                      beside the referenced packages, and their licences expect the credit. -->
-                <Border Style="{StaticResource SolidCardStyle}">
+                <Border Style="{StaticResource StarfieldCardStyle}">
                     <StackPanel Spacing="{StaticResource ControlGap}">
                         <TextBlock Text="Licences" Style="{StaticResource GroupHeading}" />
                         <TextBlock Style="{StaticResource SecondaryText}">

@@ -141,7 +141,7 @@ public sealed class PreviewSummaryTests
             Full);
 
         Assert.Equal(
-            "about 4.0 GB can be reclaimed, about 1.5 GB selected. Review the rows, then Clean.",
+            "~4.0 GB can be reclaimed, ~1.5 GB selected. Review the rows, then Clean.",
             summary);
     }
 

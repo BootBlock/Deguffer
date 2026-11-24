@@ -8357,7 +8357,7 @@ have since moved, renamed or deleted. Deguffer will not ask for it.
 
 ### About the size shown
 
-**It is a ceiling, not a forecast, and the row says "about".** `FhManagew.exe` reports nothing
+**It is a ceiling, not a forecast, and the row says "~".** `FhManagew.exe` reports nothing
 before it runs, so there is no way to ask Windows what a cleanup would free. What Deguffer shows
 instead is its own measurement of the *first* of the two conditions above: this machine's saved
 versions older than the age you set. The second condition can only take away from that, never add to

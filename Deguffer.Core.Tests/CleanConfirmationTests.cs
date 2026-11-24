@@ -210,8 +210,8 @@ public sealed class CleanConfirmationTests
             Selected("NuGet", SafetyTier.RegenerableCache, Gigabytes(1)),
         ]);
 
-        Assert.Equal(["about 3.0 GB", "1.0 GB"], confirmation.Items.Select(i => i.SizeLabel));
-        Assert.Equal("about 4.0 GB", confirmation.TotalOf(confirmation.Opening));
+        Assert.Equal(["~3.0 GB", "1.0 GB"], confirmation.Items.Select(i => i.SizeLabel));
+        Assert.Equal("~4.0 GB", confirmation.TotalOf(confirmation.Opening));
     }
 
     /// <summary>

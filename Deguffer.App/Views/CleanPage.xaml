@@ -555,22 +555,6 @@
                             <Border Style="{StaticResource Divider}" Margin="16,0" />
                         </StackPanel>
 
-                        <!-- Says what to do next rather than leaving a blank card that reads as a screen
-                             which has already failed. Before anything has been scanned it holds the one
-                             thing to do, under the words that say to do it. -->
-                        <controls:EmptyState Grid.Row="1"
-                                             Glyph="&#xE721;"
-                                             Title="{x:Bind ViewModel.EmptyState.Title, Mode=OneWay}"
-                                             Message="{x:Bind ViewModel.EmptyState.Message, Mode=OneWay}"
-                                             Visibility="{x:Bind ViewModel.EmptyState.IsShown, Mode=OneWay}">
-                            <controls:EmptyState.PrimaryAction>
-                                <views:StorageScanButtons x:Name="EmptyScanButtons"
-                                                          ViewModel="{x:Bind ViewModel}"
-                                                          ChoicePlacement="BottomEdgeAlignedLeft"
-                                                          Visibility="{x:Bind ViewModel.Controls.EmptyStateOffersScan, Mode=OneWay}" />
-                            </controls:EmptyState.PrimaryAction>
-                        </controls:EmptyState>
-
                         <!-- The template is set from the stored preference in code-behind. The shipped
                              default is named here as well, so the list is never left untemplated
                              whatever order the framework loads and shows this page in, and so the
@@ -598,6 +582,22 @@
                                 <views:AwaitingFolderGroup x:Name="AwaitingGroup" Group="{x:Bind ViewModel.AwaitingFolders}" AddCommand="{x:Bind ViewModel.AddSourceFolderCommand}" />
                             </ListView.Footer>
                         </ListView>
+
+                        <!-- Says what to do next rather than leaving a blank card that reads as a failed
+                             screen, and before any scan holds the one thing to do. After the list, so it is
+                             drawn over it: an empty list still takes every click on its area. -->
+                        <controls:EmptyState Grid.Row="1"
+                                             Glyph="&#xE721;"
+                                             Title="{x:Bind ViewModel.EmptyState.Title, Mode=OneWay}"
+                                             Message="{x:Bind ViewModel.EmptyState.Message, Mode=OneWay}"
+                                             Visibility="{x:Bind ViewModel.EmptyState.IsShown, Mode=OneWay}">
+                            <controls:EmptyState.PrimaryAction>
+                                <views:StorageScanButtons x:Name="EmptyScanButtons"
+                                                          ViewModel="{x:Bind ViewModel}"
+                                                          ChoicePlacement="BottomEdgeAlignedLeft"
+                                                          Visibility="{x:Bind ViewModel.Controls.EmptyStateOffersScan, Mode=OneWay}" />
+                            </controls:EmptyState.PrimaryAction>
+                        </controls:EmptyState>
                     </Grid>
 
                     <!-- One row's items, in place of the rows. Filled from code-behind with a list built

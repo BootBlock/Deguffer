@@ -8,6 +8,12 @@ namespace Deguffer.Core.Scanning;
 /// </summary>
 public static class FreeSpace
 {
+    /// <summary>
+    /// What stands before a figure that is a prediction rather than a measurement. A sign rather than
+    /// a word, so a hedged figure is hardly wider than a measured one in a size column or a button.
+    /// </summary>
+    public const string Approximately = "~";
+
     private static readonly string[] Units = ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
 
     /// <summary>
@@ -15,7 +21,7 @@ public static class FreeSpace
     ///
     /// Both of §5.5's routes measure exactly and agree, so neither is hedged. What is hedged is a
     /// figure a tool produced about its own future behaviour — conda's dry run — and a sole-link
-    /// sum whose link counts move whenever a project installs a dependency. Saying "about" is the
+    /// sum whose link counts move whenever a project installs a dependency. The "~" before it is the
     /// difference between reporting a measurement and repeating someone else's forecast. A ceiling
     /// says "up to" instead, because it is not a forecast at all: the removal is known to fall short.
     ///
@@ -28,7 +34,7 @@ public static class FreeSpace
     {
         { Reclaimable: 0, Entries: > 0 } => Counted.Of(size.Entries, "item", "items"),
         { IsCeiling: true } => $"up to {Format(size.Reclaimable)}",
-        { IsApproximate: true } => $"about {Format(size.Reclaimable)}",
+        { IsApproximate: true } => $"{Approximately}{Format(size.Reclaimable)}",
         _ => Format(size.Reclaimable),
     };
 

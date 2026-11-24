@@ -16,7 +16,7 @@ public sealed class CleanOfferTests
     [Fact]
     public void KeepsTheFiguresHedge()
     {
-        Assert.Equal("Clean about 2.0 MB", CleanOffer.Label(ScanSize.Approximate(2 * 1024 * 1024)));
+        Assert.Equal("Clean ~2.0 MB", CleanOffer.Label(ScanSize.Approximate(2 * 1024 * 1024)));
         Assert.Equal("Clean up to 3.0 MB", CleanOffer.Label(ScanSize.Ceiling(3 * 1024 * 1024)));
     }
 
