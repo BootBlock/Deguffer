@@ -1504,6 +1504,8 @@ code.
   particular.
 - **A machine-wide entry needs administrator rights.** Unelevated, its row says so before anything is
   tried, the page offers to reopen as administrator as Installed apps does, and nothing is attempted.
+  The offer stands only while the list holds such an entry, one rights alone keep from changing: a
+  list of the account's own entries has nothing to gain from elevating, so it shows no offer.
 - **Every refusal is decided twice.** `StartupChangePolicy` decides when the user selects a row, so the
   reason is on screen before they try anything, and `StartupSwitcher` reads the entry and its value
   again immediately before it writes. An entry that has gone, or whose command, file or value changed
