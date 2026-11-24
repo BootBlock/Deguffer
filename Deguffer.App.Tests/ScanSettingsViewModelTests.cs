@@ -278,6 +278,32 @@ public sealed class ScanSettingsViewModelTests : IDisposable
         Assert.All(section.Drives, drive => Assert.DoesNotContain("3 threads,", drive.Text, StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// Each row's reset is the setting its name says, and a value under the kind picker is the value of
+    /// the kind the picker names, for every kind.
+    /// </summary>
+    [Fact]
+    public void EachRowsResetIsTheSettingItIsNamedForOnEveryKind()
+    {
+        var (section, _, _) = Section();
+        var rows = typeof(ScanSettingsViewModel).GetProperties().Where(property => property.PropertyType == typeof(SettingReset)).ToList();
+
+        foreach (var media in ScanTuningText.Kinds)
+        {
+            section.KindIndex = KindIndex(section, media);
+
+            foreach (var property in rows)
+            {
+                var name = property.Name[..^"Default".Length];
+                var expected = typeof(ShippedSettings).GetField(name)?.GetValue(null)
+                    ?? typeof(KindSettingDefaults).GetProperty(name)?.GetValue(ShippedSettings.ForKind(media));
+
+                Assert.True(expected is not null, $"{property.Name} names no setting the page restores.");
+                Assert.Same(expected, ((SettingReset)property.GetValue(section)!).Setting);
+            }
+        }
+    }
+
     private static int KindIndex(ScanSettingsViewModel section, StorageMedia media) =>
         section.KindNames.ToList().IndexOf(ScanTuningText.MediaName(media));
 

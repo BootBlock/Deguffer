@@ -73,7 +73,7 @@ public sealed class RecycleBinProvider : CleanupProviderBase
 
     /// <summary>
     /// Asked which route each bin takes, and given to the executor that takes it. See
-    /// <see cref="CleanupProviderBase"/>'s <c>emptier</c>.
+    /// <see cref="CleanupProviderBase"/>'s <c>routes</c>.
     /// </summary>
     private readonly IRecycleBinEmptier _emptier;
 
@@ -108,7 +108,7 @@ public sealed class RecycleBinProvider : CleanupProviderBase
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner,
-            emptier,
+            [new RecycleBinRun(emptier)],
             volumes: volumes)
     {
         _emptier = emptier;

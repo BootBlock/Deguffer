@@ -50,7 +50,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
     /// <summary>
     /// The listing presence and planning both read, and Windows' cleanup asked beside it. It asks the
     /// handlers given to the executor that runs the cleanup, so the plan and the clean ask the same
-    /// instance. See <see cref="CleanupProviderBase"/>'s <c>handlers</c>.
+    /// instance. See <see cref="CleanupProviderBase"/>'s <c>routes</c>.
     /// </summary>
     private readonly DriverStoreReading _reading;
 
@@ -71,7 +71,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner ?? HardLinkAwareScanner.Default,
-            handlers: handlers,
+            routes: [new DiskCleanupRun(handlers)],
             servicing: servicing)
     {
         _system = system ?? SystemDirectories.Current;

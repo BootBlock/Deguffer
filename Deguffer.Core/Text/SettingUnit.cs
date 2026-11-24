@@ -12,6 +12,9 @@ public static class SettingUnit
 
     public static string Days(double shown) => Agreeing(shown, "day", "days");
 
+    /// <summary>The unit after a box that holds a size in kibibytes, written as Windows writes it.</summary>
+    public static string Kilobytes => "KB";
+
     /// <param name="whenEmpty">The count an empty box stands for, which its placeholder names.</param>
     public static string Threads(double shown, int whenEmpty) => Agreeing(Count(shown, whenEmpty), "thread", "threads");
 

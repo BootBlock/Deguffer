@@ -64,7 +64,7 @@ public sealed class DirectoryRemoverTests : IDisposable
     /// <summary>
     /// A root the caller asked to keep is never attempted, so a refusal to describe it is not
     /// reported as a folder this removal could not take. <see cref="RemovalOutcome.LeftStanding"/>
-    /// means "tried and still here", and <c>ClearAsync</c> is the caller that keeps its root.
+    /// means "tried and still here", and <c>ClearRun</c> is the caller that keeps its root.
     /// </summary>
     [Fact]
     public async Task DoesNotCallAKeptRootLeftStandingWhenWindowsWillNotDescribeIt()

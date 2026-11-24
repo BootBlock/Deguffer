@@ -130,7 +130,7 @@
                                            Description="How much of a folder's listing Windows hands over in each call on this kind of drive. Empty the box for Auto."
                                            Details="A larger buffer means fewer calls, and each call costs the whole buffer however few entries the folder holds."
                                            Default="{x:Bind Scanning.ListingBufferKiBDefault}"
-                                           Unit="KB">
+                                           Unit="{x:Bind text:SettingUnit.Kilobytes}">
                             <views:SettingsRow.Control>
                                 <NumberBox x:Name="ListingBufferBox"
                                            Value="{x:Bind Scanning.ListingBufferKiB, Mode=TwoWay}"
@@ -151,7 +151,7 @@
                                            Title="File table read size"
                                            Description="How much of a volume's file table each read asks for on this kind of drive. Administrator only. Empty the box for Auto."
                                            Default="{x:Bind Scanning.TableReadKiBDefault}"
-                                           Unit="KB">
+                                           Unit="{x:Bind text:SettingUnit.Kilobytes}">
                             <views:SettingsRow.Control>
                                 <NumberBox x:Name="TableReadBox"
                                            Value="{x:Bind Scanning.TableReadKiB, Mode=TwoWay}"

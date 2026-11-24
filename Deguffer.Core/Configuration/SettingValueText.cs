@@ -5,7 +5,8 @@ namespace Deguffer.Core.Configuration;
 /// <summary>
 /// A setting's value in the words its control shows, so the default a row states and the list of what
 /// a restore changes read as the control does: <c>7 days</c> beside a box showing 7 and the unit
-/// "days", <c>On</c> beside a switch, and the item a combo box lists.
+/// "days", <c>On</c> beside a switch, and the item a combo box lists. A number's unit is
+/// <see cref="SettingUnit"/>'s, the word the box shows after itself.
 /// </summary>
 public static class SettingValueText
 {
@@ -36,15 +37,15 @@ public static class SettingValueText
     /// <summary>A switch's state, in the words the switch shows beside itself.</summary>
     public static string Switch(bool on) => on ? "On" : "Off";
 
-    public static string Hours(int hours) => Counted.Of(hours, "hour", "hours");
+    public static string Hours(int hours) => $"{hours:N0} {SettingUnit.Hours(hours)}";
 
-    public static string Days(int days) => Counted.Of(days, "day", "days");
+    public static string Days(int days) => $"{days:N0} {SettingUnit.Days(days)}";
 
-    public static string Threads(int? chosen) => AutoOr(chosen, threads => Counted.Of(threads, "thread", "threads"));
+    public static string Threads(int? chosen) => AutoOr(chosen, threads => $"{threads:N0} {SettingUnit.Threads(threads, threads)}");
 
-    public static string Reads(int? chosen) => AutoOr(chosen, reads => Counted.Of(reads, "read", "reads"));
+    public static string Reads(int? chosen) => AutoOr(chosen, reads => $"{reads:N0} {SettingUnit.Reads(reads, reads)}");
 
-    public static string KiB(int? chosen) => AutoOr(chosen, kib => $"{kib:N0} KB");
+    public static string Kilobytes(int? chosen) => AutoOr(chosen, kib => $"{kib:N0} {SettingUnit.Kilobytes}");
 
     /// <summary>A scan value, which is Auto where nobody chose one.</summary>
     private static string AutoOr(int? chosen, Func<int, string> say) => chosen is { } value ? say(value) : "Auto";

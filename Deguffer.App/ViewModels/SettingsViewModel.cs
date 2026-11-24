@@ -42,6 +42,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _keeps = keeps;
         _volumes = volumes;
 
+        _announcedSpacing = preferences.Current.TreemapSpacing;
         SourceRoots = [.. sourceRoots.Current];
         EmulatorFolders = [.. emulatorFolders.Current];
         KeptItems = [.. InDisplayOrder(keeps.Current)];
@@ -56,10 +57,12 @@ public sealed partial class SettingsViewModel : ObservableObject
             ConfirmBeforeCleaningDefault = Row(ShippedSettings.ConfirmBeforeCleaning),
             RequireTypedConfirmationDefault = Row(ShippedSettings.RequireTypedConfirmation),
             KeepFilesChangedWithinHoursDefault = Row(ShippedSettings.KeepFilesChangedWithinHours),
-            MinimumTemporaryFileAgeDefault = Row(ShippedSettings.MinimumTemporaryFileAgeDays),
+            MinimumTemporaryFileAgeDefault = Row(ShippedSettings.MinimumTemporaryFileAge),
             FileHistoryRetentionDaysDefault = Row(ShippedSettings.FileHistoryRetentionDays),
             EmptyRecycleBinsDirectlyDefault = Row(ShippedSettings.EmptyRecycleBinsDirectly),
         ];
+
+        CanRestoreDefaults = ShippedSettings.AnyChanged(preferences.Current);
     }
 
     /// <summary>Every row's default, refreshed together after any write.</summary>
@@ -97,9 +100,10 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     /// <summary>
     /// Whether any setting on the page is off its default, the scanning values included, which is when
-    /// the page offers to restore them.
+    /// the page offers to restore them. Held rather than read each time, so the button is told only when
+    /// the answer turns over.
     /// </summary>
-    public bool CanRestoreDefaults => ShippedSettings.Changed(_preferences.Current).Count > 0;
+    public bool CanRestoreDefaults { get; private set; }
 
     /// <summary>What the reader is asked before every setting goes back, or null where none is off its default.</summary>
     public RestoreDefaultsPrompt? RestorePrompt() => RestoreDefaultsPrompt.For(_preferences.Current);
@@ -113,8 +117,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     public void RestoreDefaults() => Apply(ShippedSettings.RestoreAll, string.Empty);
 
     /// <summary>
-    /// Read every row's default and the restore again, after a write this view-model did not make: the
-    /// scanning section's, which the page passes on.
+    /// Read every row's default and the restore again. This view-model does so after each of its own
+    /// writes, and the page after every write, the scanning section's included; each part is announced
+    /// only where its answer changed, so the second reading of one write tells nobody anything.
     /// </summary>
     public void FollowStoredDefaults()
     {
@@ -123,7 +128,13 @@ public sealed partial class SettingsViewModel : ObservableObject
             row.Refresh();
         }
 
-        OnPropertyChanged(nameof(CanRestoreDefaults));
+        var canRestore = ShippedSettings.AnyChanged(_preferences.Current);
+
+        if (canRestore != CanRestoreDefaults)
+        {
+            CanRestoreDefaults = canRestore;
+            OnPropertyChanged(nameof(CanRestoreDefaults));
+        }
     }
 
     /// <summary>
@@ -296,7 +307,38 @@ public sealed partial class SettingsViewModel : ObservableObject
     public int TreemapSpacingIndex
     {
         get => (int)_preferences.Current.TreemapSpacing;
-        set => Apply(current => current with { TreemapSpacing = (ExploreSpacing)value });
+        set
+        {
+            // Recorded before the write, because the write calls FollowStoredSpacing as it lands and
+            // Apply announces the box anyway. Read back after it, as a refused write stores nothing.
+            _announcedSpacing = (ExploreSpacing)value;
+            Apply(current => current with { TreemapSpacing = (ExploreSpacing)value });
+            _announcedSpacing = _preferences.Current.TreemapSpacing;
+        }
+    }
+
+    /// <summary>
+    /// The spacing <see cref="TreemapSpacingIndex"/> was last announced as, so a change to some other
+    /// preference does not make the box read it again.
+    /// </summary>
+    private ExploreSpacing _announcedSpacing;
+
+    /// <summary>
+    /// Show a spacing chosen in the map appearance window, which writes the same setting while this page
+    /// is open. The page calls this on every change to the preferences, so the spacing shown is one
+    /// already in the file. No other setting here has a second place it is written.
+    /// </summary>
+    public void FollowStoredSpacing()
+    {
+        var stored = _preferences.Current.TreemapSpacing;
+
+        if (stored == _announcedSpacing)
+        {
+            return;
+        }
+
+        _announcedSpacing = stored;
+        OnPropertyChanged(nameof(TreemapSpacingIndex));
     }
 
     public bool BackdropEnabled
@@ -431,7 +473,16 @@ public sealed partial class SettingsViewModel : ObservableObject
         // A write that succeeds can store something other than what was typed, because a number goes
         // through EnteredSetting first: half an hour is stored as one. The control that made the
         // change reads it back, or it goes on showing a value that is not in effect.
-        OnPropertyChanged(SaveFailed ? string.Empty : setting);
+        var announced = SaveFailed ? string.Empty : setting;
+
+        if (announced.Length == 0)
+        {
+            // Every control reads back, the spacing box with them, so the spacing it shows is the
+            // stored one and need not be announced again when the page passes the write on.
+            _announcedSpacing = _preferences.Current.TreemapSpacing;
+        }
+
+        OnPropertyChanged(announced);
         FollowStoredDefaults();
     }
 }

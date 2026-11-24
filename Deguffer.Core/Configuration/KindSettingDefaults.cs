@@ -44,8 +44,8 @@ public sealed class KindSettingDefaults
 
         return new KindSettingDefaults(
             Value(media, kind, "Folders read at once", chosen => chosen.WalkThreads, (chosen, value) => chosen with { WalkThreads = value }, SettingValueText.Threads),
-            Value(media, kind, "Listing buffer", chosen => chosen.ListingBufferKiB, (chosen, value) => chosen with { ListingBufferKiB = value }, SettingValueText.KiB),
-            Value(media, kind, "File table read size", chosen => chosen.TableReadKiB, (chosen, value) => chosen with { TableReadKiB = value }, SettingValueText.KiB),
+            Value(media, kind, "Listing buffer", chosen => chosen.ListingBufferKiB, (chosen, value) => chosen with { ListingBufferKiB = value }, SettingValueText.Kilobytes),
+            Value(media, kind, "File table read size", chosen => chosen.TableReadKiB, (chosen, value) => chosen with { TableReadKiB = value }, SettingValueText.Kilobytes),
             Value(media, kind, "File table reads at once", chosen => chosen.TableReadsInFlight, (chosen, value) => chosen with { TableReadsInFlight = value }, SettingValueText.Reads),
             Value(media, kind, "Attribute list reads at once", chosen => chosen.TableListReadsInFlight, (chosen, value) => chosen with { TableListReadsInFlight = value }, SettingValueText.Reads));
     }

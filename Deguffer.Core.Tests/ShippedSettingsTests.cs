@@ -31,21 +31,64 @@ public sealed class ShippedSettingsTests
     };
 
     /// <summary>
-    /// Preferences other pages set where they are seen, and Explore's remembered places, none of which
-    /// the Settings page shows.
+    /// Every preference the Settings page does not show off its shipped value: what other pages set
+    /// where they are seen, how a map is drawn, and Explore's remembered places.
+    /// <see cref="TheFixtureMovesEveryPreferenceThePageDoesNotShow"/> holds it to that as preferences are added.
     /// </summary>
     private static readonly AppPreferences OffThePage = AppPreferences.Default with
     {
         View = ViewDensity.Compact,
         Explore = ExploreView.Sunburst,
-        StorageOrder = StorageOrder.Name,
-        ShowNotInstalled = true,
+        ExploreColours = ExploreColouring.Age,
+        TreemapScheme = ExploreScheme.Vivid,
+        IcicleScheme = ExploreScheme.Soft,
+        SunburstScheme = ExploreScheme.Vivid,
         ExploreNotesDismissed = true,
+        ExploreOverviewHidden = true,
+        MemoryOverviewHidden = true,
+        ShowNotInstalled = true,
+        StorageOrder = StorageOrder.Name,
+        StartupOrder = Startup.StartupOrder.Name,
+        StartupOrderDirection = Startup.StartupOrderDirection.Descending,
         BackUpInstalledAppEntries = false,
+        WhenCleanComplete = Execution.CompletionAction.Lock,
         Rail = RailChoice.Collapsed,
         MemoryLiveUpdate = false,
+        MapStyle = MapStyle.Default with { Shading = MapShading.Flat },
+        MapPointerLight = MapPointerLight.Default with { Shown = false },
+        MapDetail = MapDetail.Default with { Sizes = false },
+        Duplicates = DuplicatePreferences.Default with { SearchHidden = true },
+        ChosenToScan = ProviderChoice.None with { Ids = ["npm-cache"] },
         Locations = ExploreLocations.None.WithComputer("server.test"),
     };
+
+    /// <summary>The preferences the page shows, by property, which every other test here reads through <see cref="ShippedSettings"/>.</summary>
+    private static readonly string[] PageProperties =
+    [
+        nameof(AppPreferences.Theme), nameof(AppPreferences.BackdropEnabled), nameof(AppPreferences.TreemapSpacing),
+        nameof(AppPreferences.ShowAlreadyClear), nameof(AppPreferences.SpotlightCleanedRow),
+        nameof(AppPreferences.ConfirmBeforeCleaning), nameof(AppPreferences.RequireTypedConfirmation),
+        nameof(AppPreferences.KeepFilesChangedWithinHours), nameof(AppPreferences.MinimumTemporaryFileAgeDays),
+        nameof(AppPreferences.FileHistoryRetentionDays), nameof(AppPreferences.EmptyRecycleBinsDirectly),
+        nameof(AppPreferences.Scanning),
+    ];
+
+    /// <summary>
+    /// The restore test below can only catch a restore that is too wide on a preference this fixture moves,
+    /// so it moves every one the page does not show, a preference added later included.
+    /// </summary>
+    [Fact]
+    public void TheFixtureMovesEveryPreferenceThePageDoesNotShow()
+    {
+        var unmoved = typeof(AppPreferences)
+            .GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+            .Where(property => property.CanWrite && !PageProperties.Contains(property.Name))
+            .Where(property => Equals(property.GetValue(OffThePage), property.GetValue(AppPreferences.Default)))
+            .Select(property => property.Name)
+            .ToList();
+
+        Assert.True(unmoved.Count == 0, $"These preferences are still on their defaults in the fixture: {string.Join(", ", unmoved)}.");
+    }
 
     [Fact]
     public void EverySettingIsOnItsDefaultInAFreshInstall() =>
@@ -80,18 +123,23 @@ public sealed class ShippedSettingsTests
     [Fact]
     public void RestoringAllPutsBackThePageAndLeavesEveryOtherPreference()
     {
-        var mixed = EveryOneChanged with
+        var mixed = OffThePage with
         {
-            View = OffThePage.View,
-            Explore = OffThePage.Explore,
-            StorageOrder = OffThePage.StorageOrder,
-            ShowNotInstalled = OffThePage.ShowNotInstalled,
-            ExploreNotesDismissed = OffThePage.ExploreNotesDismissed,
-            BackUpInstalledAppEntries = OffThePage.BackUpInstalledAppEntries,
-            Rail = OffThePage.Rail,
-            MemoryLiveUpdate = OffThePage.MemoryLiveUpdate,
-            Locations = OffThePage.Locations,
+            Theme = EveryOneChanged.Theme,
+            BackdropEnabled = EveryOneChanged.BackdropEnabled,
+            TreemapSpacing = EveryOneChanged.TreemapSpacing,
+            ShowAlreadyClear = EveryOneChanged.ShowAlreadyClear,
+            SpotlightCleanedRow = EveryOneChanged.SpotlightCleanedRow,
+            ConfirmBeforeCleaning = EveryOneChanged.ConfirmBeforeCleaning,
+            RequireTypedConfirmation = EveryOneChanged.RequireTypedConfirmation,
+            KeepFilesChangedWithinHours = EveryOneChanged.KeepFilesChangedWithinHours,
+            MinimumTemporaryFileAgeDays = EveryOneChanged.MinimumTemporaryFileAgeDays,
+            FileHistoryRetentionDays = EveryOneChanged.FileHistoryRetentionDays,
+            EmptyRecycleBinsDirectly = EveryOneChanged.EmptyRecycleBinsDirectly,
+            Scanning = EveryOneChanged.Scanning,
         };
+
+        Assert.Equal(ShippedSettings.All, ShippedSettings.Changed(mixed));
 
         Assert.Equal(OffThePage, ShippedSettings.RestoreAll(mixed));
     }
@@ -105,7 +153,7 @@ public sealed class ShippedSettingsTests
         Assert.Equal("Default: On", ShippedSettings.ConfirmBeforeCleaning.Statement);
         Assert.Equal("Default: Off", ShippedSettings.RequireTypedConfirmation.Statement);
         Assert.Equal("Default: 0 hours", ShippedSettings.KeepFilesChangedWithinHours.Statement);
-        Assert.Equal("Default: 7 days", ShippedSettings.MinimumTemporaryFileAgeDays.Statement);
+        Assert.Equal("Default: 7 days", ShippedSettings.MinimumTemporaryFileAge.Statement);
         Assert.Equal("Default: 365 days", ShippedSettings.FileHistoryRetentionDays.Statement);
         Assert.Equal("Default: Auto", ShippedSettings.Route.Statement);
         Assert.Equal("Default: Auto", ShippedSettings.ForKind(StorageMedia.Rotational).ListingBufferKiB.Statement);

@@ -32,10 +32,12 @@ public sealed partial class SettingsPage : Page
 
     /// <summary>
     /// The preview follows the stored preferences rather than the box, so it shows what took effect:
-    /// a spacing that could not be saved puts the box back, and the preview with it.
+    /// a spacing that could not be saved puts the box back, and the preview with it. The box follows
+    /// them too, as the map appearance window writes the same spacing while this page is open.
     /// </summary>
     private void OnPreferencesChanged(object? sender, EventArgs e)
     {
+        ViewModel.FollowStoredSpacing();
         ShowSpacing();
 
         // The page's restore and each row's reset follow every write, the scanning section's included,
@@ -99,6 +101,8 @@ public sealed partial class SettingsPage : Page
     public ScanHistorySettingsViewModel History { get; }
 
     public SizeHistorySettingsViewModel Sizes { get; }
+
+    private void OnOpenMapAppearance(object sender, RoutedEventArgs e) => App.ShowMapAppearance();
 
     private void OnRemoveScanSummary(object sender, RoutedEventArgs e)
     {

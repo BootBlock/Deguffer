@@ -128,7 +128,7 @@ public sealed class DiskCleanupStepTests : IDisposable
             new FakeProcessRunner(),
             ParallelEnumerationScanner.Default,
             RefusalRecord.For(new FakeUserEnvironment(_temp.Path)),
-            handlers: handlers);
+            routes: [new DiskCleanupRun(handlers)]);
 
         Directory.CreateDirectory(Download);
         File.WriteAllBytes(Path.Combine(Download, "update.cab"), new byte[16]);
@@ -154,7 +154,7 @@ public sealed class DiskCleanupStepTests : IDisposable
             new FakeProcessRunner(),
             ParallelEnumerationScanner.Default,
             RefusalRecord.For(new FakeUserEnvironment(_temp.Path)),
-            handlers: handlers);
+            routes: [new DiskCleanupRun(handlers)]);
 
         Directory.CreateDirectory(Download);
         File.WriteAllBytes(Path.Combine(Download, "recent.bin"), new byte[16]);
@@ -285,7 +285,7 @@ public sealed class DiskCleanupStepTests : IDisposable
             new FakeProcessRunner(),
             ParallelEnumerationScanner.Default,
             RefusalRecord.For(new FakeUserEnvironment(_temp.Path)),
-            handlers: handlers,
+            routes: [new DiskCleanupRun(handlers)],
             fileSystem: fs);
 
         return await executor.ExecuteAsync(plan, runReach: null, residue: null, activity: null, progress: null, underway: null, ct);

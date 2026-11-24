@@ -9,9 +9,13 @@ namespace Deguffer.Core.Configuration;
 ///
 /// <para>Only the settings on that page. The keep list, the source folders and the emulator folders
 /// are lists the reader built one entry at a time, kept in files of their own, and nothing here
-/// reaches them. Preferences another page sets where they are seen, such as the Storage page's order or
-/// how a map is drawn, are left as they are: a reader restoring the Settings page has not looked at
-/// them. <c>ShippedSettingsMarkupTests</c> holds this list and the page's rows to each other.</para>
+/// reaches them. Preferences another page sets where they are seen, such as the Storage page's order,
+/// are left as they are, because a reader restoring the Settings page has not looked at them. So is how
+/// a map is drawn, which the map appearance window sets and puts back with a restore of its own. Only the
+/// treemap spacing is in both places, and it is on this page.</para>
+///
+/// <para><c>ShippedSettingsMarkupTests</c> holds this list and the page's rows to each other, by the
+/// member name each row's default and control are bound to.</para>
 /// </summary>
 public static class ShippedSettings
 {
@@ -43,7 +47,7 @@ public static class ShippedSettings
         (preferences, value) => preferences with { KeepFilesChangedWithinHours = value },
         SettingValueText.Hours);
 
-    public static readonly SettingDefault MinimumTemporaryFileAgeDays = SettingDefault.Of(
+    public static readonly SettingDefault MinimumTemporaryFileAge = SettingDefault.Of(
         "Only offer temporary files older than",
         null,
         preferences => preferences.MinimumTemporaryFileAgeDays,
@@ -88,7 +92,7 @@ public static class ShippedSettings
         ConfirmBeforeCleaning,
         RequireTypedConfirmation,
         KeepFilesChangedWithinHours,
-        MinimumTemporaryFileAgeDays,
+        MinimumTemporaryFileAge,
         FileHistoryRetentionDays,
         EmptyRecycleBinsDirectly,
         Route,
@@ -98,6 +102,20 @@ public static class ShippedSettings
 
     /// <summary>The five values the page sets for <paramref name="media"/>.</summary>
     public static KindSettingDefaults ForKind(StorageMedia media) => Kinds[ScanTuningText.KindIndex(media)];
+
+    /// <summary>Whether <paramref name="preferences"/> hold any setting on the page off its shipped value.</summary>
+    public static bool AnyChanged(AppPreferences preferences)
+    {
+        foreach (var setting in All)
+        {
+            if (!setting.IsDefault(preferences))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     /// <summary>Each setting <paramref name="preferences"/> hold off its shipped value, in the page's order.</summary>
     public static IReadOnlyList<SettingDefault> Changed(AppPreferences preferences) =>

@@ -26,7 +26,7 @@ public static class ScanTuningText
     ];
 
     /// <summary>Where <paramref name="media"/> stands in <see cref="Kinds"/>.</summary>
-    public static int KindIndex(StorageMedia media) =>
+    internal static int KindIndex(StorageMedia media) =>
         Array.IndexOf(KindOrder, media) is var index and >= 0
             ? index
             : throw new ArgumentOutOfRangeException(nameof(media), media, null);

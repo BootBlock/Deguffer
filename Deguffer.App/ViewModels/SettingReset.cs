@@ -27,16 +27,42 @@ public sealed class SettingReset : ObservableObject
         _preferences = preferences;
         _setting = setting;
         _reset = reset;
+
+        Statement = setting().Statement;
+        CanReset = !setting().IsDefault(preferences.Current);
     }
 
     /// <summary>The default in words, as the row shows it: <c>Default: 7 days</c>.</summary>
-    public string Statement => _setting().Statement;
+    public string Statement { get; private set; }
 
     /// <summary>Whether the stored value is off the default, which is when the row offers its reset.</summary>
-    public bool CanReset => !_setting().IsDefault(_preferences.Current);
+    public bool CanReset { get; private set; }
+
+    /// <summary>The setting the row sets now.</summary>
+    internal SettingDefault Setting => _setting();
 
     public void Reset() => _reset(_setting());
 
-    /// <summary>Read the stored value again, after a write or a change of the setting the row sets.</summary>
-    internal void Refresh() => OnPropertyChanged(string.Empty);
+    /// <summary>
+    /// Read the stored value again, after a write or a change of the setting the row sets, and tell the
+    /// row only what changed: most writes leave most rows as they were.
+    /// </summary>
+    internal void Refresh()
+    {
+        var setting = _setting();
+
+        if (setting.Statement != Statement)
+        {
+            Statement = setting.Statement;
+            OnPropertyChanged(nameof(Statement));
+        }
+
+        var canReset = !setting.IsDefault(_preferences.Current);
+
+        if (canReset != CanReset)
+        {
+            CanReset = canReset;
+            OnPropertyChanged(nameof(CanReset));
+        }
+    }
 }

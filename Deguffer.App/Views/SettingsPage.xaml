@@ -52,23 +52,38 @@
                     </views:SettingsRow.Control>
                 </views:SettingsRow>
 
-                <!-- Indexed against ExploreSpacing. Both pages that draw a treemap read it as they come
-                     back on screen, so it takes effect on the picture already drawn, with no rescan. -->
-                <views:SettingsRow Glyph="&#xE80A;"
-                                   Title="Treemap spacing"
-                                   Description="Room a treemap leaves round each folder and its name. More makes folders easier to tell apart and leaves less for their contents."
+                <!-- Both pages that draw a treemap read the spacing as they come back on screen, so it
+                     takes effect on the picture already drawn, with no rescan. The map appearance
+                     window offers the same setting, so both rows take their words from one place. -->
+                <views:SettingsRow Glyph="{x:Bind views:TreemapSpacingSetting.Glyph}"
+                                   Title="{x:Bind views:TreemapSpacingSetting.Title}"
+                                   Description="{x:Bind views:TreemapSpacingSetting.Description}"
                                    Default="{x:Bind ViewModel.TreemapSpacingDefault}">
                     <views:SettingsRow.Control>
-                        <ComboBox ItemsSource="{x:Bind configuration:SettingValueText.SpacingNames}"
+                        <ComboBox x:Name="TreemapSpacingBox"
+                                  ItemsSource="{x:Bind views:TreemapSpacingSetting.Choices}"
                                   SelectedIndex="{x:Bind ViewModel.TreemapSpacingIndex, Mode=TwoWay}"
                                   MinWidth="150"
-                                  AutomationProperties.Name="Treemap spacing" />
+                                  AutomationProperties.Name="{x:Bind views:TreemapSpacingSetting.Title}" />
                     </views:SettingsRow.Control>
                 </views:SettingsRow>
 
                 <!-- What the spacing above does, drawn as it is chosen, so the reader need not go to Explore
                      to see it. The picture is invented and names no folder on the machine. -->
                 <controls:MapPreview x:Name="SpacingPreview" Height="180" />
+
+                <!-- Every other choice about how the maps look is in a window of its own, which Explore's
+                     toolbar also opens. Offered here because Appearance is where a reader looks for it. -->
+                <views:SettingsRow Glyph="&#xE713;"
+                                   Title="{x:Bind views:MapAppearanceWindow.Name}"
+                                   Description="Colours, shading, lines and names for the maps on Explore and Memory.">
+                    <views:SettingsRow.Control>
+                        <Button x:Name="OpenMapAppearanceButton"
+                                Content="Open"
+                                Click="OnOpenMapAppearance"
+                                AutomationProperties.Name="Open map appearance" />
+                    </views:SettingsRow.Control>
+                </views:SettingsRow>
 
                 <!-- A clear location offers no decision, so it is hidden by default. Presentation only:
                      every location is still scanned. Its explanation names the rows it never hides,

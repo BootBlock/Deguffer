@@ -77,17 +77,13 @@ public sealed class RunReach(
     {
         ArgumentNullException.ThrowIfNull(plans);
 
-        var commands = plans.SelectMany(plan => plan.Steps.OfType<RunCommandStep>()).ToList();
+        // Each step states its own reach, so a new kind of step changes nothing here.
+        IReadOnlyList<CleanupStep> steps = [.. plans.SelectMany(plan => plan.Steps)];
 
-        // A profile Windows removes is a folder the run destroys, though Deguffer never names it to a
-        // deletion: a protected path inside it that disappears is the run's to answer for.
         return new RunReach(
-            [
-                .. plans.SelectMany(plan => plan.TargetedPaths),
-                .. plans.SelectMany(plan => plan.Steps.OfType<RemoveProfileStep>()).Select(step => step.Folder),
-            ],
-            [.. commands.SelectMany(command => command.MeasuredPaths)],
-            Unbounded: commands.Count > 0 || plans.Any(plan => plan.Steps.OfType<DiskCleanupStep>().Any()));
+            [.. steps.SelectMany(step => step.RunTargets)],
+            [.. steps.SelectMany(step => step.ProbedPaths)],
+            Unbounded: steps.Any(step => step.ReachUnstated));
     }
 
     /// <summary>
