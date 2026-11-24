@@ -459,48 +459,19 @@
                 </StackPanel>
 
                 <!-- §5.6's verdict on the run those two figures describe, and it stays as long
-                     as they do. The info bar below cannot hold it: a clean re-plans the list
-                     immediately afterwards, and every provider that scan checks reports a line
-                     of its own into that bar. A verdict there is gone before it is read.
+                     as they do. See SafetyCheckView for why the info bar below cannot hold it.
 
                      The gap above it is this element's margin rather than the grid's
                      RowSpacing, because row spacing is a property of the rows: it stands
                      whether or not anything is in them, and before the first clean of a session
                      that is empty space under the capacity bar. -->
-                <StackPanel x:Name="RunVerdictPanel"
-                            Grid.Row="1"
-                            Grid.Column="0"
-                            Grid.ColumnSpan="2"
-                            Margin="{StaticResource RegionGapAbove}"
-                            Spacing="{StaticResource ControlGap}"
-                            Visibility="{x:Bind ViewModel.HasRunResult, Mode=OneWay}">
-
-                    <TextBlock Text="{x:Bind ViewModel.RunStatement, Mode=OneWay}"
-                               Style="{x:Bind ViewModel.RunVerificationFailed, Mode=OneWay, Converter={StaticResource RunStatementStyle}}" />
-
-                    <!-- What the sentence above is about, named. When it asks the user to report
-                         a protected path that did not survive, this is the only thing on the
-                         screen that says which path, why it was protected, and what was found
-                         in its place — and a request to report a fault with no way to state it
-                         is a dead end. -->
-                    <views:VerificationCheckList Checks="{x:Bind ViewModel.RunVerificationNotes}"
-                                                Visibility="{x:Bind ViewModel.HasRunVerificationNotes, Mode=OneWay}" />
-
-                    <!-- The run written out for a GitHub issue. The sentence above can ask the
-                         user to report a fault, and copying the paths above by hand loses which
-                         row each belonged to, what each step did and the build it came from. -->
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <HyperlinkButton x:Name="CopyRunDiagnosticsLink"
-                                         Content="Copy diagnostic information"
-                                         Padding="0"
-                                         AutomationProperties.HelpText="Copies a report of this clean to the clipboard, with your user folder hidden, to paste into a GitHub issue."
-                                         Click="OnCopyRunDiagnostics" />
-                        <TextBlock x:Name="CopyRunDiagnosticsResult"
-                                   VerticalAlignment="Center"
-                                   Style="{StaticResource SecondaryText}"
-                                   AutomationProperties.LiveSetting="Polite" />
-                    </StackPanel>
-                </StackPanel>
+                <views:SafetyCheckView x:Name="RunVerdictPanel"
+                                       Grid.Row="1"
+                                       Grid.Column="0"
+                                       Grid.ColumnSpan="2"
+                                       Margin="{StaticResource RegionGapAbove}"
+                                       Report="{x:Bind ViewModel.SafetyCheck}"
+                                       Visibility="{x:Bind ViewModel.HasRunResult, Mode=OneWay}" />
 
                 <!-- Windows' own retrim, offered where a clean freed a lot on a thin, virtual or
                      solid-state drive, whose storage learns the space is free only when Windows
