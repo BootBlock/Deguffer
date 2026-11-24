@@ -4,13 +4,13 @@ using Microsoft.UI.Xaml.Data;
 namespace Deguffer.App.Converters;
 
 /// <summary>
-/// How the run-result card states its §5.6 verdict: in the critical colour when a protected path
-/// went missing where this run could have taken it, and quiet otherwise.
+/// How the Memory page states what a close did: in the critical colour when its §5.6 check failed,
+/// and quiet otherwise. A clean's verdict has a heading and a glyph of its own
+/// (<see cref="SafetyCheckHeadingStyleConverter"/>).
 ///
-/// Quiet covers every other verdict, and deliberately. A path something else removed while the
-/// preview sat on screen, and a path Windows would not describe after the run, are facts the card
-/// states in words and lists underneath, and neither is a fault to report — colouring them as one
-/// would spend the critical colour on ordinary events and leave nothing to mark the real thing with.
+/// Quiet covers every other outcome, and deliberately. A process that exited on its own is a fact the
+/// report states in words and lists underneath, and not a fault to report. Colouring it as one would
+/// spend the critical colour on ordinary events and leave nothing to mark the real thing with.
 ///
 /// A <see cref="Style"/> rather than a brush, for the reason <see cref="TierChipStyleConverter"/>
 /// gives — resolving <c>Application.Current.Resources[key]</c> in C# snapshots the theme in force at

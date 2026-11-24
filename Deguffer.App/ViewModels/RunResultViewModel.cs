@@ -7,12 +7,14 @@ using Deguffer.Core.Viewing;
 namespace Deguffer.App.ViewModels;
 
 /// <summary>
-/// What the Storage page's result card states about the last clean, for as long as its figures stand.
+/// What the Storage page's result card states about the last clean beside its §5.6 verdict, for as long
+/// as its figures stand.
 ///
-/// <para>Every decision is Core's: <see cref="RunFigures"/> for the figures, <see cref="RunOutcome"/>
-/// for the verdict and whether it needs attention, <see cref="RunRows"/> for the line each location
-/// gets, and <see cref="FreeSpaceMove"/> for the free space either side of the run. This type holds
-/// what they said, so the page can bind to it, and forgets it when the next run begins.</para>
+/// <para>Every decision is Core's: <see cref="RunFigures"/> for the figures, <see cref="RunRows"/> for
+/// the line each location gets, <see cref="RunOutcome.NeedsReporting"/> for whether those lines open
+/// on their own, and <see cref="FreeSpaceMove"/> for the free space either side of the run. This type
+/// holds what they said, so the page can bind to it, and forgets it when the next run begins. The
+/// verdict itself is <see cref="SafetyCheckViewModel"/>'s.</para>
 /// </summary>
 public sealed partial class RunResultViewModel : ObservableObject
 {
@@ -58,31 +60,6 @@ public sealed partial class RunResultViewModel : ObservableObject
 
     public bool HasFreeSpaceMove => !string.IsNullOrEmpty(FreeSpaceMoveText);
 
-    /// <summary>
-    /// The run's own §5.6 verdict, the heading over its rows.
-    ///
-    /// <para>The info bar cannot be its home. The bar describes whatever happened most recently, and
-    /// what happens immediately after a clean is the re-plan that follows it, so a verdict left there
-    /// is displaced by the next provider's progress line.</para>
-    /// </summary>
-    [ObservableProperty]
-    public partial string Statement { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Whether that verdict is a failure, so the card can say so in more than words. The words carry
-    /// it on their own (§6.5).
-    /// </summary>
-    [ObservableProperty]
-    public partial bool VerificationFailed { get; set; }
-
-    /// <summary>
-    /// Every §5.6 check the run has something to answer for, in full. A request to report a fault that
-    /// does not say which path, why it was protected and what was found is a dead end.
-    /// </summary>
-    public ObservableCollection<VerificationCheck> Checks { get; } = [];
-
-    public bool HasChecks => Checks.Count > 0;
-
     /// <summary>A line for each location the run cleaned. See <see cref="RunRow"/>.</summary>
     public ObservableCollection<RunRow> Rows { get; } = [];
 
@@ -106,22 +83,17 @@ public sealed partial class RunResultViewModel : ObservableObject
     [ObservableProperty]
     public partial bool IsDetailsOpen { get; set; }
 
-    /// <summary>
-    /// The run written out for a GitHub issue, which the card's link copies. Empty where no run's
-    /// figures are on screen. See <see cref="Core.Diagnostics.CleanRunReport"/>.
-    /// </summary>
-    public string Diagnostics { get; private set; } = string.Empty;
-
     /// <summary>Whether a run's result is on screen.</summary>
     public bool IsShown => !string.IsNullOrEmpty(RemovedLabel);
 
-    /// <summary>State a finished run, with the free space read before it and as it stands now.</summary>
-    public void Show(IReadOnlyList<CleanupResult> results, RunOutcome outcome, long? freeBefore, long? freeNow, string diagnostics)
+    /// <summary>
+    /// State a finished run: its figures, the line each location gets, whether the lines open on their
+    /// own, and the free space read before it and as it stands now.
+    /// </summary>
+    public void Show(RunFigures figures, RunRows rows, bool opensDetails, long? freeBefore, long? freeNow)
     {
-        ArgumentNullException.ThrowIfNull(outcome);
-
-        var figures = RunFigures.For(results);
-        var rows = RunRows.For(results);
+        ArgumentNullException.ThrowIfNull(figures);
+        ArgumentNullException.ThrowIfNull(rows);
 
         RequestedLabel = figures.Requested > 0 ? FreeSpace.Format(figures.Requested) : string.Empty;
         ScheduledLabel = figures.Scheduled > 0 ? FreeSpace.Format(figures.Scheduled) : string.Empty;
@@ -129,15 +101,9 @@ public sealed partial class RunResultViewModel : ObservableObject
         _freeBefore = freeBefore;
         Track(freeNow);
 
-        Statement = outcome.Statement;
-        VerificationFailed = outcome.VerificationFailed;
-        IsDetailsOpen = outcome.NeedsReporting;
-        Diagnostics = diagnostics;
+        IsDetailsOpen = opensDetails;
 
-        // Filled where they stand, so the page's bindings keep the collections they were given.
-        LiveList.Rewrite(Checks, figures.Checks);
-        OnPropertyChanged(nameof(HasChecks));
-
+        // Filled where it stands, so the page's binding keeps the collection it was given.
         LiveList.Rewrite(Rows, rows.Rows);
         RowsHeading = rows.Heading;
         RowsNote = rows.Note;
@@ -163,12 +129,7 @@ public sealed partial class RunResultViewModel : ObservableObject
         ScheduledLabel = string.Empty;
         _freeBefore = null;
         FreeSpaceMoveText = string.Empty;
-        Statement = string.Empty;
-        VerificationFailed = false;
         IsDetailsOpen = false;
-        Diagnostics = string.Empty;
-        Checks.Clear();
-        OnPropertyChanged(nameof(HasChecks));
         Rows.Clear();
         RowsHeading = string.Empty;
         RowsNote = string.Empty;

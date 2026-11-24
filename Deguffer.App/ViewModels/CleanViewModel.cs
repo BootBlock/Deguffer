@@ -444,7 +444,13 @@ public sealed partial class CleanViewModel : ObservableObject
     /// <summary>What that button says. See <see cref="ElevationOffer.Label"/>.</summary>
     public string ElevateLabel => ElevationOffer.Label(HasPreview);
 
-    /// <summary>What the result card states about the last clean, for as long as its figures stand.</summary>
+    /// <summary>The run's own §5.6 verdict, beside its figures, for as long as those figures stand.</summary>
+    public SafetyCheckViewModel SafetyCheck { get; } = new();
+
+    /// <summary>
+    /// The last clean's figures, the free space either side of it, and the line each location gets,
+    /// for as long as they stand.
+    /// </summary>
     public RunResultViewModel RunResult { get; } = new();
 
     public string FreeSpaceNowLabel => FreeSpaceNow is { } value ? FreeSpace.Format(value) : "—";
@@ -584,8 +590,8 @@ public sealed partial class CleanViewModel : ObservableObject
             // A previous run's figures and its §5.6 verdict describe a machine state this run is
             // about to replace, exactly as a preview's do. Cleared here rather than when the new ones
             // arrive, because a run that fails, or is cancelled while its confirmations are
-            // collected, never reaches RecordRunResult: leaving the old verdict up would stand "All
-            // protected paths survived" over a deletion nobody verified, which is the inversion §5.6
+            // collected, never reaches RecordRunResult: leaving the old verdict up would stand "Safety
+            // check passed" over a deletion nobody verified, which is the inversion §5.6
             // exists to prevent. After the confirmation above, so declining still leaves the screen
             // exactly as it was.
             ClearRunResult();
@@ -1035,12 +1041,18 @@ public sealed partial class CleanViewModel : ObservableObject
 
     /// <summary>
     /// §5.6 is reported, not just performed, so the run's verdict goes somewhere that outlives the
-    /// run: the result card, beside the figures it carries and over the line each location gets.
+    /// run: the result card, beside the two figures it already carries.
     /// </summary>
     private RunOutcome RecordRunResult(IReadOnlyList<CleanupResult> results, long? freeBefore)
     {
+        var figures = RunFigures.For(results);
         var outcome = RunOutcome.For(results);
-        RunResult.Show(results, outcome, freeBefore, FreeSpaceOfProfile(), CleanRunReport.Describe(results, _origin, _environment));
+
+        SafetyCheck.Show(outcome, figures.Checks, CleanRunReport.Describe(results, _origin, _environment));
+
+        // Last, because it is what brings the card in, and the verdict above is part of what it brings.
+        RunResult.Show(figures, RunRows.For(results), outcome.NeedsReporting, freeBefore, FreeSpaceOfProfile());
+
         return outcome;
     }
 
@@ -1132,6 +1144,7 @@ public sealed partial class CleanViewModel : ObservableObject
     private void ClearRunResult()
     {
         Retrim.Clear();
+        SafetyCheck.Clear();
         RunResult.Clear();
     }
 

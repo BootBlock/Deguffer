@@ -62,7 +62,7 @@ public sealed class WhenCleanCompleteTests
     [InlineData(RunVerdict.RemovedFromOutside)]
     public void FollowsACleanThatRanToTheEnd(RunVerdict verdict)
     {
-        Assert.True(WhenCleanComplete.Follows(CompletionAction.ShutDown, new RunOutcome("Cleaned.", verdict, Cancelled: false), cancelPressed: false));
+        Assert.True(WhenCleanComplete.Follows(CompletionAction.ShutDown, new RunOutcome(verdict, "Cleaned.", "Checked 1 item that had to survive.", Cancelled: false), cancelPressed: false));
     }
 
     /// <summary>The one sentence on the screen that must be read before the next run.</summary>
@@ -71,7 +71,7 @@ public sealed class WhenCleanCompleteTests
     {
         Assert.False(WhenCleanComplete.Follows(
             CompletionAction.ShutDown,
-            new RunOutcome("Cleaned, but verification failed.", RunVerdict.VerificationFailed, Cancelled: false),
+            new RunOutcome(RunVerdict.VerificationFailed, "Cleaned, but verification failed.", "Checked 1 item that had to survive.", Cancelled: false),
             cancelPressed: false));
     }
 
@@ -81,7 +81,7 @@ public sealed class WhenCleanCompleteTests
     {
         Assert.False(WhenCleanComplete.Follows(
             CompletionAction.ShutDown,
-            new RunOutcome("Clean cancelled part-way.", RunVerdict.AllSurvived, Cancelled: true),
+            new RunOutcome(RunVerdict.AllSurvived, "Clean cancelled part-way.", "Checked 1 item that had to survive.", Cancelled: true),
             cancelPressed: true));
     }
 
@@ -94,7 +94,7 @@ public sealed class WhenCleanCompleteTests
     {
         Assert.False(WhenCleanComplete.Follows(
             CompletionAction.ShutDown,
-            new RunOutcome("All protected paths survived.", RunVerdict.AllSurvived, Cancelled: false),
+            new RunOutcome(RunVerdict.AllSurvived, "", "Checked 1 item that had to survive.", Cancelled: false),
             cancelPressed: true));
     }
 
@@ -103,7 +103,7 @@ public sealed class WhenCleanCompleteTests
     {
         Assert.False(WhenCleanComplete.Follows(
             CompletionAction.Nothing,
-            new RunOutcome("All protected paths survived.", RunVerdict.AllSurvived, Cancelled: false),
+            new RunOutcome(RunVerdict.AllSurvived, "", "Checked 1 item that had to survive.", Cancelled: false),
             cancelPressed: false));
     }
 

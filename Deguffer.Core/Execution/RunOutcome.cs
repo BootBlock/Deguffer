@@ -28,10 +28,10 @@ public enum RunVerdict
 /// <summary>
 /// What a finished clean says about itself: the §5.6 verdict.
 ///
-/// <para>One sentence, derived once, because it has to appear in two places. The Storage page keeps
-/// it beside the run's figures for as long as those figures stand, and states it in the info bar as
-/// well whenever there is something to answer for. Formatting it at each of those surfaces is how
-/// the two came to disagree about the same run.</para>
+/// <para>Derived once, because it has to appear in two places. The Storage page keeps it beside the
+/// run's figures for as long as those figures stand, as a heading, its evidence and the detail, and
+/// states it in the info bar as one <see cref="Statement"/> whenever there is something to answer for.
+/// Formatting it at each of those surfaces is how the two came to disagree about the same run.</para>
 ///
 /// <para>Here rather than in the view-model for the reason <see cref="PreviewSummary"/> is: §5.6 is
 /// reported, not just performed, so the words that report it are worth being able to hold to a
@@ -42,17 +42,53 @@ public enum RunVerdict
 /// able to contradict it.</para>
 ///
 /// <para>Nor does it say what the run left behind. That belongs to the location that left it, and
-/// <see cref="RunRows"/> lists it a line per location under this sentence: one paragraph for the run
+/// <see cref="RunRows"/> lists it a line per location under this verdict: one paragraph for the run
 /// can name neither the row nor what to do about it.</para>
 /// </summary>
-/// <param name="Statement">The sentence, always non-empty: a run that verified cleanly still says so.</param>
 /// <param name="Verdict">Which of the things above happened.</param>
+/// <param name="Detail">
+/// What the run did, after the verdict in <see cref="Heading"/>: which providers have something to
+/// answer for, and that a cancel stopped the run part-way. Empty for a run that finished and verified
+/// cleanly, because the heading has then said everything.
+/// </param>
+/// <param name="Evidence">How many protected subjects the check covered. See <see cref="EvidenceFor"/>.</param>
 /// <param name="Cancelled">
 /// Whether the user cancelled the run before it finished. The verdict still stands: it covers every
 /// plan, the ones never started included. See <see cref="CleanupPlanner.ExecuteAsync"/>.
 /// </param>
-public sealed record RunOutcome(string Statement, RunVerdict Verdict, bool Cancelled)
+public sealed record RunOutcome(RunVerdict Verdict, string Detail, string Evidence, bool Cancelled)
 {
+    /// <summary>
+    /// What the safety check looks at, in words for someone who came to free space rather than to
+    /// learn the tier model: the tooltip and help text behind <see cref="Heading"/>. "Protected path"
+    /// means nothing to that reader, and a verdict whose subject is unexplained cannot be trusted or
+    /// doubted, only ignored.
+    /// </summary>
+    public const string WhatIsChecked =
+        "After every clean, Deguffer checks that it left alone what it was told to: each tool's own "
+        + "folder, folders it does not recognise, and anything kept, by you or by its own rules.";
+
+    /// <summary>
+    /// The verdict as one plain sentence, the line the card leads with. It opens by saying whether
+    /// the check passed, so the outcome reads before its explanation, and the shell sets a glyph
+    /// beside it that says the same, because colour alone is not a cue (§6.5).
+    ///
+    /// <para>The two verdicts that are not an alarm say "incomplete" rather than "passed" or
+    /// "failed": nothing proves the paths survived, which is what <see cref="VerificationResult.Passed"/>
+    /// also says of them, and nothing shows this run took one.</para>
+    /// </summary>
+    public string Heading => HeadingFor(Verdict);
+
+    /// <summary>The heading, then the detail: the whole account in one line, for the info bar and a report.</summary>
+    public string Statement => Detail.Length == 0 ? Heading : $"{Heading} {Detail}";
+
+    /// <summary>
+    /// Whether the check passed outright, which is the one verdict that asks nothing of the reader. A
+    /// page keeps what serves a fault report, such as the copy of the run's diagnostics, out of the
+    /// way of a pass, where offering it suggests something went wrong.
+    /// </summary>
+    public bool Passed => Verdict == RunVerdict.AllSurvived;
+
     /// <summary>
     /// Whether a rule was over-broad. The headline, and the only verdict that is an alarm: the user
     /// needs to know before the next run.
@@ -65,9 +101,6 @@ public sealed record RunOutcome(string Statement, RunVerdict Verdict, bool Cance
     /// run's figures describe a machine that moved underneath them, and one names paths nobody could
     /// check, which the fresh preview's totals would not mention. A cancelled run does too, because
     /// the totals would not say that the clean stopped part-way.
-    ///
-    /// <para>The Storage page opens the run's details for the same reasons, so the paths behind the
-    /// sentence and the rows a cancel cut short are in view without a click.</para>
     /// </summary>
     public bool NeedsReporting => Verdict != RunVerdict.AllSurvived || Cancelled;
 
@@ -76,6 +109,7 @@ public sealed record RunOutcome(string Statement, RunVerdict Verdict, bool Cance
         ArgumentNullException.ThrowIfNull(results);
 
         var cancelled = results.Any(r => r.Interrupted);
+        var evidence = EvidenceFor(results);
 
         // What the run did, before what §5.6 found. A cancelled run says so first, because every
         // figure beside the sentence is smaller than the preview promised for that reason.
@@ -88,10 +122,11 @@ public sealed record RunOutcome(string Statement, RunVerdict Verdict, bool Cance
             // A failed run says one thing, so nothing else buries the only sentence on the screen that
             // is an alarm.
             return new RunOutcome(
+                RunVerdict.VerificationFailed,
                 (cancelled ? "Clean cancelled part-way, and" : "Cleaned, but")
                 + $" verification failed for {Names(failed)}. "
                 + "A protected path did not survive — please report this.",
-                RunVerdict.VerificationFailed,
+                evidence,
                 cancelled);
         }
 
@@ -116,23 +151,73 @@ public sealed record RunOutcome(string Statement, RunVerdict Verdict, bool Cance
                 + "nothing in this run took them");
 
             return new RunOutcome(
+                RunVerdict.RemovedFromOutside,
                 $"{did} {went}. Scan again to see the machine as it is now."
                 + NotChecked(results),
-                RunVerdict.RemovedFromOutside,
+                evidence,
                 cancelled);
         }
 
         if (results.Any(r => r.Verification is { Unverified.Count: > 0 }))
         {
-            return new RunOutcome(did + NotChecked(results), RunVerdict.Unverified, cancelled);
+            return new RunOutcome(
+                RunVerdict.Unverified, did + NotChecked(results), evidence, cancelled);
         }
 
+        // "Cleaned." is left off a pass: the heading has already said the run finished well, and a
+        // detail of one word under it would only repeat that.
         return new RunOutcome(
-            (cancelled
-                ? "Clean cancelled part-way. Anything already removed stays removed, and all protected paths survived."
-                : "All protected paths survived."),
             RunVerdict.AllSurvived,
+            cancelled ? "Clean cancelled part-way. Anything already removed stays removed." : string.Empty,
+            evidence,
             cancelled);
+    }
+
+    /// <summary>
+    /// The heading for each verdict. Every verdict has a sentence of its own, and an unnamed value
+    /// throws rather than falling to the pass, so a verdict added later cannot read as one by default.
+    /// </summary>
+    public static string HeadingFor(RunVerdict verdict) =>
+        verdict switch
+        {
+            RunVerdict.AllSurvived =>
+                "Safety check passed: everything Deguffer was told to leave alone is still there.",
+            RunVerdict.Unverified =>
+                "Safety check incomplete: Windows would not let Deguffer check everything it was told to leave alone.",
+            RunVerdict.RemovedFromOutside =>
+                "Safety check incomplete: something other than this clean removed part of what Deguffer was told to leave alone.",
+
+            // "Reached" rather than "removed", because a path emptied or gone into is this verdict
+            // as well as one deleted. See VerificationResult.Failures.
+            RunVerdict.VerificationFailed =>
+                "Safety check failed: this clean reached something Deguffer was told to leave alone.",
+            _ => throw new ArgumentOutOfRangeException(nameof(verdict), verdict, null),
+        };
+
+    /// <summary>
+    /// The count behind the verdict: how many protected subjects had to survive, and of those how
+    /// many the check could look at.
+    ///
+    /// <para>A subject that was not there when the plan was made is left out, because it had nothing
+    /// to survive, and counting it would claim more was protected than was. One Windows would not
+    /// describe is counted as having to survive and not as checked, so the figure never says more
+    /// was looked at than was.</para>
+    /// </summary>
+    private static string EvidenceFor(IReadOnlyList<CleanupResult> results)
+    {
+        var required = results.Sum(r => r.Verification?.MustSurvive.Count ?? 0);
+        var undescribed = results.Sum(r => r.Verification?.Unverified.Count ?? 0);
+
+        if (required == 0)
+        {
+            return "Nothing Deguffer was told to leave alone was there to check.";
+        }
+
+        var items = Counted.Of(required, "item", "items");
+
+        return undescribed == 0
+            ? $"Checked {items} that had to survive."
+            : $"Checked {required - undescribed:N0} of {items} that had to survive.";
     }
 
     /// <summary>
