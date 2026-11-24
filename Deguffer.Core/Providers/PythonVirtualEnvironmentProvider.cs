@@ -82,7 +82,7 @@ public sealed class PythonVirtualEnvironmentProvider : BuildDirectoryProvider
         Recommendation = "One caveat comes with it: recreating the environment means running the "
             + "install again, and a hand-maintained requirements file may not list everything that "
             + "was in it. Deguffer offers one only where a dependency manifest sits beside the "
-            + "project, and only inside the folders listed under Settings, Source folders. "
+            + "project, and only inside the folders listed under Settings, Where Deguffer looks. "
             + AiEnvironmentsLiveElsewhere,
     };
 

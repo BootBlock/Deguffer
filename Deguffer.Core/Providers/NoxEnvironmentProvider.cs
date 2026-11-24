@@ -67,7 +67,7 @@ public sealed class NoxEnvironmentProvider : BuildDirectoryProvider
             + "environment for every session it runs.",
         Recommendation = "Getting one back means installing every environment again. Deguffer offers "
             + "one only where the cache tag and .gitignore nox writes are inside it and a noxfile.py "
-            + "sits beside it, and only inside the folders listed under Settings, Source folders.",
+            + "sits beside it, and only inside the folders listed under Settings, Where Deguffer looks.",
     };
 
     protected override string Subject => "a nox environment folder";

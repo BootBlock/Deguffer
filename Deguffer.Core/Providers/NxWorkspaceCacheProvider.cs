@@ -93,7 +93,7 @@ public sealed class NxWorkspaceCacheProvider : CleanupProviderBase
         Recommendation = "Deguffer offers one only beside a workspace's nx.json, only where Nx made its "
             + "terminalOutputs folder inside it and the version of Nx that reads its index runs a task "
             + "again when its entry is missing, and only inside the folders listed under Settings, "
-            + "Source folders.",
+            + "Where Deguffer looks.",
     };
 
     /// <summary>The roots the user approved. Empty means this provider does nothing.</summary>

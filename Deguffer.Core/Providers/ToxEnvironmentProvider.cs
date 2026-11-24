@@ -68,7 +68,7 @@ public sealed class ToxEnvironmentProvider : BuildDirectoryProvider
             + "for every interpreter and configuration the project tests against.",
         Recommendation = "Getting one back means installing every environment again. Deguffer offers "
             + "one only where tox's own cache tag is inside it and a tox configuration sits beside "
-            + "it, and only inside the folders listed under Settings, Source folders.",
+            + "it, and only inside the folders listed under Settings, Where Deguffer looks.",
     };
 
     protected override string Subject => "a tox work folder";

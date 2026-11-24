@@ -18,7 +18,6 @@ public sealed class DesignMarkupLengthTests
         ["Deguffer.App/Views/CleanPage.xaml"] = 802,
         ["Deguffer.App/Views/DuplicatesPage.xaml"] = 627,
         ["Deguffer.App/Views/ExplorePage.xaml"] = 1435,
-        ["Deguffer.App/Views/SettingsPage.xaml"] = 649,
     };
 
     [Fact]

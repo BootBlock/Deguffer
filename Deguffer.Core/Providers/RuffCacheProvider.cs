@@ -68,7 +68,7 @@ public sealed class RuffCacheProvider : BuildDirectoryProvider
             + "for every file so the next run reads only what changed.",
         Recommendation = "Deguffer offers one only where ruff's own cache tag and the .gitignore it "
             + "writes are inside it and a file ruff reads its settings from sits beside it, and only "
-            + "inside the folders listed under Settings, Source folders.",
+            + "inside the folders listed under Settings, Where Deguffer looks.",
     };
 
     protected override string Subject => "a ruff cache";

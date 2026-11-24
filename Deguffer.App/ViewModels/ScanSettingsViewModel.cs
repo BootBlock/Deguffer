@@ -51,6 +51,15 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
 
     public IReadOnlyList<string> KindNames { get; } = (string[])[.. Kinds.Select(ScanTuningText.MediaName)];
 
+    /// <summary>The route picker's items, indexed as <see cref="RouteIndex"/> is.</summary>
+    public IReadOnlyList<string> RouteNames => ScanTuningText.RouteNames;
+
+    /// <summary>
+    /// The section in one line, on the header that folds it away: the route, and how many values are
+    /// set rather than left on Auto.
+    /// </summary>
+    public string Summary => ScanTuningText.Summary(Scanning);
+
     /// <summary>Index into the route combo box, ordered to match <see cref="ScanRoute"/>.</summary>
     public int RouteIndex
     {
@@ -226,6 +235,7 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
 
         if (!SaveFailed)
         {
+            OnPropertyChanged(nameof(Summary));
             DescribeDrives();
         }
     }

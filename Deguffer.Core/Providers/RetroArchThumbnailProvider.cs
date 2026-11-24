@@ -75,7 +75,7 @@ public sealed class RetroArchThumbnailProvider : RetroArchProviderBase
             + "your own.",
         Recommendation = "Remove a system's thumbnails only if you added no pictures of your own to it, "
             + "because nothing tells yours apart from downloaded ones. Deguffer finds RetroArch where "
-            + "Steam installed it. For any other copy, add its folder under Emulator folders in Settings.",
+            + "Steam installed it. For any other copy, add its folder under Where Deguffer looks in Settings.",
     };
 
     private protected override string Taken => "thumbnails";

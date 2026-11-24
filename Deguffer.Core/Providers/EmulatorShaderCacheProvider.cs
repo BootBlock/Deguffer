@@ -111,7 +111,7 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
         Recommendation = "Remove these for a game you have finished with, or after a driver or emulator "
             + "update has made them stale. Deguffer finds each emulator where it keeps its data by "
             + "default. For a portable install, and for every RPCS3 and Vita3K install, add its folder under "
-            + "Emulator folders in Settings.",
+            + "Where Deguffer looks in Settings.",
     };
 
     public override void InvalidateCaches()

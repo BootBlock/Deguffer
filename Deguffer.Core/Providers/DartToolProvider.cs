@@ -96,7 +96,7 @@ public sealed class DartToolProvider : BuildDirectoryProvider
             + "between runs.",
         Recommendation = "Deguffer offers one only where pub's own package configuration is inside "
             + "it, the pubspec.yaml and pubspec.lock sit beside it, and git tracks nothing inside "
-            + "it, and only inside the folders listed under Settings, Source folders.",
+            + "it, and only inside the folders listed under Settings, Where Deguffer looks.",
     };
 
     protected override string Subject => "a Dart tool folder";
