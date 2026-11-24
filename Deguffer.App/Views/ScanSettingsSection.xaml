@@ -14,6 +14,7 @@
     x:Class="Deguffer.App.Views.ScanSettingsSection"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:text="using:Deguffer.Core.Text"
     xmlns:views="using:Deguffer.App.Views"
     xmlns:viewModels="using:Deguffer.App.ViewModels">
 
@@ -67,7 +68,8 @@
 
             <views:SettingsRow Glyph="&#xE950;"
                                Title="File table parse threads"
-                               Description="Threads that turn a file table into folders and sizes, on every kind of drive. Administrator only. Empty the box for Auto.">
+                               Description="Threads that turn a file table into folders and sizes, on every kind of drive. Administrator only. Empty the box for Auto."
+                               Unit="{x:Bind text:SettingUnit.Threads(Scanning.TableParseThreads, Scanning.AutoTableParseThreadsCount), Mode=OneWay}">
                 <views:SettingsRow.Control>
                     <NumberBox x:Name="TableParseThreadsBox"
                                Value="{x:Bind Scanning.TableParseThreads, Mode=TwoWay}"
@@ -79,7 +81,6 @@
                                SpinButtonPlacementMode="Compact"
                                ValidationMode="InvalidInputOverwritten"
                                MinWidth="150"
-                               Header="Threads"
                                ToolTipService.ToolTip="Auto uses one thread per processor, up to four, which was as fast as more where it was measured."
                                AutomationProperties.Name="File table parse threads" />
                 </views:SettingsRow.Control>
@@ -103,7 +104,8 @@
                     <StackPanel x:Name="KindValues" Spacing="{StaticResource ControlGap}" Margin="{StaticResource NestedRowIndent}">
                         <views:SettingsRow Glyph="&#xE8B7;"
                                            Title="Folders read at once"
-                                           Description="How many folders a walk reads at the same time on this kind of drive. Empty the box to go back to Auto.">
+                                           Description="How many folders a walk reads at the same time on this kind of drive. Empty the box to go back to Auto."
+                                           Unit="{x:Bind text:SettingUnit.Threads(Scanning.WalkThreads, Scanning.AutoWalkThreadsCount), Mode=OneWay}">
                             <views:SettingsRow.Control>
                                 <NumberBox x:Name="WalkThreadsBox"
                                            Value="{x:Bind Scanning.WalkThreads, Mode=TwoWay}"
@@ -115,7 +117,6 @@
                                            SpinButtonPlacementMode="Compact"
                                            ValidationMode="InvalidInputOverwritten"
                                            MinWidth="150"
-                                           Header="Threads"
                                            ToolTipService.ToolTip="Auto uses the number measured as fastest for this kind of drive, or the number scans have always used where this kind has not been measured."
                                            AutomationProperties.Name="Folders read at once" />
                             </views:SettingsRow.Control>
@@ -124,7 +125,8 @@
                         <views:SettingsRow Glyph="&#xE8FD;"
                                            Title="Listing buffer"
                                            Description="How much of a folder's listing Windows hands over in each call on this kind of drive. Empty the box for Auto."
-                                           Details="A larger buffer means fewer calls, and each call costs the whole buffer however few entries the folder holds.">
+                                           Details="A larger buffer means fewer calls, and each call costs the whole buffer however few entries the folder holds."
+                                           Unit="KB">
                             <views:SettingsRow.Control>
                                 <NumberBox x:Name="ListingBufferBox"
                                            Value="{x:Bind Scanning.ListingBufferKiB, Mode=TwoWay}"
@@ -136,7 +138,6 @@
                                            SpinButtonPlacementMode="Compact"
                                            ValidationMode="InvalidInputOverwritten"
                                            MinWidth="150"
-                                           Header="KB"
                                            ToolTipService.ToolTip="Auto uses the size measured as fastest for this kind of drive, or the size scans have always used where this kind has not been measured."
                                            AutomationProperties.Name="Listing buffer in KB" />
                             </views:SettingsRow.Control>
@@ -144,7 +145,8 @@
 
                         <views:SettingsRow Glyph="&#xE9F5;"
                                            Title="File table read size"
-                                           Description="How much of a volume's file table each read asks for on this kind of drive. Administrator only. Empty the box for Auto.">
+                                           Description="How much of a volume's file table each read asks for on this kind of drive. Administrator only. Empty the box for Auto."
+                                           Unit="KB">
                             <views:SettingsRow.Control>
                                 <NumberBox x:Name="TableReadBox"
                                            Value="{x:Bind Scanning.TableReadKiB, Mode=TwoWay}"
@@ -156,7 +158,6 @@
                                            SpinButtonPlacementMode="Compact"
                                            ValidationMode="InvalidInputOverwritten"
                                            MinWidth="150"
-                                           Header="KB"
                                            ToolTipService.ToolTip="Auto uses the size measured as fastest for this kind of drive, or the size scans have always used where this kind has not been measured."
                                            AutomationProperties.Name="File table read size in KB" />
                             </views:SettingsRow.Control>
@@ -165,7 +166,8 @@
                         <views:SettingsRow Glyph="&#xE9D5;"
                                            Title="File table reads at once"
                                            Description="How many file table reads wait at once on this kind of drive. Administrator only. Empty the box for Auto."
-                                           Details="Each read and each parse thread holds a buffer of the read size until the scan ends.">
+                                           Details="Each read and each parse thread holds a buffer of the read size until the scan ends."
+                                           Unit="{x:Bind text:SettingUnit.Reads(Scanning.TableReadsInFlight, Scanning.AutoTableReadsInFlightCount), Mode=OneWay}">
                             <views:SettingsRow.Control>
                                 <NumberBox x:Name="TableReadsInFlightBox"
                                            Value="{x:Bind Scanning.TableReadsInFlight, Mode=TwoWay}"
@@ -177,7 +179,6 @@
                                            SpinButtonPlacementMode="Compact"
                                            ValidationMode="InvalidInputOverwritten"
                                            MinWidth="150"
-                                           Header="Reads"
                                            ToolTipService.ToolTip="Auto uses the number past which more reads gained little on this kind of drive, or one read at a time where no measurement favoured more."
                                            AutomationProperties.Name="File table reads at once" />
                             </views:SettingsRow.Control>
@@ -185,7 +186,8 @@
 
                         <views:SettingsRow Glyph="&#xE8FD;"
                                            Title="Attribute list reads at once"
-                                           Description="How many lists kept outside the file table are read at once on this kind of drive. Used only when Deguffer runs as administrator.">
+                                           Description="How many lists kept outside the file table are read at once on this kind of drive. Used only when Deguffer runs as administrator."
+                                           Unit="{x:Bind text:SettingUnit.Reads(Scanning.TableListReadsInFlight, Scanning.AutoTableListReadsInFlightCount), Mode=OneWay}">
                             <views:SettingsRow.Control>
                                 <NumberBox x:Name="TableListReadsInFlightBox"
                                            Value="{x:Bind Scanning.TableListReadsInFlight, Mode=TwoWay}"
@@ -197,7 +199,6 @@
                                            SpinButtonPlacementMode="Compact"
                                            ValidationMode="InvalidInputOverwritten"
                                            MinWidth="150"
-                                           Header="Reads"
                                            ToolTipService.ToolTip="These lists describe files in many pieces. On an NVMe SSD they are read while the table is, and on other drives after it, where each one waiting adds to the scan. Auto reads 32 at once, which was fastest where it was measured. One at a time took several times as long on the drive measured with thousands of lists. Empty the box to go back to Auto."
                                            AutomationProperties.Name="Attribute list reads at once" />
                             </views:SettingsRow.Control>

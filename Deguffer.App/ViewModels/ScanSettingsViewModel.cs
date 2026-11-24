@@ -169,6 +169,18 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
     public string AutoTableParseThreads => AutoText(Auto.Table.ParseThreads);
 
     /// <summary>
+    /// The count an empty box stands for, which its placeholder names, so the unit after the box
+    /// agrees with it: "Auto (1) thread".
+    /// </summary>
+    public int AutoWalkThreadsCount => Auto.Walk.Threads;
+
+    public int AutoTableReadsInFlightCount => Auto.Table.ReadsInFlight;
+
+    public int AutoTableListReadsInFlightCount => Auto.Table.ListReadsInFlight;
+
+    public int AutoTableParseThreadsCount => Auto.Table.ParseThreads;
+
+    /// <summary>
     /// One line per drive present, saying what its kind is and what each scan of it runs with. Brought
     /// up to date in place, so a line the reader is on keeps its place.
     /// </summary>
