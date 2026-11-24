@@ -91,6 +91,12 @@ public sealed class DriveHealthReader(IDriveProbe probe, IVolumeInventory invent
             : label;
     }
 
+    /// <summary>
+    /// The volume by its first mount point, as <c>C:</c>. A volume mounted only in a folder keeps the
+    /// folder, so it is still named on a drive that has no letter.
+    /// </summary>
+    private static string VolumeName(LocalVolume volume) => volume.RootPath.TrimEnd(Path.DirectorySeparatorChar);
+
     private async Task ReadDrivesAsync(IReadOnlyList<DriveDescription> drives, IProgress<DriveHealth> progress, CancellationToken ct)
     {
         var options = new ParallelOptions { MaxDegreeOfParallelism = MostAtOnce, CancellationToken = ct };
@@ -137,7 +143,11 @@ public sealed class DriveHealthReader(IDriveProbe probe, IVolumeInventory invent
         {
             var volumes = byDisk.GetValueOrDefault(drive.Disk, []);
 
-            progress.Report(new DriveVolumes(drive.Key, string.Join("; ", volumes.Select(VolumeText)), [.. volumes.SelectMany(volume => (IEnumerable<string>)[volume.RootPath, .. volume.AlsoMountedAt ?? []])]));
+            progress.Report(new DriveVolumes(
+                drive.Key,
+                string.Join("; ", volumes.Select(VolumeText)),
+                string.Join(", ", volumes.Select(VolumeName)),
+                [.. volumes.SelectMany(volume => (IEnumerable<string>)[volume.RootPath, .. volume.AlsoMountedAt ?? []])]));
         }
     }
 

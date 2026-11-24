@@ -29,6 +29,7 @@ public sealed partial class HealthDriveRow : ObservableObject
     public ObservableCollection<HealthAttribute> Attributes { get; } = [];
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AccessibleName))]
     public partial string Title { get; private set; }
 
     [ObservableProperty]
@@ -48,6 +49,14 @@ public sealed partial class HealthDriveRow : ObservableObject
     [ObservableProperty]
     public partial string Volumes { get; private set; } = string.Empty;
 
+    /// <summary>The volumes on this drive by where each is mounted, as <c>C:, D:</c>.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AccessibleName))]
+    public partial string VolumeNames { get; private set; } = string.Empty;
+
+    /// <summary>The row's name in the order it reads, so a screen reader finds a drive by its letters too.</summary>
+    public string AccessibleName => VolumeNames.Length == 0 ? Title : $"{Title}, {VolumeNames}";
+
     [ObservableProperty]
     public partial bool HasFindings { get; private set; }
 
@@ -64,7 +73,11 @@ public sealed partial class HealthDriveRow : ObservableObject
     /// <summary>Follow the name a fresh listing gives, keeping everything the last reading showed.</summary>
     public void Show(DriveDescription drive) => Title = drive.Name;
 
-    public void Show(DriveVolumes volumes) => Volumes = volumes.Line;
+    public void Show(DriveVolumes volumes)
+    {
+        Volumes = volumes.Line;
+        VolumeNames = volumes.Names;
+    }
 
     public void Show(DriveHealth report)
     {

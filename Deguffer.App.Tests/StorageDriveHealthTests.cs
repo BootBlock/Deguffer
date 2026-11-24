@@ -22,7 +22,7 @@ public sealed class StorageDriveHealthTests
 
         Assert.False(page.ViewModel.DriveHealth.HasConcern);
 
-        page.DriveHealth.Record(new DriveVolumes(System.Key, "profile", [page.VolumeRoot]));
+        page.DriveHealth.Record(new DriveVolumes(System.Key, "profile", "profile", [page.VolumeRoot]));
         page.DriveHealth.Record(Report(DriveVerdict.Good));
 
         Assert.False(page.ViewModel.DriveHealth.HasConcern);
@@ -34,7 +34,7 @@ public sealed class StorageDriveHealthTests
         using var page = new StoragePage([new FakeCleanupProvider("cache")]);
         var line = page.ViewModel.DriveHealth;
 
-        page.DriveHealth.Record(new DriveVolumes(System.Key, "profile", [page.VolumeRoot]));
+        page.DriveHealth.Record(new DriveVolumes(System.Key, "profile", "profile", [page.VolumeRoot]));
         page.DriveHealth.Record(Report(DriveVerdict.Failing));
 
         Assert.True(line.HasConcern);
@@ -58,7 +58,7 @@ public sealed class StorageDriveHealthTests
     {
         using var page = new StoragePage([new FakeCleanupProvider("cache")]);
 
-        page.DriveHealth.Record(new DriveVolumes(System.Key, "elsewhere", [@"Q:\"]));
+        page.DriveHealth.Record(new DriveVolumes(System.Key, "elsewhere", "Q:", [@"Q:\"]));
         page.DriveHealth.Record(Report(DriveVerdict.Failing));
 
         Assert.False(page.ViewModel.DriveHealth.HasConcern);
