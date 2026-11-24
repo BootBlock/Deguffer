@@ -15,9 +15,9 @@ namespace Deguffer.App.Shell;
 /// <para>The keys are switched off rather than left unhandled while there is nowhere to go back to.
 /// Measured: an enabled accelerator on the window's content takes Alt+Left from the Explore page's
 /// own Back button even when its handler leaves the key unhandled, so Explore stopped stepping back.
-/// A disabled one is passed over. While a link has been followed the window's keys come first, which
-/// no page can yet see: a link today opens only Startup, and every other page is reached from the
-/// rail, which forgets every link.</para>
+/// A disabled one is passed over. While a link has been followed the window's keys come first, so a
+/// link that opens a page with a Back of its own (Explore's) has to decide which Back the keys mean
+/// there before it lands.</para>
 ///
 /// <para>The mouse's button is heard as it bubbles, so the Explore page's handler, which marks it
 /// handled where Explore stepped back, comes first at any time.</para>

@@ -4,21 +4,20 @@ using Deguffer.Core.Viewing;
 namespace Deguffer.App.Shell;
 
 /// <summary>
-/// The window's Back: where the window is, the links it followed from there, and the command the
-/// rail's back button, Alt+Left and the mouse's Back button all run. <see cref="LinkTrail{T}"/>
-/// decides what Back leads to, and this tells the window when that changes and where to go.
+/// The window's Back: the command the rail's back button, Alt+Left and the mouse's Back button all
+/// run, enabled while <see cref="LinkTrail{T}"/> says Back leads somewhere, and showing where it
+/// leads. The trail decides; this tells the window when that changes and where to go.
 /// </summary>
 internal sealed class LinkHistory
 {
-    private readonly LinkTrail<Destination> _trail = new();
+    private readonly LinkTrail<Destination> _trail;
     private readonly Action<Destination> _show;
-    private Destination _here;
 
     /// <param name="start">Where the window opens.</param>
     /// <param name="show">Shows a destination, and selects it on the rail, for Back.</param>
     public LinkHistory(Destination start, Action<Destination> show)
     {
-        _here = start;
+        _trail = new LinkTrail<Destination>(start);
         _show = show;
         BackCommand = new RelayCommand(GoBack, () => _trail.CanGoBack);
     }
@@ -27,39 +26,34 @@ internal sealed class LinkHistory
     public IRelayCommand BackCommand { get; }
 
     /// <summary>The window is following a link to <paramref name="to"/>.</summary>
-    public void Follow(Destination to)
-    {
-        var changed = _trail.Follow(_here, to);
-        _here = to;
+    public void Follow(Destination to) => Move(() => _trail.Follow(to));
 
-        if (changed)
-        {
-            BackCommand.NotifyCanExecuteChanged();
-        }
-    }
-
-    /// <summary>The reader chose <paramref name="to"/> on the rail, which forgets every link (see <see cref="LinkTrail{T}"/>).</summary>
-    public void Choose(Destination to)
-    {
-        _here = to;
-
-        if (_trail.Forget())
-        {
-            BackCommand.NotifyCanExecuteChanged();
-        }
-    }
+    /// <summary>The reader chose <paramref name="to"/> on the rail.</summary>
+    public void Choose(Destination to) => Move(() => _trail.Choose(to));
 
     private void GoBack()
     {
-        if (_trail.Back() is not { } place)
-        {
-            return;
-        }
+        Destination? place = null;
+        Move(() => place = _trail.Back());
 
-        // Where the window is before it goes there, so a link followed from the page Back shows is
-        // followed from that page.
-        _here = place;
-        BackCommand.NotifyCanExecuteChanged();
-        _show(place);
+        if (place is { } shown)
+        {
+            _show(shown);
+        }
+    }
+
+    /// <summary>
+    /// Make <paramref name="move"/>, and say the command changed only where Back became offered or
+    /// withdrawn: the rail's button is shown and hidden on that, and a second link changes neither.
+    /// </summary>
+    private void Move(Action move)
+    {
+        var could = _trail.CanGoBack;
+        move();
+
+        if (_trail.CanGoBack != could)
+        {
+            BackCommand.NotifyCanExecuteChanged();
+        }
     }
 }

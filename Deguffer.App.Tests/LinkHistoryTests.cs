@@ -3,9 +3,10 @@ using Deguffer.App.Shell;
 namespace Deguffer.App.Tests;
 
 /// <summary>
-/// The window's Back is offered after a link and not after a rail click, and returns to the page the
-/// link was on. Each test's window records what Back asked it to show, as MainWindow shows it and
-/// selects it on the rail.
+/// The window's Back command is offered after a link and not after a rail click, says so once per
+/// change, and asks the window to show the page the link was on. Each test's window records what Back
+/// asked it to show, as MainWindow shows it and selects it on the rail. Which page Back leads to is
+/// <see cref="Core.Viewing.LinkTrail{T}"/>'s rule, tested in Core.
 /// </summary>
 public sealed class LinkHistoryTests
 {
@@ -17,7 +18,7 @@ public sealed class LinkHistoryTests
         Assert.False(History(Destination.Storage).BackCommand.CanExecute(null));
 
     [Fact]
-    public void BackAfterMemorysLinkReturnsToMemory()
+    public void BackAfterMemorysLinkShowsMemory()
     {
         var history = History(Destination.Memory);
 
@@ -57,48 +58,21 @@ public sealed class LinkHistoryTests
         Assert.Empty(_shown);
     }
 
-    /// <summary>A link followed from a page a link opened is followed from there, so Back retraces both in turn.</summary>
+    /// <summary>A second link leaves Back offered, so the command says nothing new and the button does not flicker.</summary>
     [Fact]
-    public void LinksFollowedInTurnAreRetracedInTurn()
+    public void ASecondLinkRaisesNoChange()
     {
         var history = History(Destination.Memory);
         history.Follow(Destination.Startup);
+
         history.Follow(Destination.Explore);
+        Assert.Equal(1, _changes);
 
         history.BackCommand.Execute(null);
-        history.BackCommand.Execute(null);
 
-        Assert.Equal([Destination.Startup, Destination.Memory], _shown);
-    }
-
-    /// <summary>
-    /// A link followed from the page Back returned to is followed from there, and not from the page the
-    /// window left by going back.
-    /// </summary>
-    [Fact]
-    public void ALinkAfterBackIsFollowedFromWhereBackLed()
-    {
-        var history = History(Destination.Memory);
-        history.Follow(Destination.Startup);
-        history.BackCommand.Execute(null);
-
-        history.Follow(Destination.Startup);
-        history.BackCommand.Execute(null);
-
-        Assert.Equal([Destination.Memory, Destination.Memory], _shown);
-    }
-
-    /// <summary>A rail click moves where the window is, so the next link is followed from the page clicked.</summary>
-    [Fact]
-    public void ALinkAfterARailClickIsFollowedFromThePageClicked()
-    {
-        var history = History(Destination.Storage);
-        history.Choose(Destination.Memory);
-
-        history.Follow(Destination.Startup);
-        history.BackCommand.Execute(null);
-
-        Assert.Equal([Destination.Memory], _shown);
+        Assert.Equal([Destination.Startup], _shown);
+        Assert.True(history.BackCommand.CanExecute(null));
+        Assert.Equal(1, _changes);
     }
 
     private LinkHistory History(Destination start)
