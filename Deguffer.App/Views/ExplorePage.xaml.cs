@@ -290,7 +290,7 @@ public sealed partial class ExplorePage : Page
         // the new one.
         _appearance.View = view;
 
-        var listed = view is ExploreView.List or ExploreView.Files;
+        var listed = !view.DrawsPicture();
 
         if (listed)
         {

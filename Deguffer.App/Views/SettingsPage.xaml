@@ -10,13 +10,13 @@
     xmlns:configuration="using:Deguffer.Core.Configuration"
     Background="Transparent">
 
-    <Grid Padding="{StaticResource PagePadding}" RowSpacing="{StaticResource RegionGap}" RowDefinitions="Auto,*">
-        <controls:PageHeader Destination="Settings" />
+    <Grid controls:ReadingColumn.Limit="{StaticResource ReadingWidth}" Padding="{StaticResource PagePadding}" RowSpacing="{StaticResource RegionGap}" RowDefinitions="Auto,*">
+        <controls:PageHeader controls:ReadingColumn.Fills="True" Destination="Settings" />
 
-        <ScrollViewer Grid.Row="1">
+        <ScrollViewer Grid.Row="1" controls:ReadingColumn.Fills="True">
             <!-- Capped because these rows are a title and a sentence: run full-bleed on a wide window
                  and the control drifts so far from the label that they stop reading as one row. -->
-            <StackPanel Spacing="{StaticResource ControlGap}" MaxWidth="720" HorizontalAlignment="Left">
+            <StackPanel Spacing="{StaticResource ControlGap}" MaxWidth="{StaticResource FormReadingWidth}" HorizontalAlignment="Left">
 
                 <InfoBar IsOpen="{x:Bind ViewModel.SaveFailed, Mode=OneWay}"
                          IsClosable="False"

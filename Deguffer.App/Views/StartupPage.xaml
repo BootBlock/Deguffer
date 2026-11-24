@@ -92,9 +92,9 @@
         </Style>
     </Page.Resources>
 
-    <Grid Padding="{StaticResource PagePadding}" RowSpacing="{StaticResource RegionGap}" RowDefinitions="Auto,Auto,Auto,Auto,*">
+    <Grid controls:ReadingColumn.Limit="{StaticResource ReadingWidth}" Padding="{StaticResource PagePadding}" RowSpacing="{StaticResource RegionGap}" RowDefinitions="Auto,Auto,Auto,Auto,*">
 
-        <controls:PageHeader Destination="Startup">
+        <controls:PageHeader controls:ReadingColumn.Fills="True" Destination="Startup">
             <controls:PageHeader.Actions>
                 <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
                     <ProgressRing IsActive="{x:Bind ViewModel.IsReading, Mode=OneWay}"
