@@ -49,7 +49,7 @@ public sealed partial class StartupRowMenu : ObservableObject
     private void Properties() => HandOff(entry => StartupFiles.Program(entry), _shell.Properties);
 
     [RelayCommand(CanExecute = nameof(HasRow))]
-    private Task CopyAsync() => HandOffAsync(entry => StartupFiles.Command(entry), _shell.Copy);
+    private Task CopyAsync(CancellationToken ct) => HandOffAsync(entry => StartupFiles.Command(entry), _shell.Copy, ct);
 
     /// <summary>
     /// Hand <paramref name="decide"/>'s answer for the row to <paramref name="to"/>, or say why not.
@@ -64,11 +64,11 @@ public sealed partial class StartupRowMenu : ObservableObject
     }
 
     /// <inheritdoc cref="HandOff" />
-    private async Task HandOffAsync(Func<StartupEntry, StartupHandoff?> decide, Func<string, Task<string?>> to)
+    private async Task HandOffAsync(Func<StartupEntry, StartupHandoff?> decide, Func<string, CancellationToken, Task<string?>> to, CancellationToken ct)
     {
         if (Decided(decide) is { } value)
         {
-            Report(await to(value));
+            Report(await to(value, ct));
         }
     }
 

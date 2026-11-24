@@ -15,7 +15,7 @@ namespace Deguffer.App.Shell;
 public sealed record ShellHandoff(
     Func<string, string?> Reveal,
     Func<string, string?> Properties,
-    Func<string, Task<string?>> Copy)
+    Func<string, CancellationToken, Task<string?>> Copy)
 {
     public static ShellHandoff Windows { get; } = new(
         path => ShellActions.Reveal(path, isDirectory: false),

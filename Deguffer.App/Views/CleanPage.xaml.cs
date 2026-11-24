@@ -358,7 +358,7 @@ public sealed partial class CleanPage : Page
     /// paste it.
     /// </summary>
     private async void OnCopyRunDiagnostics(object sender, RoutedEventArgs e) =>
-        CopyRunDiagnosticsResult.Text = await ClipboardText.PutAsync(ViewModel.RunDiagnostics) ?? "Copied. Paste it into a GitHub issue.";
+        CopyRunDiagnosticsResult.Text = await ClipboardText.PutAsync(ViewModel.RunDiagnostics, CancellationToken.None) ?? "Copied. Paste it into a GitHub issue.";
 
     /// <summary>
     /// Put the item list the view-model names on the card, or take it off and give the keyboard back

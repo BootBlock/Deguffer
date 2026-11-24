@@ -94,7 +94,7 @@ public sealed class StartupRowMenuTests
         var shell = new ShellHandoff(
             path => Hand("reveal", path),
             path => Hand("properties", path),
-            text => Task.FromResult(Hand("copy", text)));
+            (text, _) => Task.FromResult(Hand("copy", text)));
 
         return new StartupRowMenu(_ => Folder, shell, (sentence, severity) => _said.Add((sentence, severity))) { Row = row };
     }

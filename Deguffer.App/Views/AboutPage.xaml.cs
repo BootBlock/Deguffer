@@ -89,7 +89,7 @@ public sealed partial class AboutPage : Page
     /// </summary>
     private async void OnCopyDetails(object sender, RoutedEventArgs e)
     {
-        var said = await ClipboardText.PutAsync(Details.ToClipboardText()) ?? "Copied. Paste it into your report.";
+        var said = await ClipboardText.PutAsync(Details.ToClipboardText(), CancellationToken.None) ?? "Copied. Paste it into your report.";
 
         CopyDetailsResult.Text = said;
         FrameworkElementAutomationPeer.FromElement(CopyDetailsButton)?.RaiseNotificationEvent(
