@@ -265,7 +265,7 @@ public class PreferenceStoreTests
 
     /// <summary>
     /// The shipped answer to "what is asked before a deletion", on a machine nobody has configured.
-    /// The blanket confirmation is on and the typed phrase is off, so a fresh install asks once, in
+    /// Confirming before a clean is on and the typed phrase is off, so a fresh install asks once, in
     /// words, naming everything it is about to remove. Either default flipping by accident changes
     /// that silently, which is why they are pinned rather than left to the record declaration.
     /// </summary>

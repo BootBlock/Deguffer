@@ -538,16 +538,27 @@ Deliberate points, and the traps that come with them:
   the app says so. Those rows all say the same thing, one per provider, so they are folded into one
   group below the list, closed by default. Closed, the group still counts them and says where to
   add a source folder, under any filter.
+- **A clean is confirmed once, in one dialog.** It lists every row going, grouped by tier, each with
+  its size, and totals all of them. Each Tier 2 row carries its own acknowledgement, and each Tier 3
+  row its own typed box where the typed phrase is on. Every row that does not rebuild itself states
+  what it costs. The primary button names the verb and the figure ("Clean 32.1 GB") and stays
+  disabled until every ticked row is answered. The verb is "Delete" only while a permanent loss
+  (Tier 3) is ticked, and "Release" where every row only releases local copies of cloud files. A row the user no longer wants is unticked in the
+  dialog. Cancel stops the whole clean with nothing removed, and Close stays the default button, so
+  Enter is safe. Where a "When complete" action is chosen, the dialog says what will follow the
+  clean. A chain of near-identical dialogs, each with a Cancel whose meaning changes, is the gate
+  users learn to get past without reading. Settled in [#829](https://github.com/BootBlock/Deguffer/issues/829).
 - **Tier 3 says plainly what is unrecoverable**, and by default it is confirmed before deletion.
   *Saying* it is not negotiable. *How hard the confirmation is to give* is the user's to set, and
   the two are separate. Typing a provider's name for every emptied Recycle Bin is transcription
   rather than deliberation, and a gate the user resents is a gate they learn to get past without
   reading it, so the typed phrase is a preference and it is off by default. Switching it off retires
-  Tier 3's *own* question rather than the question: the row falls to the blanket confirmation, which
-  names it, quotes the same "permanent, cannot be undone" sentence the typed dialog would
-  have carried, and totals what is going. Switching that off as well is a second, separate choice,
-  and what then stands between the user and the deletion is the preview below and Tier 3 never being
-  pre-selected. **No preference reaches Tier 4**, which stays excluded however the settings are left.
+  Tier 3's *own* box rather than the question: the row stays in the clean's one dialog, named, with
+  the same "permanent, cannot be undone" sentence and its size in the total. A selection whose rows
+  need no answer of their own is still confirmed, unless the user switches that off as well. That is
+  a second, separate choice, and what then stands between the user and the deletion is the preview
+  below and Tier 3 never being pre-selected. A Tier 2 row is always confirmed. **No preference
+  reaches Tier 4**, which stays excluded however the settings are left.
 - **Dry run is the default action.** The primary button scans and removes nothing; deleting is the
   second step.
 - **A scan can be narrowed to the locations the user chooses.** Scan is a split button: the button

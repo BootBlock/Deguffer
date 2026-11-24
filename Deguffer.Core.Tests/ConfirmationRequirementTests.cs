@@ -111,105 +111,10 @@ public sealed class ConfirmationRequirementTests
     }
 
     /// <summary>
-    /// The shell stands its own blanket confirmation down whenever §7 will ask anyway. Getting this
-    /// backwards for Tier 1 is the dangerous direction: it would suppress the only question asked
-    /// before a deletion that §7 itself never prompts for.
-    /// </summary>
-    [Theory]
-    [InlineData(SafetyTier.RegenerableCache, false)]
-    [InlineData(SafetyTier.RegenerableWithCost, true)]
-    [InlineData(SafetyTier.UserData, true)]
-    [InlineData(SafetyTier.DoNotTouch, true)]
-    public void OnlyTier1PassesWithoutAQuestionOfItsOwn(SafetyTier tier, bool expected)
-    {
-        Assert.Equal(expected, ConfirmationRequirement.PromptsUser(WorkToDo(PlanFor(tier))));
-    }
-
-    /// <summary>
-    /// An empty plan deletes nothing and is never asked about, so it must not be mistaken for a
-    /// tier that §7 covers — otherwise selecting an already-clean Tier 2 row would silence the
-    /// blanket confirmation for everything selected alongside it.
-    /// </summary>
-    [Theory]
-    [InlineData(SafetyTier.RegenerableCache)]
-    [InlineData(SafetyTier.RegenerableWithCost)]
-    [InlineData(SafetyTier.UserData)]
-    public void AnEmptyPlanIsNeverAQuestion(SafetyTier tier)
-    {
-        Assert.False(ConfirmationRequirement.PromptsUser(PlanFor(tier)));
-    }
-
-    /// <summary>
-    /// A plan the planner runs only to verify what it withheld destroys nothing either. It must not
-    /// stand the blanket confirmation down, and it must not be swept into it.
-    /// </summary>
-    [Theory]
-    [InlineData(SafetyTier.RegenerableCache)]
-    [InlineData(SafetyTier.RegenerableWithCost)]
-    [InlineData(SafetyTier.UserData)]
-    public void AStepFreePlanWithSomethingToProveIsNeverAQuestion(SafetyTier tier)
-    {
-        var plan = PlanFor(tier) with
-        {
-            ProtectedPaths =
-            [
-                new ProtectedPath(
-                    @"C:\Users\testuser\.cache\subject\withheld",
-                    "Withheld.",
-                    PresenceBefore: PathPresence.Present,
-                    Withheld: Withholding.TooRecent),
-            ],
-        };
-
-        Assert.True(plan.HasSomethingToProve);
-        Assert.False(ConfirmationRequirement.PromptsUser(plan));
-        Assert.Empty(ConfirmationRequirement.NotPromptedFor([plan], p => p));
-    }
-
-    /// <summary>
-    /// The mixed selection, which is where this went wrong in practice: one Tier 2 row alongside
-    /// Tier 1 rows. The Tier 1 rows are not covered by §7, so they must come back here — a shell
-    /// that concludes "§7 has this selection covered" deletes them having asked nothing at all,
-    /// including when the user declines the single dialog they are shown.
-    /// </summary>
-    [Fact]
-    public void Tier1RowsAlongsideATier2RowStillNeedAsking()
-    {
-        CleanupPlan[] selection =
-        [
-            WorkToDo(PlanFor(SafetyTier.RegenerableCache)) with { ProviderId = "uv" },
-            WorkToDo(PlanFor(SafetyTier.RegenerableCache)) with { ProviderId = "npm" },
-            WorkToDo(PlanFor(SafetyTier.RegenerableWithCost)) with { ProviderId = "platformio" },
-        ];
-
-        var unasked = ConfirmationRequirement.NotPromptedFor(selection, p => p);
-
-        Assert.Equal(["uv", "npm"], unasked.Select(p => p.ProviderId));
-    }
-
-    /// <summary>The negative half: the Tier 2 row must not also be swept into the blanket ask.</summary>
-    [Fact]
-    public void ARowSection7AsksAboutIsNotAskedTwice()
-    {
-        CleanupPlan[] selection = [WorkToDo(PlanFor(SafetyTier.RegenerableWithCost))];
-
-        Assert.Empty(ConfirmationRequirement.NotPromptedFor(selection, p => p));
-    }
-
-    /// <summary>An already-clear row deletes nothing, so it is not something to confirm.</summary>
-    [Fact]
-    public void AnAlreadyClearRowIsNotAskedAbout()
-    {
-        CleanupPlan[] selection = [PlanFor(SafetyTier.RegenerableCache)];
-
-        Assert.Empty(ConfirmationRequirement.NotPromptedFor(selection, p => p));
-    }
-
-    /// <summary>
     /// The typed phrase is a preference, and switching it off retires Tier 3's own question. It does
-    /// not promote the row to Tier 1: the level drops to <see cref="ConfirmationLevel.None"/> so that
-    /// the shell's blanket confirmation picks the row up instead, which the pair of assertions
-    /// further down proves.
+    /// not promote the row to Tier 1: the level drops to <see cref="ConfirmationLevel.None"/>, and the
+    /// clean's one confirmation still lists the row with what it loses
+    /// (<see cref="CleanConfirmationTests.ATier3RowWithTheTypedPhraseOffStillSaysItIsPermanent"/>).
     /// </summary>
     [Fact]
     public void Tier3AsksNothingOfItsOwnWhenTheTypedPhraseIsSwitchedOff()
@@ -247,8 +152,8 @@ public sealed class ConfirmationRequirementTests
 
     /// <summary>
     /// What is lost does not change because the user switched the typing off, so the wording must
-    /// still say the deletion is permanent. This is the sentence the shell's blanket confirmation
-    /// quotes for a Tier 3 row once the typed dialog stops appearing, so keying it to the derived
+    /// still say the deletion is permanent. This is the sentence the clean's confirmation states for a
+    /// Tier 3 row once its typed box stops appearing, so keying it to the derived
     /// level rather than the tier would put a Tier 1 sentence in front of a permanent deletion.
     /// </summary>
     [Fact]
@@ -263,61 +168,23 @@ public sealed class ConfirmationRequirementTests
     }
 
     /// <summary>
-    /// The half of the preference that has to hold for it to be safe at all. Switching the typed
-    /// phrase off moves a Tier 3 row into the blanket confirmation; it must not drop out of both,
-    /// which would delete user data having asked nothing whatsoever.
+    /// "Release" only of a plan in which nothing is destroyed, "Delete" only of a permanent loss, so the
+    /// word carries weight where it appears, and "Clean" for everything else, a Tier 2 deletion included.
+    /// A tier nobody decided falls to "Delete" rather than to the reassuring word.
     /// </summary>
     [Fact]
-    public void ATier3RowFallsToTheBlanketConfirmationWhenTheTypedPhraseIsOff()
-    {
-        CleanupPlan[] selection = [WorkToDo(PlanFor(SafetyTier.UserData))];
-
-        Assert.False(ConfirmationRequirement.PromptsUser(selection[0], requireTypedPhrase: false));
-        Assert.Equal(
-            ["subject"],
-            ConfirmationRequirement
-                .NotPromptedFor(selection, p => p, requireTypedPhrase: false)
-                .Select(p => p.ProviderId));
-    }
-
-    /// <summary>Tier 2 remains §7's to ask about, so it must not be swept in alongside it.</summary>
-    [Fact]
-    public void ATier2RowIsStillNotAskedTwiceWhenTheTypedPhraseIsOff()
-    {
-        CleanupPlan[] selection = [WorkToDo(PlanFor(SafetyTier.RegenerableWithCost))];
-
-        Assert.Empty(ConfirmationRequirement.NotPromptedFor(selection, p => p, requireTypedPhrase: false));
-    }
-
-    /// <summary>
-    /// "Delete" is said about anything that deletes, including a plan that mixes a deletion with a
-    /// release, and "Release" only about a plan in which nothing is destroyed.
-    /// </summary>
-    [Fact]
-    public void TheVerbIsReleaseOnlyWhereNothingIsDestroyed()
+    public void DeleteIsSaidOnlyOfAPermanentLossAndReleaseOnlyWhereNothingIsDestroyed()
     {
         var release = new ReleaseLocalCopiesStep(@"C:\Users\testuser\OneDrive", "OneDrive", "Local copies");
         var plan = PlanFor(SafetyTier.RegenerableWithCost);
         var deletion = WorkToDo(plan);
 
-        Assert.Equal("Release", ConfirmationRequirement.For(plan with { Steps = [release] }).Verb);
-        Assert.Equal("Delete", ConfirmationRequirement.For(deletion).Verb);
-        Assert.Equal("Delete", ConfirmationRequirement.For(deletion with { Steps = [.. deletion.Steps, release] }).Verb);
-        Assert.Equal("Delete", ConfirmationRequirement.For(plan).Verb);
-    }
-
-    /// <summary>
-    /// The question opens on the verb its button carries, so a reader who reads only the title and
-    /// the button sees one word for one action, and a release is never asked as a deletion.
-    /// </summary>
-    [Fact]
-    public void TheTitleAsksWithTheButtonsVerb()
-    {
-        var release = new ReleaseLocalCopiesStep(@"C:\Users\testuser\OneDrive", "OneDrive", "Local copies");
-        var plan = PlanFor(SafetyTier.RegenerableWithCost);
-
-        Assert.Equal("Delete Android SDK?", ConfirmationRequirement.For(WorkToDo(plan)).Title);
-        Assert.Equal("Release Android SDK?", ConfirmationRequirement.For(plan with { Steps = [release] }).Title);
+        Assert.Equal(ConfirmationVerb.Release, ConfirmationRequirement.For(plan with { Steps = [release] }).Verb);
+        Assert.Equal(ConfirmationVerb.Clean, ConfirmationRequirement.For(deletion).Verb);
+        Assert.Equal(ConfirmationVerb.Clean, ConfirmationRequirement.For(deletion with { Steps = [.. deletion.Steps, release] }).Verb);
+        Assert.Equal(ConfirmationVerb.Clean, ConfirmationRequirement.For(WorkToDo(PlanFor(SafetyTier.RegenerableCache))).Verb);
+        Assert.Equal(ConfirmationVerb.Delete, ConfirmationRequirement.For(WorkToDo(PlanFor(SafetyTier.UserData))).Verb);
+        Assert.Equal(ConfirmationVerb.Delete, ConfirmationRequirement.For(WorkToDo(PlanFor(SafetyTier.DoNotTouch))).Verb);
     }
 
     /// <summary>

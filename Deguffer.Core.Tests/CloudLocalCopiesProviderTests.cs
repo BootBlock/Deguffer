@@ -531,6 +531,6 @@ public sealed class CloudLocalCopiesProviderTests : IDisposable
         var requirement = ConfirmationRequirement.For(await CreateProvider().PlanAsync());
 
         Assert.Equal(ConfirmationLevel.Acknowledgement, requirement.Level);
-        Assert.Equal("Release", requirement.Verb);
+        Assert.Equal(ConfirmationVerb.Release, requirement.Verb);
     }
 }

@@ -86,6 +86,15 @@ public static class WhenCleanComplete
     };
 
     /// <summary>
+    /// What the confirmation that starts a clean says will follow it, or null for
+    /// <see cref="CompletionAction.Nothing"/>. The choice is stored and can be days old, so the moment the
+    /// user authorises the clean is the moment to remind them of it.
+    /// </summary>
+    public static string? Then(CompletionAction action) => action == CompletionAction.Nothing
+        ? null
+        : $"When the clean finishes, Deguffer will {Doing(action)} after a {CompletionCountdown.Seconds}-second countdown you can cancel.";
+
+    /// <summary>
     /// What the user is told where Windows refused <paramref name="action"/>, with Windows' own
     /// reason.
     /// </summary>
