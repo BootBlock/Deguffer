@@ -100,32 +100,8 @@
                                TextAlignment="Right"
                                VerticalAlignment="Center" />
 
-                    <!-- Tier is text on a tinted chip, never colour alone: the classification must
-                         survive a flat background and a high-contrast theme (§6.5).
-
-                         Two words name the tier and do not explain it, so the explanation the About
-                         page gives is on the chip itself. The chip is not a tab stop, so a tooltip
-                         alone would leave a screen reader with the two words: the same sentence is
-                         its help text.
-
-                         A researched row's chip goes to the tier's left, so the tier chips stay in one
-                         straight column against the figures. -->
                     <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
-                        <StackPanel Orientation="Horizontal"
-                                    Spacing="{StaticResource ControlGap}"
-                                    VerticalAlignment="Center">
-                            <ContentControl Content="{x:Bind Facts.BasisLabel}"
-                                            Visibility="{x:Bind Facts.IsResearched}"
-                                            Style="{StaticResource BasisChip}"
-                                            ToolTipService.ToolTip="{x:Bind Facts.BasisExplanation}"
-                                            AutomationProperties.Name="{x:Bind Facts.BasisLabel}"
-                                            AutomationProperties.HelpText="{x:Bind Facts.BasisExplanation}" />
-                            <ContentControl Content="{x:Bind Facts.TierLabel}"
-                                            Style="{x:Bind Facts.Tier, Converter={StaticResource TierChipStyle}}"
-                                            ToolTipService.ToolTip="{x:Bind Facts.TierExplanation}"
-                                            AutomationProperties.Name="{x:Bind Facts.TierLabel}"
-                                            AutomationProperties.HelpText="{x:Bind Facts.TierExplanation}" />
-                        </StackPanel>
+                        <controls:ProviderChips Facts="{x:Bind Facts}" />
 
                         <!-- The group is on the cell rather than the figure, so a row whose figure is
                              hidden still keeps the column's width and its chip stays in line. -->
@@ -192,13 +168,7 @@
                                                  AutomationProperties.AutomationId="{x:Bind AutomationIds.ItemsLink}" />
                             </StackPanel>
 
-                            <!-- Tier is text on a tinted chip, never colour alone: the classification
-                                 must survive a flat background and a high-contrast theme (§6.5). The
-                                 chip carries the tier's own explanation, by pointer and by help text,
-                                 because two words name it without saying what it means. A researched
-                                 row's chip sits to the tier's left, so the tier chips stay in line.
-
-                                 "What is this?" opens whose folder this is, what it is for, and the
+                            <!-- "What is this?" opens whose folder this is, what it is for, and the
                                  plan that says what would happen to it. One dialog holds both,
                                  because they are one question: a reader cannot judge a list of paths
                                  belonging to a tool they have never heard of. It is a link rather
@@ -207,19 +177,7 @@
                                  prose from the name down to the figures, and the link is at a fixed
                                  place on every row. -->
                             <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
-                                <ContentControl Content="{x:Bind Facts.BasisLabel}"
-                                                Visibility="{x:Bind Facts.IsResearched}"
-                                                Style="{StaticResource BasisChip}"
-                                                VerticalAlignment="Center"
-                                                ToolTipService.ToolTip="{x:Bind Facts.BasisExplanation}"
-                                                AutomationProperties.Name="{x:Bind Facts.BasisLabel}"
-                                                AutomationProperties.HelpText="{x:Bind Facts.BasisExplanation}" />
-                                <ContentControl Content="{x:Bind Facts.TierLabel}"
-                                                Style="{x:Bind Facts.Tier, Converter={StaticResource TierChipStyle}}"
-                                                VerticalAlignment="Center"
-                                                ToolTipService.ToolTip="{x:Bind Facts.TierExplanation}"
-                                                AutomationProperties.Name="{x:Bind Facts.TierLabel}"
-                                                AutomationProperties.HelpText="{x:Bind Facts.TierExplanation}" />
+                                <controls:ProviderChips Facts="{x:Bind Facts}" />
                                 <HyperlinkButton Content="What is this?"
                                                  VerticalAlignment="Center"
                                                  Padding="{StaticResource InlineLinkPadding}"
@@ -461,48 +419,19 @@
                 </StackPanel>
 
                 <!-- §5.6's verdict on the run those two figures describe, and it stays as long
-                     as they do. The info bar below cannot hold it: a clean re-plans the list
-                     immediately afterwards, and every provider that scan checks reports a line
-                     of its own into that bar. A verdict there is gone before it is read.
+                     as they do. See SafetyCheckView for why the info bar below cannot hold it.
 
                      The gap above it is this element's margin rather than the grid's
                      RowSpacing, because row spacing is a property of the rows: it stands
                      whether or not anything is in them, and before the first clean of a session
                      that is empty space under the capacity bar. -->
-                <StackPanel x:Name="RunVerdictPanel"
-                            Grid.Row="1"
-                            Grid.Column="0"
-                            Grid.ColumnSpan="2"
-                            Margin="{StaticResource RegionGapAbove}"
-                            Spacing="{StaticResource ControlGap}"
-                            Visibility="{x:Bind ViewModel.HasRunResult, Mode=OneWay}">
-
-                    <TextBlock Text="{x:Bind ViewModel.RunStatement, Mode=OneWay}"
-                               Style="{x:Bind ViewModel.RunVerificationFailed, Mode=OneWay, Converter={StaticResource RunStatementStyle}}" />
-
-                    <!-- What the sentence above is about, named. When it asks the user to report
-                         a protected path that did not survive, this is the only thing on the
-                         screen that says which path, why it was protected, and what was found
-                         in its place — and a request to report a fault with no way to state it
-                         is a dead end. -->
-                    <views:VerificationCheckList Checks="{x:Bind ViewModel.RunVerificationNotes}"
-                                                Visibility="{x:Bind ViewModel.HasRunVerificationNotes, Mode=OneWay}" />
-
-                    <!-- The run written out for a GitHub issue. The sentence above can ask the
-                         user to report a fault, and copying the paths above by hand loses which
-                         row each belonged to, what each step did and the build it came from. -->
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <HyperlinkButton x:Name="CopyRunDiagnosticsLink"
-                                         Content="Copy diagnostic information"
-                                         Padding="0"
-                                         AutomationProperties.HelpText="Copies a report of this clean to the clipboard, with your user folder hidden, to paste into a GitHub issue."
-                                         Click="OnCopyRunDiagnostics" />
-                        <TextBlock x:Name="CopyRunDiagnosticsResult"
-                                   VerticalAlignment="Center"
-                                   Style="{StaticResource SecondaryText}"
-                                   AutomationProperties.LiveSetting="Polite" />
-                    </StackPanel>
-                </StackPanel>
+                <views:SafetyCheckView x:Name="RunVerdictPanel"
+                                       Grid.Row="1"
+                                       Grid.Column="0"
+                                       Grid.ColumnSpan="2"
+                                       Margin="{StaticResource RegionGapAbove}"
+                                       Report="{x:Bind ViewModel.SafetyCheck}"
+                                       Visibility="{x:Bind ViewModel.HasRunResult, Mode=OneWay}" />
 
                 <!-- Windows' own retrim, offered where a clean freed a lot on a thin, virtual or
                      solid-state drive, whose storage learns the space is free only when Windows

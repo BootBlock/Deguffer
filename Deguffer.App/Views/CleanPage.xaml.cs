@@ -140,13 +140,9 @@ public sealed partial class CleanPage : Page
     public CleanViewModel ViewModel { get; }
 
     /// <summary>
-    /// The view-model asks whether to go ahead by calling the hook; whether it asks at all is the
-    /// preference, expressed by leaving the hook unset. Deleting at these sizes has no undo (§8),
-    /// so the default is to ask.
-    ///
-    /// This is the blanket confirmation, which covers the Tier 1 case §7 does not prompt for. The
-    /// view-model stands it down when §7 will ask about the selection anyway — and with the typed
-    /// phrase switched off, Tier 3 is one of the rows it therefore covers.
+    /// The preferences decide whether a clean that needs no answer of its own is still confirmed, and
+    /// whether Tier 3 asks for typing. Deleting at these sizes has no undo (§8), so the default is to
+    /// ask. Either way a clean asks once, in one dialog (<see cref="CleanConfirmation"/>).
     /// </summary>
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
@@ -260,7 +256,7 @@ public sealed partial class CleanPage : Page
     {
         var preferences = App.Preferences.Current;
 
-        ViewModel.ConfirmCleanAsync = preferences.ConfirmBeforeCleaning ? ConfirmCleanAsync : null;
+        ViewModel.ConfirmBeforeCleaning = preferences.ConfirmBeforeCleaning;
         ViewModel.RequireTypedConfirmation = preferences.RequireTypedConfirmation;
         ViewModel.KeepFilesChangedWithinHours = preferences.KeepFilesChangedWithinHours;
     }
@@ -275,18 +271,6 @@ public sealed partial class CleanPage : Page
         App.MainWindow?.Content is FrameworkElement { XamlRoot: not null } window
             ? ContentDialogCompletionCountdown.AskAsync(countdown, App.Running, window)
             : Task.FromResult(false);
-
-    /// <summary>
-    /// The blanket "are you sure" before a clean. Cancel is the default button: this is the last point
-    /// at which an accidental selection can still be caught.
-    /// </summary>
-    private async Task<bool> ConfirmCleanAsync(CleanConfirmation confirmation)
-    {
-        var dialog = DialogFactory.Question(
-            this, confirmation.Title, new CleanConfirmationView(confirmation), confirmation.ConfirmLabel);
-
-        return await ModalDialog.ShowAsync(dialog) == ContentDialogResult.Primary;
-    }
 
     /// <summary>
     /// Open the row's own explanation: whose folder it is, what it is for, whether it is worth
@@ -319,12 +303,6 @@ public sealed partial class CleanPage : Page
             ShowItemsOrRows();
         }
 
-        // A new run's card must not say an earlier run's report was copied.
-        if (e.PropertyName == nameof(CleanViewModel.RunStatement))
-        {
-            CopyRunDiagnosticsResult.Text = string.Empty;
-        }
-
         if (e.PropertyName == nameof(CleanViewModel.HasRunResult) && ViewModel.HasRunResult)
         {
             BringInRunResult();
@@ -351,14 +329,6 @@ public sealed partial class CleanPage : Page
             _runResultEntrance.Enter(part, played, TimeSpan.Zero);
         }
     }
-
-    /// <summary>
-    /// Put the last run's report on the clipboard, and say on the card whether it went. It stays on
-    /// the clipboard after Deguffer closes, which is when a user filing an issue is most likely to
-    /// paste it.
-    /// </summary>
-    private async void OnCopyRunDiagnostics(object sender, RoutedEventArgs e) =>
-        CopyRunDiagnosticsResult.Text = await ClipboardText.PutAsync(ViewModel.RunDiagnostics, CancellationToken.None) ?? "Copied. Paste it into a GitHub issue.";
 
     /// <summary>
     /// Put the item list the view-model names on the card, or take it off and give the keyboard back
