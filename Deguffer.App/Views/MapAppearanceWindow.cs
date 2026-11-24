@@ -36,7 +36,7 @@ public sealed class MapAppearanceWindow : Window, IToolWindow
 
     private readonly MapAppearanceView _view;
 
-    /// <summary>The window's name, which every control that opens it uses as well.</summary>
+    /// <summary>The window's name, which the Settings row that opens it and Explore's button read as well.</summary>
     public static string Name => "Map appearance";
     private readonly FrameworkElement? _ownerRoot;
     private readonly ToolWindowPlacement _placement;

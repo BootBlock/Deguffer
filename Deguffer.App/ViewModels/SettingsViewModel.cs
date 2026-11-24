@@ -220,9 +220,10 @@ public sealed partial class SettingsViewModel : ObservableObject
         get => (int)_preferences.Current.TreemapSpacing;
         set
         {
+            // Recorded before the write, because the write calls FollowStoredSpacing as it lands and
+            // Apply announces the box anyway. Read back after it, as a refused write stores nothing.
+            _announcedSpacing = (ExploreSpacing)value;
             Apply(current => current with { TreemapSpacing = (ExploreSpacing)value });
-
-            // Apply has announced the stored spacing, written or put back.
             _announcedSpacing = _preferences.Current.TreemapSpacing;
         }
     }

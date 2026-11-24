@@ -166,7 +166,7 @@ public sealed class SettingsViewModelTests : IDisposable
 
     /// <summary>
     /// The page hears of every change to the preferences. Only one that moved the spacing makes the box
-    /// read it, including a move back to a spacing this page chose before.
+    /// read it, including a move back to the spacing the page started with.
     /// </summary>
     [Fact]
     public void OnlyAChangeToTheSpacingMakesTheBoxReadIt()
@@ -187,6 +187,23 @@ public sealed class SettingsViewModelTests : IDisposable
 
         Assert.Equal([nameof(SettingsViewModel.TreemapSpacingIndex)], raised);
         Assert.Equal((int)ExploreSpacing.Comfortable, page.TreemapSpacingIndex);
+    }
+
+    /// <summary>
+    /// The page hears of its own write as well, as the write lands, and the box reads the spacing once.
+    /// </summary>
+    [Fact]
+    public void ASpacingChosenOnThePageIsAnnouncedOnce()
+    {
+        var (page, preferences) = Page();
+        preferences.Changed += (_, _) => page.FollowStoredSpacing();
+        var raised = new List<string?>();
+        page.PropertyChanged += (_, changed) => raised.Add(changed.PropertyName);
+
+        page.TreemapSpacingIndex = (int)ExploreSpacing.Spacious;
+
+        Assert.Equal([nameof(SettingsViewModel.TreemapSpacingIndex)], raised);
+        Assert.Equal(ExploreSpacing.Spacious, preferences.Current.TreemapSpacing);
     }
 
     /// <summary>
