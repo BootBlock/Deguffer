@@ -18,7 +18,7 @@ namespace Deguffer.Core.Execution;
 /// something else, and that is exactly the over-reach this check exists to report.</para>
 /// </summary>
 /// <param name="protection">What lists the restore points, shadow copies and storage the step must leave.</param>
-public sealed class RestorePointProof(ISystemProtection protection) : StepProof<RemoveRestorePointsStep>
+internal sealed class RestorePointProof(ISystemProtection protection) : StepProof<RemoveRestorePointsStep>
 {
     private protected override IEnumerable<VerificationCheck> Checks(
         IReadOnlyList<RemoveRestorePointsStep> steps,

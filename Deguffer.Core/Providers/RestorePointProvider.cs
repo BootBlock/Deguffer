@@ -42,7 +42,7 @@ public sealed class RestorePointProvider : CleanupProviderBase
 {
     /// <summary>
     /// Read by planning and given to the executor that removes, so the plan and the clean ask the same
-    /// instance. See <see cref="CleanupProviderBase"/>'s <c>protection</c>.
+    /// instance. See <see cref="CleanupProviderBase"/>'s <c>routes</c>.
     /// </summary>
     private readonly ISystemProtection _protection;
 

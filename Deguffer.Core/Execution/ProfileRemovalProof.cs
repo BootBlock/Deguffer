@@ -18,7 +18,7 @@ namespace Deguffer.Core.Execution;
 /// it.</para>
 /// </summary>
 /// <param name="profiles">What lists the profiles the plan's removals must leave.</param>
-public sealed class ProfileRemovalProof(IUserProfiles profiles) : StepProof<RemoveProfileStep>
+internal sealed class ProfileRemovalProof(IUserProfiles profiles) : StepProof<RemoveProfileStep>
 {
     private const string OtherReason = "Another profile, which removing a profile must leave exactly as it was.";
 

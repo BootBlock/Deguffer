@@ -12,7 +12,7 @@ namespace Deguffer.Core.Execution;
 /// <para><b>Never defaulted to the machine's cloud files</b>, for the reason <see cref="RecycleBinRun"/>
 /// is not: the real one acts on the cloud accounts of whoever runs the process.</para>
 /// </summary>
-public sealed class LocalCopyRelease : StepRoute<ReleaseLocalCopiesStep>
+internal sealed class LocalCopyRelease : StepRoute<ReleaseLocalCopiesStep>
 {
     private readonly ICloudFiles _cloud;
 

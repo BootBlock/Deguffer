@@ -13,7 +13,7 @@ namespace Deguffer.Core.Execution;
 /// The provider that plans the step chooses its route by asking the same emptier, so a plan cannot
 /// choose a route on one object's answer and then be carried out by another.</para>
 /// </summary>
-public sealed class RecycleBinRun(IRecycleBinEmptier emptier) : StepRoute<EmptyRecycleBinStep>
+internal sealed class RecycleBinRun(IRecycleBinEmptier emptier) : StepRoute<EmptyRecycleBinStep>
 {
     /// <summary>
     /// Hand one volume's bin to Windows, then find out what that achieved by looking at the disk.

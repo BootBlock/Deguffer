@@ -15,7 +15,7 @@ namespace Deguffer.Core.Execution;
 /// <para><b>Never defaulted to the machine's own</b>, for the reason <see cref="RecycleBinRun"/> is not:
 /// the real one removes the machine's restore points.</para>
 /// </summary>
-public sealed class RestorePointRun : StepRoute<RemoveRestorePointsStep>
+internal sealed class RestorePointRun : StepRoute<RemoveRestorePointsStep>
 {
     private readonly ISystemProtection _protection;
 

@@ -13,8 +13,7 @@ namespace Deguffer.Core.Execution;
 /// <param name="Proofs">
 /// What proves each step whose work the protected paths cannot, usually the
 /// <see cref="StepRoute.Proof"/> of each route the plan ran through. A step none of them proves is
-/// asked of the machine's own proof of its kind (<see cref="MachineProofs"/>), as each was before routes
-/// carried them.
+/// asked of the machine's own proof of its kind (<see cref="MachineProofs"/>), which only reads.
 /// </param>
 /// <param name="Volumes">
 /// Asked every other path a protected path and each of the run's paths are reachable at, because a step

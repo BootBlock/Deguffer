@@ -15,7 +15,7 @@ namespace Deguffer.Core.Execution;
 /// <para><b>Never defaulted to the real handlers</b>, for the reason <see cref="RecycleBinRun"/> is
 /// not: the real ones can delete the previous Windows installation.</para>
 /// </summary>
-public sealed class DiskCleanupRun(IDiskCleanupHandlers handlers) : StepRoute<DiskCleanupStep>
+internal sealed class DiskCleanupRun(IDiskCleanupHandlers handlers) : StepRoute<DiskCleanupStep>
 {
     private protected override async Task<StepOutcome> CarryOutAsync(StepRun run, DiskCleanupStep step, CancellationToken ct)
     {

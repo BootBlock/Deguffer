@@ -29,7 +29,7 @@ public sealed class OtherAccountProfilesProvider : CleanupProviderBase
 {
     /// <summary>
     /// Read by planning and given to the executor that removes, so the plan and the clean ask the same
-    /// instance. See <see cref="CleanupProviderBase"/>'s <c>profiles</c>.
+    /// instance. See <see cref="CleanupProviderBase"/>'s <c>routes</c>.
     /// </summary>
     private readonly IUserProfiles _profiles;
 

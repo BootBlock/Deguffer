@@ -24,7 +24,7 @@ namespace Deguffer.Core.Execution;
 /// interleaved.</para>
 /// </summary>
 /// <param name="cloud">What describes each file the step named.</param>
-public sealed class ReleasedFileProof(ICloudFiles cloud) : StepProof<ReleaseLocalCopiesStep>
+internal sealed class ReleasedFileProof(ICloudFiles cloud) : StepProof<ReleaseLocalCopiesStep>
 {
     private protected override IEnumerable<VerificationCheck> Checks(
         IReadOnlyList<ReleaseLocalCopiesStep> steps,

@@ -6,13 +6,16 @@ namespace Deguffer.Core.Execution;
 /// of step is a new route and never an edit to the executor or the verifier.
 ///
 /// <para><b>Built only in this assembly.</b> The members are internal and the constructor is private
-/// protected, so the set of routes is the set this assembly defines. A route is still public so that
-/// the app's composition can give one to a provider (<see cref="CleanupPlanner.CreateDefault"/>).</para>
+/// protected, so the set of routes is the set this assembly defines. A route is still public because
+/// <see cref="Providers.CleanupProviderBase"/>, a public type, takes the routes of the provider that
+/// derives from it.</para>
 ///
 /// <para><b>Never defaulted where it acts on the machine.</b> The routes that empty a Recycle Bin, ask
-/// Windows' Disk Cleanup handlers, release cloud files, or remove restore points or profiles are given
-/// only where the app composes its providers. An executor given none refuses a plan that holds such a
-/// step before any of its steps runs, so a test that forgot a fake fails closed.</para>
+/// Windows' Disk Cleanup handlers, release cloud files, or remove restore points or profiles are built
+/// by the provider that plans such a step, on the collaborator it is given, which is the real one only
+/// where the app composes its providers (<see cref="CleanupPlanner.CreateDefault"/>). An executor given
+/// none refuses a plan that holds such a step before any of its steps runs, so a test that forgot a fake
+/// fails closed.</para>
 /// </summary>
 public abstract class StepRoute
 {

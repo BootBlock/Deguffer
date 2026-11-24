@@ -38,7 +38,7 @@ public abstract class SetupCleanupProviderBase : CleanupProviderBase
     /// <summary>
     /// Asked whether Windows' own cleanup has anything to clear, and given to the executor that runs it,
     /// so the plan and the clean ask the same instance. See <see cref="CleanupProviderBase"/>'s
-    /// <c>handlers</c>.
+    /// <c>routes</c>.
     /// </summary>
     private readonly IDiskCleanupHandlers _handlers;
 

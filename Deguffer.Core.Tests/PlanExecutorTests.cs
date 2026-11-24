@@ -1236,6 +1236,31 @@ public sealed class PlanExecutorTests : IDisposable
     }
 
     /// <summary>
+    /// The count of what the guard kept agrees with its noun, as every count Deguffer writes does,
+    /// rather than hedging with "file(s)".
+    /// </summary>
+    [Theory]
+    [InlineData(1, "Left alone: 1 file changed too recently.")]
+    [InlineData(2, "Left alone: 2 files changed too recently.")]
+    public async Task SaysHowManyFilesTheGuardKeptInWordsThatAgree(int files, string expected)
+    {
+        var cache = _temp.CreateDirectory("cache");
+
+        for (var i = 0; i < files; i++)
+        {
+            _temp.CreateFile(4096, "cache", $"written-just-now-{i}.bin");
+        }
+
+        var plan = PlanDeleting(new DeleteDirectoryStep(cache, "A cache")) with { Keep = MinimumAge.WithinHours(8, DateTime.UtcNow) };
+
+        var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog)
+            .ExecuteAsync(plan, runReach: null, residue: null, activity: null, progress: null, underway: null, ct: CancellationToken.None);
+
+        Assert.Equal(expected, Assert.Single(result.Steps).Message);
+        Assert.True(Directory.Exists(cache), "the guard kept every file and the folder around them went");
+    }
+
+    /// <summary>
     /// The guard travels on the plan, so a plan made without one deletes exactly what it always did.
     /// Reading the setting again at execution is what this rules out: the cut-off would then have
     /// moved, and the clean would take files the preview promised to leave.

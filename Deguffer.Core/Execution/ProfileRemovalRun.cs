@@ -15,7 +15,7 @@ namespace Deguffer.Core.Execution;
 /// <para><b>Never defaulted to the machine's own</b>, for the reason <see cref="RecycleBinRun"/> is not:
 /// the real one removes the machine's profiles.</para>
 /// </summary>
-public sealed class ProfileRemovalRun : StepRoute<RemoveProfileStep>
+internal sealed class ProfileRemovalRun : StepRoute<RemoveProfileStep>
 {
     private readonly IUserProfiles _profiles;
 
