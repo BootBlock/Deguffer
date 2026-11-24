@@ -277,15 +277,41 @@ public sealed class StartupViewModelTests : IDisposable
         Assert.Equal(InfoBarSeverity.Informational, page.ReportSeverity);
     });
 
+    /// <summary>
+    /// The offer follows each reading (§7.5): nothing before the first, none for a list of this
+    /// account's own entries, and the offer once a machine-wide entry is listed.
+    /// </summary>
     [Fact]
-    public void ReopeningElevatedAsksForThisPage()
+    public void TheOfferToReopenElevatedFollowsTheReading() => UiThread.Run(async () =>
     {
+        _registry.WithRun(StartupSource.UserRun, "ToolTray", Tool);
         var page = Page();
+
+        Assert.False(page.CanElevate);
+
+        await page.RefreshAsync();
+
+        Assert.False(page.CanElevate);
+        Assert.False(page.ElevateCommand.CanExecute(null));
+
+        _registry.WithRun(StartupSource.MachineRun, "Shared", Tool);
+        await page.RefreshAsync();
+
+        Assert.True(page.CanElevate);
+        Assert.True(page.ElevateCommand.CanExecute(null));
+    });
+
+    [Fact]
+    public void ReopeningElevatedAsksForThisPage() => UiThread.Run(async () =>
+    {
+        _registry.WithRun(StartupSource.MachineRun, "ToolTray", Tool);
+        var page = Page();
+        await page.RefreshAsync();
 
         page.ElevateCommand.Execute(null);
 
         Assert.Equal([ElevationRequest.Startup], _relaunches);
-    }
+    });
 
     private StartupViewModel Page()
     {

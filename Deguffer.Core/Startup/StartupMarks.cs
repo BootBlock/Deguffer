@@ -73,7 +73,7 @@ public sealed record StartupMarks(
 
     /// <summary>A shield where a change would be offered but for the rights it needs.</summary>
     private static string? ShieldFor(StartupEntry entry, bool isElevated) =>
-        !isElevated && !entry.IsPackaged && entry.Key.Source.NeedsAdministrator() && entry.Approval is { IsReplaceable: true }
+        StartupChangePolicy.WantsAdministrator(entry, isElevated)
             ? "This entry starts for every user, so changing it needs administrator rights."
             : null;
 

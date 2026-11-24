@@ -65,7 +65,6 @@ public sealed partial class StartupViewModel : ObservableObject
         _openSettings = openSettings;
         _running = running;
         _work = work;
-        CanElevate = ElevationOffer.ShouldOffer(isElevated);
         Menu = new StartupRowMenu(folderOf, shell, (sentence, severity) => Show(sentence, severity));
 
         // A change on this page, or a clean or a removal on another, ends with this process.
@@ -221,6 +220,7 @@ public sealed partial class StartupViewModel : ObservableObject
 
             _view = view;
             Headline = view.Headline;
+            CanElevate = ElevationOffer.ShouldOffer(_isElevated, view.Reading.Entries);
             ShowRows();
         }
         catch (OperationCanceledException) when (reads.IsCancellationRequested)
