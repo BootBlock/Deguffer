@@ -178,8 +178,7 @@ public class FindingViewModelTests
 
     /// <summary>
     /// A row with some of its items ticked shows a mixed checkbox and the size that will go against the
-    /// whole. A two-state box read as full beside it, and the row's figure was the whole row's size, so
-    /// the list could show a full tick beside "18.4 GB" for a clean that took 300 MB.
+    /// whole, so the list never shows a full tick beside "18.4 GB" for a clean that takes 300 MB.
     /// </summary>
     [Fact]
     public void ARowWithSomeItemsTickedIsMixedAndStatesWhatIsChosen()
@@ -212,15 +211,30 @@ public class FindingViewModelTests
     }
 
     /// <summary>
-    /// A step nobody can tick does not hold the row short of full. Its checkbox is disabled, so a
-    /// row that counted it could never be ticked by any click.
+    /// A step nobody can tick does not hold the checkbox short of full: its own checkbox is disabled, so
+    /// a row that counted it could never be ticked by any click. It still counts towards what the row
+    /// holds, so the figure states the part a clean takes against that, and the link the items ticked.
     /// </summary>
     [Fact]
-    public void AStepThatCannotBeTickedDoesNotMakeTheRowMixed()
+    public void AStepThatCannotBeTickedLeavesTheBoxFullAndTheFigureAPart()
     {
-        var row = Rows.Row(Rows.Found(Cache, Rows.Folder("a", 10), Rows.Folder("b", 20, requiresElevation: true)));
+        var row = Rows.Row(Rows.Found(Cache, Rows.Folder("a", 1024), Rows.Folder("b", 8192, requiresElevation: true)));
 
         Assert.True(row.SelectionState);
+        Assert.Equal($"{FreeSpace.Format(1024)} of {FreeSpace.Format(9216)}", row.SizeLabel);
+        Assert.Equal("1 of 2 items", row.ItemsLinkLabel);
+    }
+
+    /// <summary>
+    /// A row nothing in which can be ticked states what it holds, which is the figure that decides
+    /// whether reopening as administrator is worth it.
+    /// </summary>
+    [Fact]
+    public void ARowNeedingRightsForEveryStepStatesItsWhole()
+    {
+        var row = Rows.Row(Rows.Found(Cache, Rows.Folder("a", 8192, requiresElevation: true)));
+
+        Assert.Equal(FreeSpace.Format(8192), row.SizeLabel);
     }
 
     /// <summary>
@@ -244,7 +258,7 @@ public class FindingViewModelTests
 
     /// <summary>
     /// A tick that leaves a row as mixed as it was changes neither of its states, and still moves the
-    /// figures on it. Announced with the states alone, the row went on stating the size before the tick.
+    /// figures on it, which are announced with the size rather than with the states.
     /// </summary>
     [Fact]
     public void ATickThatLeavesTheRowMixedStillMovesItsFigures()

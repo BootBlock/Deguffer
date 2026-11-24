@@ -139,18 +139,13 @@ public sealed partial class FindingViewModel : ObservableObject
             step.PropertyChanged += OnStepChanged;
         }
 
-        // Under the guard, because the steps already carry their own restored state and the setter
-        // below would otherwise overwrite every one of them with this single value.
-        //
         // Rolled up from the steps rather than taken from the row's own remembered value, which is
         // the invariant the rest of this type holds: a row is selected when a step in it is. The
         // remembered value would tick a row that cannot contribute anything — one whose every step
         // is disabled for want of administrator rights, or one with no plan at all because the
         // toolchain has gone since the choice was made. Both render with a ticked, disabled
         // checkbox that nothing can clear, and both enable Clean against nothing.
-        _syncingSelection = true;
         RollUp();
-        _syncingSelection = false;
     }
 
     /// <summary>
@@ -172,9 +167,9 @@ public sealed partial class FindingViewModel : ObservableObject
     /// What the row's checkbox shows: ticked, clear, or mixed (null) where only some of the steps it can
     /// tick are ticked. See <see cref="ItemSelection.StateOf"/>.
     ///
-    /// <para>Apart from <see cref="IsSelected"/>, which answers whether the row is in the run at all. A
-    /// two-state box bound to that read as full beside a row with two of its forty items ticked, and a
-    /// click on it cleared the items the user had picked by hand without a word.</para>
+    /// <para>Apart from <see cref="IsSelected"/>, which answers whether the row is in the run at all: a
+    /// row with two of its forty items ticked is in the run and is not full, and a click on it clears
+    /// those two rather than ticking the other thirty-eight.</para>
     /// </summary>
     [ObservableProperty]
     public partial bool? SelectionState { get; private set; }
@@ -226,16 +221,22 @@ public sealed partial class FindingViewModel : ObservableObject
     public ProviderFacts Facts { get; }
 
     /// <summary>
-    /// The row's figure: what it offers, or where it is mixed, what is chosen against that. See
-    /// <see cref="ChosenOfWhole.Size"/>.
+    /// The row's figure: what it holds, or where it takes part of that, what a clean takes against it.
+    /// See <see cref="ChosenOfWhole.TakesPart"/>.
     /// </summary>
-    public string SizeLabel => Finding.IsPresent ? ChosenOfWhole.Size(SelectionState, SelectedSize, Finding.Reclaim) : "—";
+    public string SizeLabel => Finding.IsPresent
+        ? ChosenOfWhole.Size(
+            ChosenOfWhole.TakesPart(Steps.Select(s => (s.Step, s.IsSelected, s.IsKept))),
+            SelectedSize,
+            Finding.Reclaim)
+        : "—";
 
     /// <summary>
-    /// What the row's link to its item list says: how many items it lists, and how many are chosen where
-    /// the row is mixed. On the row rather than in <see cref="Text"/>, because it moves with every tick.
+    /// What the row's link to its item list says: how many items it lists, and how many are ticked where
+    /// some are and some are not. On the row rather than in <see cref="Text"/>, because it moves with
+    /// every tick.
     /// </summary>
-    public string ItemsLinkLabel => ChosenOfWhole.Items(SelectionState, Steps.Count(s => s.IsSelected), Steps.Count);
+    public string ItemsLinkLabel => ChosenOfWhole.Items(Steps.Count(s => s.IsSelected), Steps.Count);
 
     /// <summary>
     /// What this row is reporting, as the single value both its own label and the page's info bar
@@ -464,9 +465,7 @@ public sealed partial class FindingViewModel : ObservableObject
             return;
         }
 
-        _syncingSelection = true;
         RollUp();
-        _syncingSelection = false;
 
         AnnounceSelectedFigures();
         SelectionChanged?.Invoke(this);
