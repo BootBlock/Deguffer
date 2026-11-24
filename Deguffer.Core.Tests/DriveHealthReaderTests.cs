@@ -394,6 +394,20 @@ public sealed class DriveHealthReaderTests : IDisposable
     }
 
     [Fact]
+    public async Task ADrivesVolumesAreInTheOrderOfTheirLetters()
+    {
+        Nvme(4);
+        _volumes.With(@"S:\").With(@"C:\").With(@"P:\");
+        _storage.Volume(@"S:\", 4).Volume(@"C:\", 4).Volume(@"P:\", 4).Disk(4, DriveBytes.Nvme, seekPenalty: false);
+
+        await ReadAll();
+
+        var placed = Assert.Single(_placed.Reports);
+        Assert.Equal("C:, P:, S:", placed.Names);
+        Assert.Equal(@"C:\; P:\; S:\", placed.Line);
+    }
+
+    [Fact]
     public async Task ADriveThatDoesNotAnswerIsReportedAndNotAskedAgain()
     {
         using var release = new ManualResetEventSlim();
