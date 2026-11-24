@@ -10,7 +10,7 @@ namespace Deguffer.App.ViewModels;
 
 /// <summary>
 /// What is ticked across the Storage page's rows, as one selection: each change to it, wherever it
-/// came from, is remembered for the next scan and totalled for the Selected figure.
+/// came from, is remembered for the next scan and totalled for the Clean button.
 ///
 /// <para>Apart from <see cref="CleanViewModel"/>, which runs the scans and the clean, because the
 /// selection changes for reasons of its own: a click on a row or an item, or an entry of the selection
@@ -56,9 +56,9 @@ public sealed partial class StorageSelection : ObservableObject
     /// </summary>
     public event EventHandler? Changed;
 
-    /// <summary>The Selected figure: what the ticked steps would give back.</summary>
+    /// <summary>What the Clean button says: the action and what the ticked steps would give back.</summary>
     [ObservableProperty]
-    public partial string TotalLabel { get; private set; } = FreeSpace.Format(0);
+    public partial string CleanLabel { get; private set; } = CleanOffer.Label(ScanSize.Zero);
 
     /// <summary>Whether any row is ticked, which a clean needs.</summary>
     public bool IsAnyTicked => _rows.Any(row => row.IsSelected);
@@ -96,7 +96,7 @@ public sealed partial class StorageSelection : ObservableObject
     /// </summary>
     public void Retotal()
     {
-        TotalLabel = FreeSpace.Format(Total);
+        CleanLabel = CleanOffer.Label(Total);
         RefreshMenu();
     }
 

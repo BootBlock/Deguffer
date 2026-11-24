@@ -39,7 +39,7 @@ public class CleanViewModelKeepTests
         page.ViewModel.ToggleKeep(row, row.Steps[0]);
 
         Assert.True(row.Steps[0].IsKept);
-        Assert.Equal("2 KB", page.ViewModel.Selection.TotalLabel);
+        Assert.Equal("Clean 2 KB", page.ViewModel.Selection.CleanLabel);
         Assert.Equal("2 KB can be reclaimed, 2 KB selected. Review the rows, then Clean.", page.ViewModel.Status);
         Assert.Equal(["a"], new KeepStore(page.Environment).Load().KeysFor("cache"));
     }
@@ -175,7 +175,7 @@ public class CleanViewModelKeepTests
         page.ViewModel.ApplyKeepList();
 
         Assert.True(row.Steps[1].IsKept);
-        Assert.Equal("1 KB", page.ViewModel.Selection.TotalLabel);
+        Assert.Equal("Clean 1 KB", page.ViewModel.Selection.CleanLabel);
 
         var raised = page.ViewModel.Notifications();
         page.ViewModel.ApplyKeepList();

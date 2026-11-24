@@ -58,7 +58,7 @@ public class StorageSelectionTests
         Run(menu => menu.SelectAllCommand, page);
 
         Assert.All(page.ViewModel.Findings, row => Assert.True(row.IsSelected));
-        Assert.Equal("3 KB", Menu(page).TotalLabel);
+        Assert.Equal("Clean 3 KB", Menu(page).CleanLabel);
         Assert.True(page.ViewModel.CanClean);
     }
 
@@ -108,6 +108,34 @@ public class StorageSelectionTests
         Assert.False(new SelectionStore(page.Environment).Load()["cache"].Steps[row.Steps[0].Step.SelectionKey]);
     }
 
+    /// <summary>
+    /// The Clean button reads its words from the selection, so they follow each tick and untick with
+    /// a notification for the binding, rather than stating the total of the scan that built the rows.
+    /// </summary>
+    [Fact]
+    public void TheCleanButtonStatesWhatIsTickedAsRowsAreTicked()
+    {
+        using var page = Scanned();
+        var told = new List<string>();
+        Menu(page).PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(StorageSelection.CleanLabel))
+            {
+                told.Add(Menu(page).CleanLabel);
+            }
+        };
+
+        Assert.Equal("Clean 1 KB", Menu(page).CleanLabel);
+
+        page.Row("sdk").IsSelected = true;
+        page.Row("logs").IsSelected = true;
+        page.Row("cache").IsSelected = false;
+        page.Row("sdk").IsSelected = false;
+        page.Row("logs").IsSelected = false;
+
+        Assert.Equal(["Clean 2 KB", "Clean 3 KB", "Clean 2 KB", "Clean 1 KB", "Clean"], told);
+    }
+
     [Fact]
     public void SelectNoneClearsEveryRow()
     {
@@ -118,7 +146,7 @@ public class StorageSelectionTests
 
         Assert.All(page.ViewModel.Findings, row => Assert.False(row.IsSelected));
         Assert.All(page.ViewModel.Findings, row => Assert.All(row.Steps, step => Assert.False(step.IsSelected)));
-        Assert.Equal("0 B", Menu(page).TotalLabel);
+        Assert.Equal("Clean", Menu(page).CleanLabel);
         Assert.False(page.ViewModel.CanClean);
     }
 
@@ -138,7 +166,7 @@ public class StorageSelectionTests
         Assert.True(page.Row("cache").IsSelected);
         Assert.False(page.Row("sdk").IsSelected);
         Assert.False(page.Row("logs").IsSelected);
-        Assert.Equal("1 KB", Menu(page).TotalLabel);
+        Assert.Equal("Clean 1 KB", Menu(page).CleanLabel);
     }
 
     /// <summary>
