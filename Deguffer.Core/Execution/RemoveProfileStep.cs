@@ -46,4 +46,6 @@ public sealed record RemoveProfileStep(UserProfile Profile, string What) : Clean
     public override IReadOnlyList<string> Subjects => [];
 
     public override IReadOnlyList<string> Reaches => [Folder];
+
+    public override IReadOnlyList<string> RunTargets => [Folder];
 }

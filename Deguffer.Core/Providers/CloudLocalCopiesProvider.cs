@@ -44,7 +44,7 @@ public sealed class CloudLocalCopiesProvider : CleanupProviderBase
 
     /// <summary>
     /// What the sync roots are read through, and the same instance their files are released and proved
-    /// through. See <see cref="CleanupProviderBase"/>'s <c>cloud</c>.
+    /// through. See <see cref="CleanupProviderBase"/>'s <c>routes</c>.
     /// </summary>
     private readonly ICloudFiles _cloud;
 
@@ -66,7 +66,7 @@ public sealed class CloudLocalCopiesProvider : CleanupProviderBase
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner,
-            cloud: cloud)
+            routes: [new LocalCopyRelease(cloud)])
     {
         _cloud = cloud;
         _tuning = tuning ?? ScanTuner.Shipped;

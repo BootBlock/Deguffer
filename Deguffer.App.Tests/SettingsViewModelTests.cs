@@ -223,6 +223,67 @@ public sealed class SettingsViewModelTests : IDisposable
     }
 
     /// <summary>
+    /// The map appearance window writes the same spacing while the page is open, so the page's box reads
+    /// it again rather than going on showing a spacing no longer in effect.
+    /// </summary>
+    [Fact]
+    public void ASpacingChosenInTheMapAppearanceWindowIsShownInTheBox()
+    {
+        var (page, preferences) = Page();
+        var window = new MapAppearanceViewModel(preferences);
+        var raised = new List<string?>();
+        page.PropertyChanged += (_, changed) => raised.Add(changed.PropertyName);
+
+        window.SpacingIndex = (int)ExploreSpacing.Spacious;
+        page.FollowStoredSpacing();
+
+        Assert.Equal([nameof(SettingsViewModel.TreemapSpacingIndex)], raised);
+        Assert.Equal((int)ExploreSpacing.Spacious, page.TreemapSpacingIndex);
+    }
+
+    /// <summary>
+    /// The page hears of every change to the preferences. Only one that moved the spacing makes the box
+    /// read it, including a move back to the spacing the page started with.
+    /// </summary>
+    [Fact]
+    public void OnlyAChangeToTheSpacingMakesTheBoxReadIt()
+    {
+        var (page, preferences) = Page();
+        var window = new MapAppearanceViewModel(preferences);
+        page.TreemapSpacingIndex = (int)ExploreSpacing.Dense;
+        var raised = new List<string?>();
+        page.PropertyChanged += (_, changed) => raised.Add(changed.PropertyName);
+
+        preferences.Update(current => current with { BackdropEnabled = false });
+        page.FollowStoredSpacing();
+
+        Assert.Empty(raised);
+
+        window.SpacingIndex = (int)ExploreSpacing.Comfortable;
+        page.FollowStoredSpacing();
+
+        Assert.Equal([nameof(SettingsViewModel.TreemapSpacingIndex)], raised);
+        Assert.Equal((int)ExploreSpacing.Comfortable, page.TreemapSpacingIndex);
+    }
+
+    /// <summary>
+    /// The page hears of its own write as well, as the write lands, and the box reads the spacing once.
+    /// </summary>
+    [Fact]
+    public void ASpacingChosenOnThePageIsAnnouncedOnce()
+    {
+        var (page, preferences) = Page();
+        preferences.Changed += (_, _) => page.FollowStoredSpacing();
+        var raised = new List<string?>();
+        page.PropertyChanged += (_, changed) => raised.Add(changed.PropertyName);
+
+        page.TreemapSpacingIndex = (int)ExploreSpacing.Spacious;
+
+        Assert.Equal([nameof(SettingsViewModel.TreemapSpacingIndex)], raised);
+        Assert.Equal(ExploreSpacing.Spacious, preferences.Current.TreemapSpacing);
+    }
+
+    /// <summary>
     /// Listed in full, by the provider's name and then the item's, whatever case each was written in,
     /// so a reader can find an entry that no scan finds any more.
     /// </summary>

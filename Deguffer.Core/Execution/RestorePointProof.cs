@@ -17,9 +17,26 @@ namespace Deguffer.Core.Execution;
 /// restore point to its shadow copies, so a removal could have taken a copy System Restore shares with
 /// something else, and that is exactly the over-reach this check exists to report.</para>
 /// </summary>
-internal static class RestorePointProof
+/// <param name="protection">What lists the restore points, shadow copies and storage the step must leave.</param>
+internal sealed class RestorePointProof(ISystemProtection protection) : StepProof<RemoveRestorePointsStep>
 {
-    public static IEnumerable<VerificationCheck> Checks(RemoveRestorePointsStep step, ISystemProtection protection)
+    private protected override IEnumerable<VerificationCheck> Checks(
+        IReadOnlyList<RemoveRestorePointsStep> steps,
+        Func<ProtectedPath, VerificationCheck> missing,
+        CancellationToken ct)
+    {
+        foreach (var step in steps)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            foreach (var check in Checks(step))
+            {
+                yield return check;
+            }
+        }
+    }
+
+    private IEnumerable<VerificationCheck> Checks(RemoveRestorePointsStep step)
     {
         yield return KeptPoint(step.Kept, protection.ListRestorePoints());
 

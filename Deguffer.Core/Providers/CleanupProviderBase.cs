@@ -46,23 +46,14 @@ public abstract class CleanupProviderBase : ICleanupProvider
 
     private readonly PlanExecutor _executor;
     private readonly RefusalRecord _refusals;
-    private readonly VerificationSources _proof;
 
-    /// <param name="emptier">
-    /// How an <see cref="EmptyRecycleBinStep"/> is carried out, given by the one provider that plans one
-    /// and null for every other. That provider takes it as a required argument and chooses its route by
-    /// asking the same instance, so a plan cannot choose a route on one object's answer and then be
-    /// carried out by another. Never defaulted to the real one, which empties the Recycle Bin of
-    /// whoever runs the process. See <see cref="PlanExecutor"/>.
-    /// </param>
-    /// <param name="cloud">
-    /// How a <see cref="ReleaseLocalCopiesStep"/> is carried out and proved, on the terms
-    /// <paramref name="emptier"/> is given: the real one acts on the cloud accounts of whoever runs the
-    /// process.
-    /// </param>
-    /// <param name="handlers">
-    /// How a <see cref="DiskCleanupStep"/> is carried out, on the terms <paramref name="emptier"/> is
-    /// given: the real one can delete the previous Windows installation.
+    /// <param name="routes">
+    /// How this provider's steps that act through Windows or a sync app are carried out and proved: a
+    /// <see cref="RecycleBinRun"/>, <see cref="DiskCleanupRun"/>, <see cref="LocalCopyRelease"/>,
+    /// <see cref="RestorePointRun"/> or <see cref="ProfileRemovalRun"/>, given by the provider that plans
+    /// that kind of step and by no other. Each is built on the same object the provider plans with, so
+    /// a plan cannot choose a route on one object's answer and then be carried out by another. Never
+    /// defaulted to the real ones. See <see cref="StepRoute"/>.
     /// </param>
     /// <param name="servicing">
     /// Where Windows is in servicing itself, asked when a plan is made and again before a step that is
@@ -72,14 +63,6 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// <param name="time">
     /// The clock a command step waits on while its tool marks what it will remove later. See
     /// <see cref="PlanExecutor"/>.
-    /// </param>
-    /// <param name="protection">
-    /// How a <see cref="RemoveRestorePointsStep"/> is carried out and proved, on the terms
-    /// <paramref name="emptier"/> is given: the real one removes the machine's restore points.
-    /// </param>
-    /// <param name="profiles">
-    /// How a <see cref="RemoveProfileStep"/> is carried out and proved, on the terms
-    /// <paramref name="emptier"/> is given: the real one removes the machine's profiles.
     /// </param>
     /// <param name="scanner">
     /// What every measurement asks. Where none is given, the scanner of the machine
@@ -96,14 +79,10 @@ public abstract class CleanupProviderBase : ICleanupProvider
         IProcessRunner runner,
         IProcessInspector inspector,
         IDirectoryScanner? scanner,
-        IRecycleBinEmptier? emptier = null,
-        ICloudFiles? cloud = null,
-        IDiskCleanupHandlers? handlers = null,
+        IReadOnlyList<StepRoute>? routes = null,
         IWindowsServicing? servicing = null,
         TimeProvider? time = null,
-        ISystemProtection? protection = null,
-        IVolumeInventory? volumes = null,
-        IUserProfiles? profiles = null)
+        IVolumeInventory? volumes = null)
     {
         Environment = environment;
         var machine = volumes ?? VolumeInventory.Current;
@@ -115,10 +94,8 @@ public abstract class CleanupProviderBase : ICleanupProvider
         Servicing = servicing ?? WindowsServicing.Current;
         _planningServicing = PlanningServicing.For(Servicing, inspector);
         _executor = new PlanExecutor(
-            runner, Scanner, _refusals, emptier, cloud, handlers, Servicing, inspector, time, environment,
-            protection: protection, volumes: machine, profiles: profiles);
+            runner, Scanner, _refusals, routes, Servicing, inspector, time, environment, volumes: machine);
         Runner = runner;
-        _proof = new VerificationSources(cloud, protection, machine, profiles, Scanner.Tuning);
     }
 
     protected IUserEnvironment Environment { get; }
@@ -351,7 +328,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         CancellationToken ct = default) =>
         // On a thread of the proof's own, never the pool's, which watches the token itself. See ListWorkers.
         WorkerThreads.Shared.RunAsync(
-            () => PlanVerifier.Verify(plan, runReach, residue, ct, _proof),
+            () => PlanVerifier.Verify(plan, runReach, residue, ct, _executor.Proof),
             CancellationToken.None);
 
     /// <summary>A plan with nothing to do, and the reason the user is shown.</summary>

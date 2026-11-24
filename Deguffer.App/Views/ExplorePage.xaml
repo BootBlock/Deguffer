@@ -227,7 +227,7 @@
                             Padding="8"
                             Click="OnAppearanceClicked"
                             ToolTipService.ToolTip="Map appearance: colours and spacing"
-                            AutomationProperties.Name="Map appearance">
+                            AutomationProperties.Name="{x:Bind views:MapAppearanceWindow.Name}">
                         <FontIcon Glyph="&#xE713;" FontSize="{StaticResource GlyphSizeStandard}" />
                     </Button>
                 </StackPanel>

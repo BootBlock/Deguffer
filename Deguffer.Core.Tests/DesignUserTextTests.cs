@@ -31,7 +31,6 @@ public sealed partial class DesignUserTextTests
         ["Deguffer.Core/Execution/CleanupResult.cs"] = 2,
         ["Deguffer.Core/Execution/LeftInPlace.cs"] = 11,
         ["Deguffer.Core/Execution/LocalCopyRelease.cs"] = 4,
-        ["Deguffer.Core/Execution/PlanExecutor.cs"] = 1,
         ["Deguffer.Core/Execution/RecordedRefusals.cs"] = 2,
         ["Deguffer.Core/Execution/RunOutcome.cs"] = 9,
         ["Deguffer.Core/Execution/SiblingCheck.cs"] = 2,

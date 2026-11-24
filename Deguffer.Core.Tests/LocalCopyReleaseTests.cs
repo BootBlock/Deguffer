@@ -3,6 +3,7 @@ using Deguffer.Core.Cloud;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
@@ -72,8 +73,22 @@ public sealed class LocalCopyReleaseTests : IDisposable
         return new ReleaseLocalCopiesStep(_root, "OneDrive", "Local copies") { Files = named };
     }
 
-    private Task<StepOutcome> Run(ReleaseLocalCopiesStep step, IProgress<double>? progress = null, TimeProvider? time = null) =>
-        LocalCopyRelease.RunAsync(_cloud, step, MinimumAge.Off, progress, time ?? new ManualTimeProvider(), CancellationToken.None);
+    private Task<StepOutcome> Run(ReleaseLocalCopiesStep step, IProgress<double>? progress = null, TimeProvider? time = null)
+    {
+        var clock = time ?? new ManualTimeProvider();
+        var plan = new PlanRun(
+            PlanOf(step),
+            new RunResidue(),
+            new RunActivity(),
+            new ThreadAllowance(1),
+            Underway: null,
+            ParallelEnumerationScanner.Default,
+            clock,
+            new FakeUserEnvironment(_root));
+
+        return new LocalCopyRelease(_cloud).RunAsync(
+            new StepRun(plan, new StepClock(clock, WindowsFileSystem.Default), progress), step, CancellationToken.None);
+    }
 
     private static CleanupPlan PlanOf(ReleaseLocalCopiesStep step) => new()
     {
@@ -85,7 +100,7 @@ public sealed class LocalCopyReleaseTests : IDisposable
     };
 
     private VerificationResult Verify(ReleaseLocalCopiesStep step) =>
-        PlanVerifier.Verify(PlanOf(step), sources: new VerificationSources(Cloud: _cloud, Volumes: new FakeVolumeInventory()));
+        PlanVerifier.Verify(PlanOf(step), sources: new VerificationSources([new ReleasedFileProof(_cloud)], new FakeVolumeInventory()));
 
     [Fact]
     public async Task AsksAboutTheBoundsWorthOfFilesAtOnceAndNoMore()
