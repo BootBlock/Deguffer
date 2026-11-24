@@ -452,4 +452,81 @@ public sealed class SettingsViewModelTests : IDisposable
         Assert.Equal([folder], page.EmulatorFolders);
         Assert.False(page.EmulatorFolderNotOnDisk);
     }
+
+    /// <summary>
+    /// A row's reset writes that setting's default, leaves every other setting where the reader put it,
+    /// and stops offering itself, while the row still off its default goes on offering its own.
+    /// </summary>
+    [Fact]
+    public void ResettingOneRowWritesItsDefaultAndLeavesTheOthersAlone()
+    {
+        var (page, preferences) = Page();
+        page.KeepFilesChangedWithinHours = 8;
+        page.MinimumTemporaryFileAge = 3;
+
+        Assert.True(page.Defaults.KeepFilesChangedWithinHours.CanReset);
+
+        page.Defaults.KeepFilesChangedWithinHours.Reset();
+
+        Assert.Equal(AppPreferences.Default.KeepFilesChangedWithinHours, preferences.Current.KeepFilesChangedWithinHours);
+        Assert.Equal(3, preferences.Current.MinimumTemporaryFileAgeDays);
+        Assert.False(page.Defaults.KeepFilesChangedWithinHours.CanReset);
+        Assert.True(page.Defaults.MinimumTemporaryFileAge.CanReset);
+        Assert.Equal("Default: 0 hours", page.Defaults.KeepFilesChangedWithinHours.Statement);
+        Assert.False(page.KeepFilesChangedWithinHoursSave.Failed);
+    }
+
+    /// <summary>
+    /// A reset does not know which property its row's control is bound to, so every control reads back
+    /// what was stored, and the row is told that its reset is withdrawn, and nothing else.
+    /// </summary>
+    [Fact]
+    public void AResetHasEveryControlAndTheRowReadBack()
+    {
+        var (page, _) = Page();
+        page.BackdropEnabled = false;
+        var raised = new List<string?>();
+        var row = new List<string?>();
+        page.PropertyChanged += (_, changed) => raised.Add(changed.PropertyName);
+        page.Defaults.BackdropEnabled.PropertyChanged += (_, changed) => row.Add(changed.PropertyName);
+
+        page.Defaults.BackdropEnabled.Reset();
+
+        Assert.True(page.BackdropEnabled);
+        Assert.Contains(string.Empty, raised);
+        Assert.Equal([nameof(SettingReset.CanReset)], row);
+        Assert.False(page.Defaults.BackdropEnabled.CanReset);
+    }
+
+    /// <summary>A reset that could not be written is stated on its own row, as a change made there would be.</summary>
+    [Fact]
+    public void AResetThatFailsIsStatedOnItsOwnRow()
+    {
+        var (page, preferences) = Page();
+        page.FileHistoryRetentionDays = 30;
+        File.Delete(Path.Combine(Settings, "preferences.json"));
+        Directory.CreateDirectory(Path.Combine(Settings, "preferences.json"));
+
+        page.Defaults.FileHistoryRetentionDays.Reset();
+
+        Assert.True(page.FileHistoryRetentionDaysSave.Failed);
+        Assert.False(page.ThemeSave.Failed);
+        Assert.Equal(30, preferences.Current.FileHistoryRetentionDays);
+        Assert.True(page.Defaults.FileHistoryRetentionDays.CanReset);
+    }
+
+    /// <summary>Each row's reset is the setting its name says, so no row puts back another's value.</summary>
+    [Fact]
+    public void EachRowsResetIsTheSettingItIsNamedFor()
+    {
+        var (page, _) = Page();
+
+        foreach (var property in typeof(SettingsFormDefaults).GetProperties().Where(property => property.PropertyType == typeof(SettingReset)))
+        {
+            var expected = typeof(ShippedSettings).GetField(property.Name)?.GetValue(null);
+
+            Assert.True(expected is not null, $"{property.Name} names no setting the page restores.");
+            Assert.Same(expected, ((SettingReset)property.GetValue(page.Defaults)!).Setting);
+        }
+    }
 }

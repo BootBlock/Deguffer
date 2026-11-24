@@ -101,7 +101,7 @@
         </Grid>
 
         <TextBlock Grid.Row="3"
-                   Text="Your choice could not be written to disk, so it has not been applied. Check that %LOCALAPPDATA%\Deguffer is writable."
+                   Text="{x:Bind vm:SettingSave.NoticeMessage}"
                    Foreground="{ThemeResource SystemFillColorCautionBrush}"
                    TextWrapping="Wrap"
                    Visibility="{x:Bind Choice.SaveFailed, Mode=OneWay}" />

@@ -67,6 +67,29 @@ internal static class DialogFactory
     internal static TextBlock Paragraph(string text) =>
         new() { Text = text, TextWrapping = TextWrapping.WrapWholeWords };
 
+    /// <summary>
+    /// A paragraph and, under it, what it is about, one line each. The lines scroll within a bounded
+    /// height, so a long list never pushes the dialog's buttons off the window, and can be selected and
+    /// copied.
+    /// </summary>
+    internal static StackPanel Listing(string lead, IReadOnlyList<string> lines)
+    {
+        var content = new StackPanel { Spacing = 12 };
+        content.Children.Add(Paragraph(lead));
+        content.Children.Add(new ScrollViewer
+        {
+            MaxHeight = 240,
+            Content = new TextBlock
+            {
+                Text = string.Join(Environment.NewLine, lines),
+                TextWrapping = TextWrapping.Wrap,
+                IsTextSelectionEnabled = true,
+            },
+        });
+
+        return content;
+    }
+
     private static ContentDialog Build(FrameworkElement owner, string title, string closeLabel) =>
         Adopt(owner, new ContentDialog
         {

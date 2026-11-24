@@ -50,6 +50,28 @@ public sealed partial class SettingsViewModel : ObservableObject
         SourceRoots = [.. sourceRoots.Current];
         EmulatorFolders = [.. emulatorFolders.Current];
         KeptItems = [.. InDisplayOrder(keeps.Current)];
+
+        Defaults = new SettingsFormDefaults(preferences, this, Reset);
+    }
+
+    /// <summary>Each row's default, and the way back to it.</summary>
+    public SettingsFormDefaults Defaults { get; }
+
+    /// <summary>
+    /// Put one setting back to its default. Every control reads the stored settings again, because the
+    /// row that asked does not say which property its control is bound to.
+    /// </summary>
+    private void Reset(SettingSave row, SettingDefault setting) => Apply(row, setting.Reset, string.Empty);
+
+    /// <summary>
+    /// Read every control, the spacing box's record and every row's default again, after the page put
+    /// back every setting at once.
+    /// </summary>
+    public void ShowStored()
+    {
+        _announcedSpacing = _preferences.Current.TreemapSpacing;
+        OnPropertyChanged(string.Empty);
+        Defaults.Follow();
     }
 
     /// <summary>
@@ -411,6 +433,16 @@ public sealed partial class SettingsViewModel : ObservableObject
         // A write that succeeds can store something other than what was typed, because a number goes
         // through EnteredSetting first: half an hour is stored as one. The control that made the
         // change reads it back, or it goes on showing a value that is not in effect.
-        OnPropertyChanged(outcome is SaveOutcome.Refused ? string.Empty : setting);
+        var announced = outcome is SaveOutcome.Refused ? string.Empty : setting;
+
+        if (announced.Length == 0)
+        {
+            // Every control reads back, the spacing box with them, so the spacing it shows is the
+            // stored one and need not be announced again when the page passes the write on.
+            _announcedSpacing = _preferences.Current.TreemapSpacing;
+        }
+
+        OnPropertyChanged(announced);
+        Defaults.Follow();
     }
 }

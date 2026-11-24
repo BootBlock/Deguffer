@@ -21,18 +21,6 @@ namespace Deguffer.App.ViewModels;
 /// </summary>
 public sealed partial class ScanSettingsViewModel : ObservableObject
 {
-    /// <summary>The kinds in the order the picker lists them, the common ones first.</summary>
-    private static readonly StorageMedia[] Kinds =
-    [
-        StorageMedia.Nvme,
-        StorageMedia.SolidState,
-        StorageMedia.Rotational,
-        StorageMedia.Removable,
-        StorageMedia.Network,
-        StorageMedia.Virtual,
-        StorageMedia.Unknown,
-    ];
-
     private readonly PreferenceService _preferences;
     private readonly ScanTuner _tuner;
     private readonly IVolumeInventory _volumes;
@@ -50,9 +38,31 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
         _tuner = tuner;
         _volumes = volumes;
         _latest = latest;
+
+        Defaults = new ScanSettingsDefaults(preferences, this, () => Kind, Reset);
     }
 
-    public IReadOnlyList<string> KindNames { get; } = (string[])[.. Kinds.Select(ScanTuningText.MediaName)];
+    /// <summary>Each row's default, and the way back to it.</summary>
+    public ScanSettingsDefaults Defaults { get; }
+
+    /// <summary>
+    /// Put one value back to its default, for the chosen kind alone where it is one kind's value. Every
+    /// control reads the stored values again, as the row does not say which one its control shows.
+    /// </summary>
+    private void Reset(SettingSave row, SettingDefault setting) => Store(row, setting.Reset, string.Empty);
+
+    /// <summary>
+    /// Read every stored value again, after the page restored them all: every control, the folded
+    /// header's summary, what each drive is scanned with, and each row's default.
+    /// </summary>
+    public void ShowStored()
+    {
+        OnPropertyChanged(string.Empty);
+        DescribeDrives();
+        Defaults.Follow();
+    }
+
+    public IReadOnlyList<string> KindNames { get; } = (string[])[.. ScanTuningText.Kinds.Select(ScanTuningText.MediaName)];
 
     /// <summary>The route picker's items, indexed as <see cref="RouteIndex"/> is.</summary>
     public IReadOnlyList<string> RouteNames => ScanTuningText.RouteNames;
@@ -76,10 +86,11 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
         get;
         set
         {
-            if (SetProperty(ref field, Math.Clamp(value, 0, Kinds.Length - 1)))
+            if (SetProperty(ref field, Math.Clamp(value, 0, ScanTuningText.Kinds.Count - 1)))
             {
-                // Everything below the picker describes the kind it names.
+                // Everything below the picker describes the kind it names, its defaults included.
                 OnPropertyChanged(string.Empty);
+                Defaults.Follow();
             }
         }
     }
@@ -234,7 +245,7 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
 
     private ScanPreferences Scanning => _preferences.Current.Scanning;
 
-    private StorageMedia Kind => Kinds[KindIndex];
+    private StorageMedia Kind => ScanTuningText.Kinds[KindIndex];
 
     private MediaScanPreferences Chosen => Scanning.For(Kind);
 
@@ -255,9 +266,13 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
 
     /// <param name="row">The row whose control made the change, which says so if it was not saved.</param>
     /// <param name="setting">The property whose control made the change, which is the setter calling this.</param>
-    private void Apply(SettingSave row, Func<ScanPreferences, ScanPreferences> change, [CallerMemberName] string setting = "")
+    private void Apply(SettingSave row, Func<ScanPreferences, ScanPreferences> change, [CallerMemberName] string setting = "") =>
+        Store(row, current => current with { Scanning = change(current.Scanning) }, setting);
+
+    /// <param name="setting">The property whose control made the change, or empty where every control is to read back.</param>
+    private void Store(SettingSave row, Func<AppPreferences, AppPreferences> change, string setting)
     {
-        var outcome = _latest.Report(row, _preferences.Update(current => current with { Scanning = change(current.Scanning) }));
+        var outcome = _latest.Report(row, _preferences.Update(change));
 
         // As the rest of the page does: a rejected write puts every control back to what holds, and
         // an accepted one reads back what was stored, which the clamp can make differ from what was
@@ -269,5 +284,7 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
             OnPropertyChanged(nameof(Summary));
             DescribeDrives();
         }
+
+        Defaults.Follow();
     }
 }

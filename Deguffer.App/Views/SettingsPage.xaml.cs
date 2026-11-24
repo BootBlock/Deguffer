@@ -17,6 +17,7 @@ public sealed partial class SettingsPage : Page
         ViewModel = new SettingsViewModel(
             App.Preferences, App.SourceRoots, App.EmulatorFolders, App.Keeps, VolumeInventory.Current, latest);
         Scanning = new ScanSettingsViewModel(App.Preferences, App.ScanTuning, VolumeInventory.Current, latest);
+        Restore = new SettingsRestore(App.Preferences, latest);
         History = new ScanHistorySettingsViewModel(App.ScanHistory);
         Sizes = new SizeHistorySettingsViewModel(App.ProviderSizes);
         InitializeComponent();
@@ -43,6 +44,35 @@ public sealed partial class SettingsPage : Page
     {
         ViewModel.FollowStoredSpacing();
         ShowSpacing();
+
+        // Each row's default and the page's restore follow every write, made by either form or by the
+        // restore, as no one of them sees the others'.
+        ViewModel.Defaults.Follow();
+        Scanning.Defaults.Follow();
+        Restore.Follow();
+    }
+
+    /// <summary>
+    /// Ask before every setting on the page goes back to its default, naming each one that will change,
+    /// then put them back and have both parts of the page read what was stored.
+    /// </summary>
+    private async void OnRestoreDefaults(object sender, RoutedEventArgs e)
+    {
+        if (Restore.Prompt() is not { } prompt)
+        {
+            return;
+        }
+
+        var dialog = DialogFactory.Question(this, prompt.Title, DialogFactory.Listing(prompt.Consequence, prompt.Items), prompt.ConfirmLabel);
+
+        if (await ModalDialog.ShowAsync(dialog) != ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        Restore.Restore();
+        ViewModel.ShowStored();
+        Scanning.ShowStored();
     }
 
     private void ShowSpacing() => SpacingPreview.Show(MapLook.From(App.Preferences.Current), ExploreView.Treemap);
@@ -76,6 +106,8 @@ public sealed partial class SettingsPage : Page
     public SettingsViewModel ViewModel { get; }
 
     public ScanSettingsViewModel Scanning { get; }
+
+    public SettingsRestore Restore { get; }
 
     public ScanHistorySettingsViewModel History { get; }
 

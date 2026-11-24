@@ -4,7 +4,8 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Deguffer.App.Controls"
-    xmlns:views="using:Deguffer.App.Views">
+    xmlns:views="using:Deguffer.App.Views"
+    xmlns:viewModels="using:Deguffer.App.ViewModels">
 
     <!-- Every switch a row holds puts its On or Off text before the switch, so the switch ends at
          the card's padding where a combo box or a number box ends. -->
@@ -27,6 +28,26 @@
                            TextWrapping="Wrap" />
                 <TextBlock Text="{x:Bind Description, Mode=OneWay}"
                            Style="{StaticResource Caption}" />
+
+                <!-- The shipped value, so a reader can tell whether they are on it, and the way back to it
+                     while they are not. The line is as tall as the link whether or not the link is drawn,
+                     so the row does not grow under the pointer when its value first moves off the default. -->
+                <StackPanel Orientation="Horizontal"
+                            Spacing="{StaticResource ControlGap}"
+                            MinHeight="24"
+                            Visibility="{x:Bind views:SettingsRow.IsStated(Default), Mode=OneWay}">
+                    <TextBlock Text="{x:Bind Default.Statement, Mode=OneWay}"
+                               Style="{StaticResource Caption}"
+                               VerticalAlignment="Center" />
+                    <HyperlinkButton Content="Reset"
+                                     Padding="{StaticResource InlineLinkPadding}"
+                                     VerticalAlignment="Center"
+                                     Visibility="{x:Bind Default.CanReset, Mode=OneWay}"
+                                     Click="OnResetClicked"
+                                     AutomationProperties.Name="{x:Bind views:SettingsRow.ResetName(Title), Mode=OneWay}"
+                                     AutomationProperties.AutomationId="{x:Bind views:SettingsRow.ResetId(Title), Mode=OneWay}"
+                                     AutomationProperties.HelpText="{x:Bind Default.Statement, Mode=OneWay}" />
+                </StackPanel>
             </StackPanel>
 
             <!-- Right-aligned, so the control and its unit end at the card's padding on every row
@@ -54,8 +75,8 @@
                      Margin="{StaticResource ControlGapAbove}"
                      IsClosable="False"
                      Severity="Warning"
-                     Title="Not saved"
-                     Message="Your choice could not be written to disk, so it has not been applied. Check that %LOCALAPPDATA%\Deguffer is writable." />
+                     Title="{x:Bind viewModels:SettingSave.NoticeTitle}"
+                     Message="{x:Bind viewModels:SettingSave.NoticeMessage}" />
 
             <!-- Under the control as well as the words, so its chevron sits at the card's right edge
                  where a settings card's chevron is, and the explanation opens across the full row. -->
