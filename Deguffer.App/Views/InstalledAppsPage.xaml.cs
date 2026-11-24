@@ -31,7 +31,7 @@ public sealed partial class InstalledAppsPage : Page
                 backups.List,
 
                 // Built per ask, so the dialog never holds a XamlRoot from before a theme change.
-                () => new ContentDialogInstalledAppsConfirmation(XamlRoot, ActualTheme),
+                () => new ContentDialogInstalledAppsConfirmation(this),
                 App.Preferences,
                 ElevatedRelaunch.IsElevated,
                 App.Running,

@@ -13,6 +13,9 @@
 
                 <!-- The drive picker's two ways of drawing a drive, for Explore and Duplicates. -->
                 <controls:DriveTemplates />
+
+                <!-- The switch a settings row holds, with its On or Off text before it. -->
+                <ResourceDictionary Source="ms-appx:///Controls/SettingsToggleSwitchStyle.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
             <!--
@@ -131,6 +134,9 @@
                 HeroFigureBaselineOffset and FigureBaselineOffset: lift Body text set at the foot of
                 a HeroFigure or a Figure onto the figure's baseline, which the larger line's deeper
                 descent puts above the foot of the box.
+                ToggleSwitchAreaInset: a settings switch's pointer-over plate and focus target, inset
+                5 above and below inside the 40 px the switch stands in, the SDK's own value, so the
+                settings switch draws as every stock switch does.
             -->
             <Thickness x:Key="ChipPadding">8,2</Thickness>
             <Thickness x:Key="LinkPadding">4,2</Thickness>
@@ -138,6 +144,7 @@
             <Thickness x:Key="FirstLineOffset">0,2,0,0</Thickness>
             <Thickness x:Key="HeroFigureBaselineOffset">0,0,0,7</Thickness>
             <Thickness x:Key="FigureBaselineOffset">0,0,0,2</Thickness>
+            <Thickness x:Key="ToggleSwitchAreaInset">0,5</Thickness>
 
             <!--
                 The shapes. Fluent has two corner radii: ControlCornerRadius (4) for a control and a
@@ -150,9 +157,12 @@
                 20 px chip and a 32 px button both pills.
                 ColumnCornerRadius: a chart column, rounded at the top only, because it stands on the
                 baseline under it.
+                ToggleSwitchKnobCornerRadius: the knob of the settings switch only, the SDK's own value,
+                so its knob is the stock switch's shape at every size it animates to.
             -->
             <CornerRadius x:Key="PillCornerRadius">16</CornerRadius>
             <CornerRadius x:Key="ColumnCornerRadius">4,4,0,0</CornerRadius>
+            <CornerRadius x:Key="ToggleSwitchKnobCornerRadius">7</CornerRadius>
 
             <!--
                 §7's "colour by tier". These are Styles rather than loose brushes so the colours

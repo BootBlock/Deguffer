@@ -10,15 +10,14 @@ namespace Deguffer.App.Shell;
 /// counts as an answer — comes from the <see cref="ConfirmationRequirement"/>; this type chooses
 /// only how it looks.
 /// </summary>
-public sealed class ContentDialogConfirmationPrompt(XamlRoot xamlRoot, ElementTheme theme) : IConfirmationPrompt
+public sealed class ContentDialogConfirmationPrompt(FrameworkElement owner) : IConfirmationPrompt
 {
     public async Task<Confirmation?> AskAsync(ConfirmationRequirement requirement, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(requirement);
 
-        // Checked before the dialog is built rather than only through the registration below: a
-        // token already cancelled would otherwise fire Hide against a dialog ShowAsync has not yet
-        // opened, leaving a modal up that the cancel path can no longer take down.
+        // Before the refusal below as well as in ModalDialog, so a cancelled clean reports its
+        // cancellation whatever this row's tier.
         ct.ThrowIfCancellationRequested();
 
         // Tier 4 is not a question. Reaching here means a row was offered that §3 excludes, so the
@@ -28,22 +27,19 @@ public sealed class ContentDialogConfirmationPrompt(XamlRoot xamlRoot, ElementTh
             return null;
         }
 
-        var typed = requirement.Level == ConfirmationLevel.TypedPhrase ? NewPhraseBox(requirement) : null;
+        var body = new StackPanel { Spacing = 12 };
+        body.Children.Add(DialogFactory.Paragraph(requirement.Consequence));
 
-        var dialog = new ContentDialog
+        TextBox? typed = null;
+
+        if (requirement.Typing is { } typing)
         {
-            XamlRoot = xamlRoot,
+            typed = NewPhraseBox(typing);
+            body.Children.Add(DialogFactory.Paragraph(typing.Instruction));
+            body.Children.Add(typed);
+        }
 
-            // It opens in the popup layer rather than inside the page, so it does not inherit the
-            // theme applied to the window root — without this it renders dark over a light window.
-            RequestedTheme = theme,
-
-            Title = $"{requirement.Verb} {requirement.ProviderName}?",
-            Content = NewBody(requirement, typed),
-            PrimaryButtonText = requirement.Verb,
-            CloseButtonText = "Cancel",
-            DefaultButton = ContentDialogButton.Close,
-        };
+        var dialog = DialogFactory.Question(owner, requirement.Title, body, requirement.Verb);
 
         if (typed is not null)
         {
@@ -54,44 +50,18 @@ public sealed class ContentDialogConfirmationPrompt(XamlRoot xamlRoot, ElementTh
                 requirement.IsSatisfiedBy((Confirmation[])[new Confirmation(requirement.ProviderId, typed.Text)]);
         }
 
-        using var registration = ct.Register(dialog.Hide);
-
-        var result = await ModalDialog.ShowAsync(dialog);
+        var result = await ModalDialog.ShowAsync(dialog, ct);
 
         return result == ContentDialogResult.Primary
             ? new Confirmation(requirement.ProviderId, typed?.Text)
             : null;
     }
 
-    private static TextBox NewPhraseBox(ConfirmationRequirement requirement)
+    private static TextBox NewPhraseBox(PhraseWording typing)
     {
-        var box = new TextBox { PlaceholderText = requirement.RequiredPhrase };
+        var box = new TextBox { PlaceholderText = typing.Phrase };
 
-        AutomationProperties.SetName(box, $"Type {requirement.RequiredPhrase} to confirm deletion");
+        AutomationProperties.SetName(box, typing.BoxName);
         return box;
-    }
-
-    private static StackPanel NewBody(ConfirmationRequirement requirement, TextBox? typed)
-    {
-        var panel = new StackPanel { Spacing = 12 };
-
-        panel.Children.Add(new TextBlock
-        {
-            Text = requirement.Consequence,
-            TextWrapping = TextWrapping.WrapWholeWords,
-        });
-
-        if (typed is not null)
-        {
-            panel.Children.Add(new TextBlock
-            {
-                Text = $"Type “{requirement.RequiredPhrase}” to confirm.",
-                TextWrapping = TextWrapping.WrapWholeWords,
-            });
-
-            panel.Children.Add(typed);
-        }
-
-        return panel;
     }
 }

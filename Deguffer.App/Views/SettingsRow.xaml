@@ -6,6 +6,12 @@
     xmlns:controls="using:Deguffer.App.Controls"
     xmlns:views="using:Deguffer.App.Views">
 
+    <!-- Every switch a row holds puts its On or Off text before the switch, so the switch ends at
+         the card's padding where a combo box or a number box ends. -->
+    <UserControl.Resources>
+        <Style TargetType="ToggleSwitch" BasedOn="{StaticResource SettingsToggleSwitchStyle}" />
+    </UserControl.Resources>
+
     <Border Style="{StaticResource CardStyle}" Padding="{StaticResource CardRowPadding}">
         <Grid ColumnSpacing="16" ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto">
 
@@ -23,9 +29,20 @@
                            Style="{StaticResource Caption}" />
             </StackPanel>
 
-            <ContentPresenter Grid.Column="2"
-                              Content="{x:Bind Control, Mode=OneWay}"
-                              VerticalAlignment="Center" />
+            <!-- Right-aligned, so the control and its unit end at the card's padding on every row
+                 whatever width the column is given. The unit follows the box as a word ("8 hours"), never a header above it, so a
+                 number box centres in its row as every other control does. It takes the control's
+                 own text colour, as a switch's On or Off does. -->
+            <StackPanel Grid.Column="2"
+                        Orientation="Horizontal"
+                        Spacing="{StaticResource ControlGap}"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center">
+                <ContentPresenter Content="{x:Bind Control, Mode=OneWay}" VerticalAlignment="Center" />
+                <TextBlock Text="{x:Bind Unit, Mode=OneWay}"
+                           VerticalAlignment="Center"
+                           Visibility="{x:Bind views:SettingsRow.IsShown(Unit), Mode=OneWay}" />
+            </StackPanel>
 
             <!-- Under the control as well as the words, so its chevron sits at the card's right edge
                  where a settings card's chevron is, and the explanation opens across the full row. -->
@@ -35,7 +52,7 @@
                                             Subject="{x:Bind Title, Mode=OneWay}"
                                             Text="{x:Bind Details, Mode=OneWay}"
                                             Items="{x:Bind DetailItems, Mode=OneWay}"
-                                            Visibility="{x:Bind views:SettingsRow.IsExplained(Details), Mode=OneWay}" />
+                                            Visibility="{x:Bind views:SettingsRow.IsShown(Details), Mode=OneWay}" />
         </Grid>
     </Border>
 </UserControl>

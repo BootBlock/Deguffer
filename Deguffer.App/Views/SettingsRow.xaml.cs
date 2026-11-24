@@ -32,6 +32,9 @@ public sealed partial class SettingsRow : UserControl
     public static readonly DependencyProperty DetailItemsProperty =
         DependencyProperty.Register(nameof(DetailItems), typeof(IReadOnlyList<string>), typeof(SettingsRow), new PropertyMetadata(null));
 
+    public static readonly DependencyProperty UnitProperty =
+        DependencyProperty.Register(nameof(Unit), typeof(string), typeof(SettingsRow), new PropertyMetadata(string.Empty));
+
     public static readonly DependencyProperty ControlProperty =
         DependencyProperty.Register(nameof(Control), typeof(object), typeof(SettingsRow), new PropertyMetadata(null));
 
@@ -69,13 +72,23 @@ public sealed partial class SettingsRow : UserControl
         set => SetValue(DetailItemsProperty, value);
     }
 
+    /// <summary>
+    /// The word after the control, for a number box: "hours" after 8. Empty draws none. Bound through
+    /// <see cref="Deguffer.Core.Text.SettingUnit"/> where it agrees with the number.
+    /// </summary>
+    public string Unit
+    {
+        get => (string)GetValue(UnitProperty);
+        set => SetValue(UnitProperty, value);
+    }
+
     public object? Control
     {
         get => GetValue(ControlProperty);
         set => SetValue(ControlProperty, value);
     }
 
-    /// <summary>Whether the row has more to say than its description.</summary>
-    public static Visibility IsExplained(string details) =>
-        string.IsNullOrEmpty(details) ? Visibility.Collapsed : Visibility.Visible;
+    /// <summary>Whether a part of the row with words in it, its details or its unit, is drawn.</summary>
+    public static Visibility IsShown(string words) =>
+        string.IsNullOrEmpty(words) ? Visibility.Collapsed : Visibility.Visible;
 }

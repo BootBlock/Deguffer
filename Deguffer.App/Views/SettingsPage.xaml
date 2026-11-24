@@ -3,6 +3,7 @@
     x:Class="Deguffer.App.Views.SettingsPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:text="using:Deguffer.Core.Text"
     xmlns:views="using:Deguffer.App.Views"
     xmlns:controls="using:Deguffer.App.Controls"
     xmlns:viewModels="using:Deguffer.App.ViewModels"
@@ -131,7 +132,8 @@
                 <views:SettingsRow Glyph="&#xE81C;"
                                    Title="Leave recently changed files alone"
                                    Description="Leave files changed in the last few hours alone, as they may be in use. Set 0 for none. A tool's own clean is not covered."
-                                   Details="A file written in the last few hours may still be in use, and nothing else about it says so. A tool that clears its own cache decides for itself what it removes, so this cannot hold its files back.">
+                                   Details="A file written in the last few hours may still be in use, and nothing else about it says so. A tool that clears its own cache decides for itself what it removes, so this cannot hold its files back."
+                                   Unit="{x:Bind text:SettingUnit.Hours(ViewModel.KeepFilesChangedWithinHours), Mode=OneWay}">
                     <views:SettingsRow.Control>
                         <NumberBox Value="{x:Bind ViewModel.KeepFilesChangedWithinHours, Mode=TwoWay}"
                                    Minimum="0"
@@ -141,7 +143,6 @@
                                    SpinButtonPlacementMode="Compact"
                                    ValidationMode="InvalidInputOverwritten"
                                    MinWidth="150"
-                                   Header="Hours"
                                    AutomationProperties.Name="Hours to leave recently changed files alone" />
                     </views:SettingsRow.Control>
                 </views:SettingsRow>
@@ -153,7 +154,8 @@
                 <views:SettingsRow Glyph="&#xE7B8;"
                                    Title="Only offer temporary files older than"
                                    Description="How long a temporary file must sit untouched before it is offered. 0 also offers files a program wrote seconds ago and still needs."
-                                   Details="Windows and every program on it leave scratch files in the temporary folders and are meant to clear up afterwards. With no age limit, nothing tells a file a program still expects to find from one it abandoned, as age is the only sign. Anything a running program is working in, or holds open, is left alone whatever this is set to.">
+                                   Details="Windows and every program on it leave scratch files in the temporary folders and are meant to clear up afterwards. With no age limit, nothing tells a file a program still expects to find from one it abandoned, as age is the only sign. Anything a running program is working in, or holds open, is left alone whatever this is set to."
+                                   Unit="{x:Bind text:SettingUnit.Days(ViewModel.MinimumTemporaryFileAge), Mode=OneWay}">
                     <views:SettingsRow.Control>
                         <NumberBox Value="{x:Bind ViewModel.MinimumTemporaryFileAge, Mode=TwoWay}"
                                    Minimum="{x:Bind ViewModel.MinimumTemporaryFileAgeDays}"
@@ -163,7 +165,6 @@
                                    SpinButtonPlacementMode="Compact"
                                    ValidationMode="InvalidInputOverwritten"
                                    MinWidth="150"
-                                   Header="Days"
                                    AutomationProperties.Name="Days before a temporary file is offered" />
                     </views:SettingsRow.Control>
                 </views:SettingsRow>
@@ -179,7 +180,8 @@
                 <views:SettingsRow Glyph="&#xE777;"
                                    Title="Keep File History versions for"
                                    Description="How old a saved File History version must be before Windows may drop it. A version it drops is gone for good."
-                                   Details="File History saves a copy of every protected file each time it changes, and is set never to delete an old one. Windows always keeps the newest copy of a file it is still protecting. A superseded version older than this is removed.">
+                                   Details="File History saves a copy of every protected file each time it changes, and is set never to delete an old one. Windows always keeps the newest copy of a file it is still protecting. A superseded version older than this is removed."
+                                   Unit="{x:Bind text:SettingUnit.Days(ViewModel.FileHistoryRetentionDays), Mode=OneWay}">
                     <views:SettingsRow.Control>
                         <NumberBox Value="{x:Bind ViewModel.FileHistoryRetentionDays, Mode=TwoWay}"
                                    Minimum="{x:Bind ViewModel.MinimumFileHistoryRetentionDays}"
@@ -189,7 +191,6 @@
                                    SpinButtonPlacementMode="Compact"
                                    ValidationMode="InvalidInputOverwritten"
                                    MinWidth="150"
-                                   Header="Days"
                                    AutomationProperties.Name="Days to keep File History versions for" />
                     </views:SettingsRow.Control>
                 </views:SettingsRow>

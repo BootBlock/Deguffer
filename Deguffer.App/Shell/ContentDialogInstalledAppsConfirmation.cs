@@ -5,16 +5,12 @@ using Microsoft.UI.Xaml.Controls;
 namespace Deguffer.App.Shell;
 
 /// <summary>Asks an Installed apps question (§7.3) in a dialog. The words are Core's.</summary>
-public sealed class ContentDialogInstalledAppsConfirmation(XamlRoot xamlRoot, ElementTheme theme) : IInstalledAppsConfirmation
+public sealed class ContentDialogInstalledAppsConfirmation(FrameworkElement owner) : IInstalledAppsConfirmation
 {
     public async Task<bool> AskAsync(InstalledAppsPrompt prompt, CancellationToken ct)
     {
-        // Before the dialog exists, for ContentDialogConfirmationPrompt's reason: a cancelled token
-        // would fire Hide at a dialog ShowAsync has not opened yet, leaving a modal nothing closes.
-        ct.ThrowIfCancellationRequested();
-
         var content = new StackPanel { Spacing = 12 };
-        content.Children.Add(new TextBlock { Text = prompt.Consequence, TextWrapping = TextWrapping.WrapWholeWords });
+        content.Children.Add(DialogFactory.Paragraph(prompt.Consequence));
         content.Children.Add(new ScrollViewer
         {
             MaxHeight = 240,
@@ -26,23 +22,8 @@ public sealed class ContentDialogInstalledAppsConfirmation(XamlRoot xamlRoot, El
             },
         });
 
-        var dialog = new ContentDialog
-        {
-            XamlRoot = xamlRoot,
+        var dialog = DialogFactory.Question(owner, prompt.Title, content, prompt.ConfirmLabel);
 
-            // The popup layer does not inherit the window root's theme.
-            RequestedTheme = theme,
-            Title = prompt.Title,
-            Content = content,
-            PrimaryButtonText = prompt.ConfirmLabel,
-            CloseButtonText = "Cancel",
-
-            // Cancel is the default, so nothing here is confirmed by one keystroke.
-            DefaultButton = ContentDialogButton.Close,
-        };
-
-        using var registration = ct.Register(dialog.Hide);
-
-        return await ModalDialog.ShowAsync(dialog) == ContentDialogResult.Primary;
+        return await ModalDialog.ShowAsync(dialog, ct) == ContentDialogResult.Primary;
     }
 }
