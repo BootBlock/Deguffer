@@ -79,7 +79,7 @@ public static class PreviewSummary
             //
             // Entries count as ticked too: a row of empty leftovers frees no bytes, and telling the
             // user to tick rows they have already ticked would be false.
-            var next = selected.Reclaimable > 0 || selected.Entries > 0
+            var next = selected.FreesSomething
                 ? "Review the rows, then Clean."
                 : "Tick the rows you want, then Clean.";
 
