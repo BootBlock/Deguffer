@@ -12,9 +12,9 @@ namespace Deguffer.Core.Execution;
 ///
 /// §6.3 runs the app unelevated, so this is the ordinary posture rather than an edge case. The
 /// offer answers one question — would administrator rights change anything the user can see? — and
-/// what is known to answer it with depends on whether a scan has run yet. Each overload below is
-/// one of those states, and both pages that offer the relaunch read them, so the two cannot come to
-/// disagree about when it is worth asking for.
+/// what is known to answer it with depends on what the page has read so far. Each overload below
+/// is one of those states, and every page that offers the relaunch reads them, so no two pages can
+/// come to disagree about when it is worth asking for.
 ///
 /// <para>A non-NTFS volume or an unaddressable path takes the walk no matter who is asking, and
 /// offering administrator rights for that alone would be a lie.</para>
