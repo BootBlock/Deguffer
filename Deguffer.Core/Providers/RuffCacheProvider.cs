@@ -74,6 +74,6 @@ public sealed class RuffCacheProvider : BuildDirectoryProvider
     protected override string Subject => "a ruff cache";
 
     protected override string NothingApprovedGuidance =>
-        "No source folders have been added yet. Add them in Settings and Deguffer will look for " +
+        "No source folders have been added yet. Add them on the Storage page or in Settings and Deguffer will look for " +
         "ruff caches inside them, and nowhere else.";
 }

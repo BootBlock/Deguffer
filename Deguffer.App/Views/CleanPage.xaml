@@ -378,20 +378,20 @@
                             Orientation="Horizontal"
                             Spacing="28"
                             VerticalAlignment="Center"
-                            Visibility="{x:Bind ViewModel.HasRunResult, Mode=OneWay}">
+                            Visibility="{x:Bind ViewModel.RunResult.HasRunResult, Mode=OneWay}">
                     <Border Width="1"
                             Background="{ThemeResource DividerStrokeColorDefaultBrush}"
                             VerticalAlignment="Stretch" />
 
                     <StackPanel Spacing="{StaticResource LabelGap}" VerticalAlignment="Center">
                         <TextBlock Text="Removed by Deguffer" Style="{StaticResource FieldLabel}" />
-                        <TextBlock Text="{x:Bind ViewModel.RemovedLabel, Mode=OneWay}"
+                        <TextBlock Text="{x:Bind ViewModel.RunResult.RemovedLabel, Mode=OneWay}"
                                    Style="{StaticResource Figure}" />
                     </StackPanel>
 
                     <StackPanel Spacing="{StaticResource LabelGap}" VerticalAlignment="Center">
                         <TextBlock Text="Free space change" Style="{StaticResource FieldLabel}" />
-                        <TextBlock Text="{x:Bind ViewModel.FreeSpaceChangeLabel, Mode=OneWay}"
+                        <TextBlock Text="{x:Bind ViewModel.RunResult.FreeSpaceChangeLabel, Mode=OneWay}"
                                    Style="{StaticResource Figure}" />
                     </StackPanel>
 
@@ -399,10 +399,10 @@
                          so the free space change beside it may not include them yet. -->
                     <StackPanel Spacing="{StaticResource LabelGap}"
                                 VerticalAlignment="Center"
-                                Visibility="{x:Bind ViewModel.HasRequested, Mode=OneWay}"
+                                Visibility="{x:Bind ViewModel.RunResult.HasRequested, Mode=OneWay}"
                                 ToolTipService.ToolTip="Local copies of cloud files your sync app was asked to release. It does that in the background, so free space can keep growing after the clean.">
                         <TextBlock Text="Asked to release" Style="{StaticResource FieldLabel}" />
-                        <TextBlock Text="{x:Bind ViewModel.RequestedLabel, Mode=OneWay}"
+                        <TextBlock Text="{x:Bind ViewModel.RunResult.RequestedLabel, Mode=OneWay}"
                                    Style="{StaticResource Figure}" />
                     </StackPanel>
 
@@ -410,10 +410,10 @@
                          so the free space change beside it does not include them. -->
                     <StackPanel Spacing="{StaticResource LabelGap}"
                                 VerticalAlignment="Center"
-                                Visibility="{x:Bind ViewModel.HasScheduled, Mode=OneWay}"
+                                Visibility="{x:Bind ViewModel.RunResult.HasScheduled, Mode=OneWay}"
                                 ToolTipService.ToolTip="Marked for removal by the program that owns them. It removes them the next time it starts, so free space grows then rather than now.">
                         <TextBlock Text="Removed at next start" Style="{StaticResource FieldLabel}" />
-                        <TextBlock Text="{x:Bind ViewModel.ScheduledLabel, Mode=OneWay}"
+                        <TextBlock Text="{x:Bind ViewModel.RunResult.ScheduledLabel, Mode=OneWay}"
                                    Style="{StaticResource Figure}" />
                     </StackPanel>
                 </StackPanel>
@@ -430,8 +430,8 @@
                                        Grid.Column="0"
                                        Grid.ColumnSpan="2"
                                        Margin="{StaticResource RegionGapAbove}"
-                                       Report="{x:Bind ViewModel.SafetyCheck}"
-                                       Visibility="{x:Bind ViewModel.HasRunResult, Mode=OneWay}" />
+                                       Report="{x:Bind ViewModel.RunResult.SafetyCheck}"
+                                       Visibility="{x:Bind ViewModel.RunResult.HasRunResult, Mode=OneWay}" />
 
                 <!-- Windows' own retrim, offered where a clean freed a lot on a thin, virtual or
                      solid-state drive, whose storage learns the space is free only when Windows
@@ -586,7 +586,7 @@
                             <views:RowDisclosures />
                         </ListView.Resources>
                         <ListView.Footer>
-                            <views:AwaitingFolderGroup x:Name="AwaitingGroup" Group="{x:Bind ViewModel.AwaitingFolders}" />
+                            <views:AwaitingFolderGroup x:Name="AwaitingGroup" Group="{x:Bind ViewModel.AwaitingFolders}" AddCommand="{x:Bind ViewModel.AddSourceFolderCommand}" />
                         </ListView.Footer>
                     </ListView>
                 </Grid>

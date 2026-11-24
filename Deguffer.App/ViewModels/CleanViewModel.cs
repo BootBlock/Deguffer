@@ -45,7 +45,7 @@ public sealed partial class CleanViewModel : ObservableObject
     private readonly BusyWork _work;
     private readonly Func<IConfirmationPrompt> _prompt;
     private readonly PlanTimeHistory _planTimes;
-    private readonly ReportOrigin _origin;
+    private readonly SourceFolderAddition _sourceFolderAddition;
 
     /// <summary>The keep list the rows were last brought up to date with. See <see cref="ApplyKeepList"/>.</summary>
     private KeepList? _appliedKeepList;
@@ -114,6 +114,7 @@ public sealed partial class CleanViewModel : ObservableObject
     /// </param>
     /// <param name="sizes">Each provider's figure at each scan, which every row states its change against.</param>
     /// <param name="driveHealth">What Health last read of each volume's drives. See <see cref="DriveHealth"/>.</param>
+    /// <param name="sourceFolderAddition">How a folder the waiting rows ask for is approved, as Settings approves one.</param>
     public CleanViewModel(
         CleanupPlanner planner,
         PlanNarrowing narrowing,
@@ -131,7 +132,8 @@ public sealed partial class CleanViewModel : ObservableObject
         RetrimViewModel retrim,
         ScanChoiceViewModel scanChoice,
         ProviderSizeHistory sizes,
-        HealthByVolume driveHealth)
+        HealthByVolume driveHealth,
+        SourceFolderAddition sourceFolderAddition)
     {
         _planner = planner;
         _narrowing = narrowing;
@@ -145,6 +147,7 @@ public sealed partial class CleanViewModel : ObservableObject
         _work = work;
         _prompt = prompt;
         _planTimes = new PlanTimeHistory(new PlanTimeStore(environment));
+        _sourceFolderAddition = sourceFolderAddition;
         WhenComplete = whenComplete;
         Retrim = retrim;
         ScanChoice = scanChoice;
@@ -156,7 +159,7 @@ public sealed partial class CleanViewModel : ObservableObject
         // the volume list, which may not have been read yet.
         DriveHealth = new DriveHealthLine(driveHealth, volumes.MountPointOf(environment.UserProfile));
         _coverage = new ScanCoverage(planner.Providers.Count, planner.Providers.Count);
-        _origin = new ReportOrigin(build.Version, build.PlatformText, isElevated);
+        RunResult = new CleanRunResultViewModel(new ReportOrigin(build.Version, build.PlatformText, isElevated), environment);
 
         // Capacity cannot change while the app is open, so it is read once; only the free figure
         // is re-read after a run.
@@ -346,6 +349,7 @@ public sealed partial class CleanViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(PreviewChosenCommand))]
     [NotifyCanExecuteChangedFor(nameof(CleanCommand))]
     [NotifyCanExecuteChangedFor(nameof(ElevateAndRescanCommand))]
+    [NotifyCanExecuteChangedFor(nameof(AddSourceFolderCommand))]
     public partial bool IsBusy { get; set; }
 
     /// <summary>
@@ -371,6 +375,9 @@ public sealed partial class CleanViewModel : ObservableObject
 
     /// <summary>How far the clean under way has got.</summary>
     public CleanProgressViewModel CleanProgress { get; } = new();
+
+    /// <summary>What the last clean did, which stands until the next scan or clean replaces it.</summary>
+    public CleanRunResultViewModel RunResult { get; }
 
     partial void OnShowNotInstalledChanged(bool value) => RefilterRows();
 
@@ -401,6 +408,7 @@ public sealed partial class CleanViewModel : ObservableObject
     /// <summary>Whether a preview exists — the only state from which cleaning is offered.</summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(CleanCommand))]
+    [NotifyCanExecuteChangedFor(nameof(AddSourceFolderCommand))]
     [NotifyPropertyChangedFor(nameof(ElevateLabel))]
     public partial bool HasPreview { get; set; }
 
@@ -444,44 +452,7 @@ public sealed partial class CleanViewModel : ObservableObject
     /// <summary>What that button says. See <see cref="ElevationOffer.Label"/>.</summary>
     public string ElevateLabel => ElevationOffer.Label(HasPreview);
 
-    /// <summary>
-    /// §5.4: two different numbers, reported separately. What Deguffer measured itself removing,
-    /// and how the volume's free space actually changed — they disagree whenever anything else on
-    /// the machine writes during the run, and presenting them as one number invites distrust.
-    /// </summary>
-    [ObservableProperty]
-    public partial string RemovedLabel { get; set; } = string.Empty;
-
-    [ObservableProperty]
-    public partial string FreeSpaceChangeLabel { get; set; } = string.Empty;
-
-    /// <summary>
-    /// A third number, for a run that had one: what sync apps were asked to release. Apart from both
-    /// above, because it is neither something Deguffer removed nor a change anybody measured. The
-    /// release happens after the run, so the free space change may not show it yet. See
-    /// <see cref="StepOutcome.BytesRequested"/>.
-    /// </summary>
-    [ObservableProperty]
-    public partial string RequestedLabel { get; set; } = string.Empty;
-
-    public bool HasRequested => !string.IsNullOrEmpty(RequestedLabel);
-
-    /// <summary>
-    /// A fourth number, for a run that had one: what a program marked to remove the next time it
-    /// starts. Apart from the others, because nothing has gone yet and the free space change cannot
-    /// show it until the user opens that program. See <see cref="StepOutcome.BytesScheduled"/>.
-    /// </summary>
-    [ObservableProperty]
-    public partial string ScheduledLabel { get; set; } = string.Empty;
-
-    public bool HasScheduled => !string.IsNullOrEmpty(ScheduledLabel);
-
-    /// <summary>The run's own §5.6 verdict, beside its figures, for as long as those figures stand.</summary>
-    public SafetyCheckViewModel SafetyCheck { get; } = new();
-
     public string FreeSpaceNowLabel => FreeSpaceNow is { } value ? FreeSpace.Format(value) : "—";
-
-    public bool HasRunResult => !string.IsNullOrEmpty(RemovedLabel);
 
     /// <summary>What the card says in place of its rows when it draws none.</summary>
     public StorageEmptyState EmptyState => _listed.Empty;
@@ -622,7 +593,7 @@ public sealed partial class CleanViewModel : ObservableObject
         {
             // A previous run's figures and its §5.6 verdict describe a machine state this run is
             // about to replace, exactly as a preview's do. Cleared here rather than when the new ones
-            // arrive, because a run that fails never reaches RecordRunResult: leaving the old verdict
+            // arrive, because a run that fails never reaches RunResult.Record: leaving the old verdict
             // up would stand "Safety check passed" over a deletion nobody verified, which is the
             // inversion §5.6 exists to prevent. After the confirmation above, so cancelling it still
             // leaves the screen exactly as it was.
@@ -728,7 +699,7 @@ public sealed partial class CleanViewModel : ObservableObject
             // The card takes the run's figures and its §5.6 verdict the moment the run ends, before
             // the rescan below: it is the durable record, and leaving it showing the previous run
             // for the length of a scan would describe a machine that no longer exists.
-            var outcome = RecordRunResult(results, freeBefore);
+            var outcome = RunResult.Record(results, freeBefore, FreeSpaceOfProfile());
             await Retrim.OfferAsync(volumesBefore, ct);
 
             if (outcome.VerificationFailed)
@@ -943,6 +914,63 @@ public sealed partial class CleanViewModel : ObservableObject
     }
 
     /// <summary>
+    /// §7: the rows waiting for a source folder offer to add one where they stand, and every row the
+    /// approved folder answers is planned again in place (<see cref="SourceFolderChanges"/>), without a scan.
+    ///
+    /// <para>Only over a preview of the whole disk: the re-plan puts the preview back, and over rows a
+    /// cancelled pass left part-way that would turn Clean on over plans no scan stands behind. Busy from
+    /// the start, because the volumes are read again before the warning with no dialog up, and a scan or
+    /// clean started then would run under the re-plan. A failed save plans nothing; a folder already
+    /// approved since the scan still plans the rows, because they are what is out of date.</para>
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanAddSourceFolder), IncludeCancelCommand = true)]
+    private async Task AddSourceFolderAsync(CancellationToken ct)
+    {
+        IsBusy = true;
+        BusySpan? work = null;
+
+        try
+        {
+            switch (await _sourceFolderAddition.AddAsync(ct))
+            {
+                case { Choice: SourceFolderChoice.NotOnDisk }:
+                    Report(PickedFolder.NotOnDisk);
+                    return;
+                case { Choice: not SourceFolderChoice.Approved }:
+                    return;
+                case { Saved: SaveOutcome.Refused }:
+                    Report(SettingSave.NoticeMessage, InfoBarSeverity.Error);
+                    return;
+            }
+
+            work = _work.Begin();
+            await ReplanAsync(SourceFolderChanges.Stale([.. Findings.Select(row => row.Finding)]), ct);
+            ReportPreviewSummary();
+        }
+        catch (OperationCanceledException) when (work is not null)
+        {
+            Report("The folder is approved, but its search was cancelled, so some rows are not up to date. Scan to see everything it holds.", InfoBarSeverity.Warning);
+        }
+        catch (OperationCanceledException)
+        {
+            // Cancelled while the folder was still being asked for, so nothing was stored or changed.
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            // As a scan's failure is caught, for the same reason: a provider failing must not take the window down.
+            Report("The folder is approved, but Deguffer could not finish searching it because something in it could not be read. Scan to try again.", InfoBarSeverity.Error);
+            work?.Fail();
+        }
+        finally
+        {
+            IsBusy = false;
+            work?.Dispose();
+        }
+    }
+
+    private bool CanAddSourceFolder() => CanRun() && HasPreview;
+
+    /// <summary>
     /// Write one new finding over its row, and bring the page's figures up to date with it at once
     /// rather than at the end of the pass, which a cancelled or failed re-plan never reaches.
     /// </summary>
@@ -1057,34 +1085,6 @@ public sealed partial class CleanViewModel : ObservableObject
     }
 
     /// <summary>
-    /// §5.6 is reported, not just performed, so the run's verdict goes somewhere that outlives the
-    /// run: the result card, beside the two figures it already carries.
-    /// </summary>
-    private RunOutcome RecordRunResult(IReadOnlyList<CleanupResult> results, long? freeBefore)
-    {
-        var figures = RunFigures.For(results);
-
-        // FreeSpace states the entries only where no bytes went.
-        RemovedLabel = FreeSpace.Format(figures.Removed);
-
-        RequestedLabel = figures.Requested > 0 ? FreeSpace.Format(figures.Requested) : string.Empty;
-        OnPropertyChanged(nameof(HasRequested));
-
-        ScheduledLabel = figures.Scheduled > 0 ? FreeSpace.Format(figures.Scheduled) : string.Empty;
-        OnPropertyChanged(nameof(HasScheduled));
-
-        FreeSpaceChangeLabel = RunFigures.FreeSpaceChange(freeBefore, FreeSpaceOfProfile()) is { } change
-            ? FreeSpace.Format(change)
-            : "—";
-
-        var outcome = RunOutcome.For(results);
-        SafetyCheck.Show(outcome, figures.Checks, CleanRunReport.Describe(results, _origin, _environment));
-        OnPropertyChanged(nameof(HasRunResult));
-
-        return outcome;
-    }
-
-    /// <summary>
     /// What the info bar is left saying once the run and the re-plan behind it have both finished.
     ///
     /// <para>A verification failure keeps it. It means a rule was over-broad, and the user needs to
@@ -1162,6 +1162,11 @@ public sealed partial class CleanViewModel : ObservableObject
             CleanCancelCommand.Execute(null);
         }
 
+        if (AddSourceFolderCommand.IsRunning)
+        {
+            AddSourceFolderCancelCommand.Execute(null);
+        }
+
         _replanCancellation?.Cancel();
     }
 
@@ -1172,14 +1177,7 @@ public sealed partial class CleanViewModel : ObservableObject
     private void ClearRunResult()
     {
         Retrim.Clear();
-        RemovedLabel = string.Empty;
-        FreeSpaceChangeLabel = string.Empty;
-        RequestedLabel = string.Empty;
-        OnPropertyChanged(nameof(HasRequested));
-        ScheduledLabel = string.Empty;
-        OnPropertyChanged(nameof(HasScheduled));
-        SafetyCheck.Clear();
-        OnPropertyChanged(nameof(HasRunResult));
+        RunResult.Clear();
     }
 
     /// <summary>

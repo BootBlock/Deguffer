@@ -17,6 +17,7 @@ namespace Deguffer.App.Views;
 public sealed partial class ProviderInfoView : UserControl
 {
     private readonly Action<FindingViewModel> _showItems;
+    private readonly Action? _addSourceFolder;
 
     /// <summary>
     /// Assigned before InitializeComponent, so no x:Bind can evaluate against a null model whatever
@@ -26,12 +27,21 @@ public sealed partial class ProviderInfoView : UserControl
     /// Closes the dialog and lists the row's items on the Storage page. The page's rather than this
     /// control's, because the list takes the place of the page's rows.
     /// </param>
+    /// <param name="addSourceFolder">
+    /// Closes the dialog and asks for a source folder from the Storage page, or null where the page
+    /// cannot take one now because it is busy. The page's, for the reason <paramref name="showItems"/>
+    /// is: the folder's figures arrive on its rows.
+    /// </param>
     /// <param name="history">The figures kept for the row's provider, oldest first.</param>
     public ProviderInfoView(
-        FindingViewModel finding, Action<FindingViewModel> showItems, IReadOnlyList<ProviderSizeRow> history)
+        FindingViewModel finding,
+        Action<FindingViewModel> showItems,
+        Action? addSourceFolder,
+        IReadOnlyList<ProviderSizeRow> history)
     {
         Finding = finding;
         _showItems = showItems;
+        _addSourceFolder = addSourceFolder;
         History = history;
         HistoryNewestFirst = (ProviderSizeRow[])[.. history.Reverse()];
         InitializeComponent();
@@ -49,5 +59,10 @@ public sealed partial class ProviderInfoView : UserControl
 
     public bool HasNoHistory => History.Count == 0;
 
+    /// <summary>Whether the page can take a source folder now. See the constructor's <c>addSourceFolder</c>.</summary>
+    public bool CanAddSourceFolder => _addSourceFolder is not null;
+
     private void OnShowItemsClicked(object sender, RoutedEventArgs e) => _showItems(Finding);
+
+    private void OnAddSourceFolderClicked(object sender, RoutedEventArgs e) => _addSourceFolder?.Invoke();
 }
