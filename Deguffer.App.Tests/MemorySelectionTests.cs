@@ -164,7 +164,7 @@ public sealed class MemorySelectionTests : IDisposable
     });
 
     private static StartupEntry StartupEntryFor(string program) => new(
-        new StartupKey(StartupSource.UserRun, "Editor"), "Editor", program, program, ProgramStanding.Present, null, StartupState.Starts, Approval.None);
+        new StartupKey(StartupSource.UserRun, "Editor"), "Editor", program, program, ProgramStanding.Present, null, StartupState.Enabled, Approval.None);
 
     /// <summary>§7.2.1: nothing is asked of Windows for a node that is not a program.</summary>
     [Fact]

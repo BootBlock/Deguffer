@@ -148,7 +148,7 @@
                           SelectionChanged="OnOrderSelectionChanged"
                           AutomationProperties.Name="Sort by">
                     <ComboBoxItem Content="Name" />
-                    <ComboBoxItem Content="Enabled or disabled" />
+                    <ComboBoxItem Content="Status" />
                     <ComboBoxItem Content="Where it comes from" />
                     <ComboBoxItem Content="Publisher" />
                 </ComboBox>

@@ -3,6 +3,7 @@ using Deguffer.Core.Exploring.Hidden;
 using Deguffer.Core.Health;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.Startup;
 
 namespace Deguffer.Core.Execution;
 
@@ -11,9 +12,9 @@ namespace Deguffer.Core.Execution;
 ///
 /// §6.3 runs the app unelevated, so this is the ordinary posture rather than an edge case. The
 /// offer answers one question — would administrator rights change anything the user can see? — and
-/// what is known to answer it with depends on whether a scan has run yet. Each overload below is
-/// one of those states, and both pages that offer the relaunch read them, so the two cannot come to
-/// disagree about when it is worth asking for.
+/// what is known to answer it with depends on what the page has read so far. Each overload below
+/// is one of those states, and every page that offers the relaunch reads them, so no two pages can
+/// come to disagree about when it is worth asking for.
 ///
 /// <para>A non-NTFS volume or an unaddressable path takes the walk no matter who is asking, and
 /// offering administrator rights for that alone would be a lie.</para>
@@ -55,6 +56,14 @@ public static class ElevationOffer
     /// </summary>
     public static bool ShouldOffer(bool isElevated, IEnumerable<DriveHealth> drives) =>
         !isElevated && drives.Any(drive => drive.MoreWhenElevated);
+
+    /// <summary>
+    /// What the Startup page has read. Only a machine-wide entry that rights alone keep from changing
+    /// would become changeable, the one a row's shield marks, so a list without one has nothing to
+    /// ask for (§7.5). Nothing is offered before the first reading, which is quick and needs no rights.
+    /// </summary>
+    public static bool ShouldOffer(bool isElevated, IEnumerable<StartupEntry> entries) =>
+        entries.Any(entry => StartupChangePolicy.WantsAdministrator(entry, isElevated));
 
     /// <summary>
     /// What a finished Storage preview found. Two unrelated things are improved by elevating, and

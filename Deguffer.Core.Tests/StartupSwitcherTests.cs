@@ -199,7 +199,7 @@ public sealed class StartupSwitcherTests : IDisposable
     {
         var task = new StartupEntry(
             new StartupKey(StartupSource.PackagedTask, "AppStartup", "Pkg_1234567890abc"),
-            "Packaged app", null, null, ProgramStanding.Unknown, null, StartupState.Starts, Approval: null);
+            "Packaged app", null, null, ProgramStanding.Unknown, null, StartupState.Enabled, Approval: null);
 
         var report = Switcher().Switch(task, isElevated: true);
 

@@ -9,15 +9,21 @@
     Background="Transparent">
 
     <Page.Resources>
-        <!-- A drive, with its verdict in a word and its temperature. -->
+        <!-- A drive, with its verdict in a word, the letters of its volumes and its temperature. People
+             know a drive by its letters more than by its model, so the letters sit on the row and the
+             full volume line is a hover away (#909). The letters give up room before the chip or the
+             temperature does. -->
         <DataTemplate x:Key="DriveTemplate" x:DataType="vm:HealthDriveRow">
-            <Grid Padding="0,8" ColumnSpacing="8" RowSpacing="4" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto"
-                  AutomationProperties.Name="{x:Bind Title, Mode=OneWay}"
+            <Grid Padding="0,8" ColumnSpacing="8" RowSpacing="4" ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto"
+                  AutomationProperties.Name="{x:Bind AccessibleName, Mode=OneWay}"
                   AutomationProperties.HelpText="{x:Bind Summary, Mode=OneWay}">
-                <TextBlock Grid.ColumnSpan="2" Text="{x:Bind Title, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.ColumnSpan="3" Text="{x:Bind Title, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
                 <ContentControl Grid.Row="1" HorizontalAlignment="Left" Content="{x:Bind VerdictText, Mode=OneWay}"
                                 Style="{x:Bind Verdict, Mode=OneWay, Converter={StaticResource DriveVerdictChipStyle}}" />
-                <TextBlock Grid.Row="1" Grid.Column="1" Text="{x:Bind Temperature, Mode=OneWay}"
+                <TextBlock Grid.Row="1" Grid.Column="1" Text="{x:Bind VolumeNames, Mode=OneWay}"
+                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Style="{StaticResource SecondaryText}"
+                           ToolTipService.ToolTip="{x:Bind Volumes, Mode=OneWay}" />
+                <TextBlock Grid.Row="1" Grid.Column="2" Text="{x:Bind Temperature, Mode=OneWay}"
                            VerticalAlignment="Center" Style="{StaticResource SecondaryText}" />
             </Grid>
         </DataTemplate>

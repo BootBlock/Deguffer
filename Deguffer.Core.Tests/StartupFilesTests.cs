@@ -101,5 +101,5 @@ public sealed class StartupFilesTests
     }
 
     private static StartupEntry Entry(StartupSource source, string name, string? program, ProgramStanding standing) =>
-        new(new StartupKey(source, name), name, Command: null, program, standing, Publisher: null, StartupState.Starts, Approval: null);
+        new(new StartupKey(source, name), name, Command: null, program, standing, Publisher: null, StartupState.Enabled, Approval: null);
 }

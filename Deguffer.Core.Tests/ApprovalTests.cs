@@ -13,9 +13,9 @@ public sealed class ApprovalTests
     private static readonly DateTimeOffset Now = new(2026, 10, 23, 14, 0, 0, TimeSpan.Zero);
 
     [Theory]
-    [InlineData(0u, StartupState.Starts)]
+    [InlineData(0u, StartupState.Enabled)]
     [InlineData(1u, StartupState.Disabled)]
-    [InlineData(2u, StartupState.Starts)]
+    [InlineData(2u, StartupState.Enabled)]
     [InlineData(3u, StartupState.Disabled)]
     public void EveryMeasuredStateReadsByItsLowBitAndMayBeReplaced(uint state, StartupState expected)
     {
@@ -30,9 +30,9 @@ public sealed class ApprovalTests
     /// bit, so the page does too, but replacing it would throw away whatever the other bit records.
     /// </summary>
     [Theory]
-    [InlineData(6u, StartupState.Starts)]
+    [InlineData(6u, StartupState.Enabled)]
     [InlineData(7u, StartupState.Disabled)]
-    [InlineData(0x10u, StartupState.Starts)]
+    [InlineData(0x10u, StartupState.Enabled)]
     public void AStateWithABitNobodyExplainedReadsByItsLowBitAndIsNotReplaced(uint state, StartupState expected)
     {
         var approval = Approval.Of(Value(state));
@@ -56,7 +56,7 @@ public sealed class ApprovalTests
     [Fact]
     public void NoValueStartsAndMayBeReplaced()
     {
-        Assert.Equal(StartupState.Starts, Approval.None.State);
+        Assert.Equal(StartupState.Enabled, Approval.None.State);
         Assert.True(Approval.None.IsReplaceable);
     }
 
@@ -86,7 +86,7 @@ public sealed class ApprovalTests
 
         Assert.Equal(RegistryValueKind.Binary, written.Kind);
         Assert.Equal(new byte[] { 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, written.Bytes);
-        Assert.Equal(StartupState.Starts, Approval.Of(written).State);
+        Assert.Equal(StartupState.Enabled, Approval.Of(written).State);
         Assert.Null(Approval.Of(written).DisabledAt);
     }
 

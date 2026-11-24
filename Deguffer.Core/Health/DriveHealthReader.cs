@@ -91,6 +91,12 @@ public sealed class DriveHealthReader(IDriveProbe probe, IVolumeInventory invent
             : label;
     }
 
+    /// <summary>
+    /// The volume by its first mount point, as <c>C:</c>. A volume mounted only in a folder keeps the
+    /// folder, so it is still named on a drive that has no letter.
+    /// </summary>
+    private static string VolumeName(LocalVolume volume) => volume.RootPath.TrimEnd(Path.DirectorySeparatorChar);
+
     private async Task ReadDrivesAsync(IReadOnlyList<DriveDescription> drives, IProgress<DriveHealth> progress, CancellationToken ct)
     {
         var options = new ParallelOptions { MaxDegreeOfParallelism = MostAtOnce, CancellationToken = ct };
@@ -137,7 +143,11 @@ public sealed class DriveHealthReader(IDriveProbe probe, IVolumeInventory invent
         {
             var volumes = byDisk.GetValueOrDefault(drive.Disk, []);
 
-            progress.Report(new DriveVolumes(drive.Key, string.Join("; ", volumes.Select(VolumeText)), [.. volumes.SelectMany(volume => (IEnumerable<string>)[volume.RootPath, .. volume.AlsoMountedAt ?? []])]));
+            progress.Report(new DriveVolumes(
+                drive.Key,
+                string.Join("; ", volumes.Select(VolumeText)),
+                string.Join(", ", volumes.Select(VolumeName)),
+                [.. volumes.SelectMany(volume => (IEnumerable<string>)[volume.RootPath, .. volume.AlsoMountedAt ?? []])]));
         }
     }
 
@@ -183,8 +193,10 @@ public sealed class DriveHealthReader(IDriveProbe probe, IVolumeInventory invent
     }
 
     /// <summary>
-    /// Each disk's volumes. The token is left out because a run outlives the read that
-    /// started it, and the media cache is made for this run so a swapped disk is seen by the next.
+    /// Each disk's volumes, in the order of their roots, so a drive's letters read as people look for
+    /// them rather than in the order Windows mounted them. The token is left out because a run
+    /// outlives the read that started it, and the media cache is made for this run so a swapped disk
+    /// is seen by the next.
     /// </summary>
     private async Task<IReadOnlyDictionary<int, IReadOnlyList<LocalVolume>>> VolumesByDiskAsync()
     {
@@ -195,6 +207,6 @@ public sealed class DriveHealthReader(IDriveProbe probe, IVolumeInventory invent
             .Where(volume => volume.IsReady)
             .SelectMany(volume => media.Of(volume).PhysicalDisks.Select(disk => (Disk: disk, Volume: volume)))
             .GroupBy(entry => entry.Disk, entry => entry.Volume)
-            .ToDictionary(group => group.Key, IReadOnlyList<LocalVolume> (group) => [.. group]);
+            .ToDictionary(group => group.Key, IReadOnlyList<LocalVolume> (group) => [.. group.OrderBy(volume => volume.RootPath, StringComparer.OrdinalIgnoreCase)]);
     }
 }

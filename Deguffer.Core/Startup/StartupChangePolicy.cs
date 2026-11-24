@@ -42,7 +42,7 @@ public static class StartupChangePolicy
                     + "and changes nothing. Task Manager or Settings can still change it.");
         }
 
-        if (entry.Key.Source.NeedsAdministrator() && !isElevated)
+        if (WantsAdministrator(entry, isElevated))
         {
             return Refuse("This entry starts for every user, so changing it needs administrator rights. Reopen Deguffer "
                 + "as administrator to change it.");
@@ -50,13 +50,26 @@ public static class StartupChangePolicy
 
         return entry.State switch
         {
-            StartupState.Starts => new StartupVerdict(StartupChange.Disable,
+            StartupState.Enabled => new StartupVerdict(StartupChange.Disable,
                 "Disable records that this entry should not start at sign-in, as Task Manager does. The entry itself "
                 + "stays as it is, and Enable lets it start again."),
             StartupState.Disabled => new StartupVerdict(StartupChange.Enable,
                 "Enable records that this entry should start at sign-in again, as Task Manager does."),
             _ => Refuse("Whether this entry starts is unknown, so Deguffer will not change it."),
         };
+    }
+
+    /// <summary>
+    /// Whether administrator rights are all that stands between <paramref name="entry"/> and a change:
+    /// a machine-wide entry, with a record Deguffer may replace, read by a process without the rights.
+    /// The row's shield and the page's offer to reopen elevated both read this, so neither can mark an
+    /// entry that elevating would still leave unchangeable.
+    /// </summary>
+    public static bool WantsAdministrator(StartupEntry entry, bool isElevated)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+
+        return !isElevated && !entry.IsPackaged && entry.Key.Source.NeedsAdministrator() && entry.Approval is { IsReplaceable: true };
     }
 
     private static StartupVerdict Refuse(string reason) => new(null, reason);

@@ -112,7 +112,7 @@ public sealed class StartupRowMenuTests
         ProgramStanding standing = ProgramStanding.Present,
         string? command = null)
     {
-        var entry = new StartupEntry(new StartupKey(source, name), name, command, program, standing, Publisher: null, StartupState.Starts, Approval: null);
+        var entry = new StartupEntry(new StartupKey(source, name), name, command, program, standing, Publisher: null, StartupState.Enabled, Approval: null);
 
         return new StartupRow(entry, StartupMarks.For(entry, running: null, ProcessFigures.Checked, isElevated: false));
     }

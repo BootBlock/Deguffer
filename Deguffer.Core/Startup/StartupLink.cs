@@ -26,7 +26,7 @@ public sealed record StartupLink(StartupEntry Entry, string Sentence)
             $"'{first.Title}' ({first.Key.Source.Describe()})",
             $"'{first.Title}' and {entries.Count - 1:N0} more");
 
-        var sentence = entries.Any(e => e.State is StartupState.Starts)
+        var sentence = entries.Any(e => e.State is StartupState.Enabled)
             ? $"Windows starts this program at sign-in, from {named}."
             : entries.All(e => e.State is StartupState.Disabled)
                 ? $"Windows does not start this program at sign-in: its startup {Counted.Form(entries.Count, "entry", "entries")}, {named}, "
