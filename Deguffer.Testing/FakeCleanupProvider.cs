@@ -77,6 +77,12 @@ public sealed class FakeCleanupProvider(string id, SafetyTier tier = SafetyTier.
     public Action? AfterCleaning { get; set; }
 
     /// <summary>
+    /// How each step's removal comes out, in place of deleting its folder, for a test that has Windows
+    /// refuse part of a row. Null deletes the folder and reports everything removed.
+    /// </summary>
+    public Func<DeleteDirectoryStep, StepOutcome>? Removes { get; set; }
+
+    /// <summary>
     /// The tool its clean waits on, reported as under way around <see cref="AfterCleaning"/> as a
     /// command step's tool is, so a Cancel pressed there is pressed while the tool runs. Null for a
     /// clean that runs no command.
@@ -190,6 +196,12 @@ public sealed class FakeCleanupProvider(string id, SafetyTier tier = SafetyTier.
             {
                 interrupted = true;
                 break;
+            }
+
+            if (Removes is { } removes)
+            {
+                outcomes.Add(removes(step));
+                continue;
             }
 
             if (LongPath.DirectoryExists(step.Path))

@@ -413,14 +413,14 @@ public sealed partial class CleanViewModel : ObservableObject
     public partial bool HasPreview { get; set; }
 
     /// <summary>
-    /// The dependents are declared because they are what the screen actually binds to. Without
-    /// them the figure was written after a clean and never repainted — the volume had changed and
-    /// the headline number still described the machine as it was before the run.
+    /// The profile volume's free space. Everything that reads it is told when it changes: the figure,
+    /// the capacity bar, and the run's move from the reading before it (<see cref="CleanRunResultViewModel.Track"/>).
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(FreeSpaceNowLabel))]
-    [NotifyPropertyChangedFor(nameof(UsedPercent))]
+    [NotifyPropertyChangedFor(nameof(FreeSpaceNowLabel), nameof(UsedPercent))]
     public partial long? FreeSpaceNow { get; set; }
+
+    partial void OnFreeSpaceNowChanged(long? value) => RunResult.Track(value);
 
     public long? TotalSpace { get; }
 

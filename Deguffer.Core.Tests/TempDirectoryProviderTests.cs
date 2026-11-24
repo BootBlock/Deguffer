@@ -250,7 +250,7 @@ public sealed class TempDirectoryProviderTests : IDisposable
         Assert.Equal(1024, result.BytesReclaimed);
 
         // Not "left alone because something is using them": nothing is.
-        Assert.Equal(0, result.SparedCount);
+        Assert.Equal(0, result.Steps.Sum(step => step.Spared));
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 

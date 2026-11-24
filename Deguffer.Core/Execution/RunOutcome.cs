@@ -26,7 +26,7 @@ public enum RunVerdict
 }
 
 /// <summary>
-/// What a finished clean says about itself: the §5.6 verdict, and whatever the run left behind.
+/// What a finished clean says about itself: the §5.6 verdict.
 ///
 /// <para>Derived once, because it has to appear in two places. The Storage page keeps it beside the
 /// run's figures for as long as those figures stand, as a heading, its evidence and the detail, and
@@ -40,12 +40,16 @@ public enum RunVerdict
 /// <para>It does not restate what was reclaimed. The page carries that figure separately under a
 /// label of its own (§5.4), and a sentence repeating it beside that label would be one more thing
 /// able to contradict it.</para>
+///
+/// <para>Nor does it say what the run left behind. That belongs to the location that left it, and
+/// <see cref="RunRows"/> lists it a line per location under this verdict: one paragraph for the run
+/// can name neither the row nor what to do about it.</para>
 /// </summary>
 /// <param name="Verdict">Which of the things above happened.</param>
 /// <param name="Detail">
-/// What the run did and left behind, after the verdict in <see cref="Heading"/>: which providers have
-/// something to answer for, and every cause the run left something in place for. Empty for a run that
-/// finished, verified cleanly and left nothing, because the heading has then said everything.
+/// What the run did, after the verdict in <see cref="Heading"/>: which providers have something to
+/// answer for, and that a cancel stopped the run part-way. Empty for a run that finished and verified
+/// cleanly, because the heading has then said everything.
 /// </param>
 /// <param name="Evidence">How many protected subjects the check covered. See <see cref="EvidenceFor"/>.</param>
 /// <param name="Cancelled">
@@ -115,8 +119,8 @@ public sealed record RunOutcome(RunVerdict Verdict, string Detail, string Eviden
 
         if (failed.Count > 0)
         {
-            // A failed run says one thing. What the run left behind is routine, and appending it
-            // here would bury the only sentence on the screen that is an alarm.
+            // A failed run says one thing, so nothing else buries the only sentence on the screen that
+            // is an alarm.
             return new RunOutcome(
                 RunVerdict.VerificationFailed,
                 (cancelled ? "Clean cancelled part-way, and" : "Cleaned, but")
@@ -134,8 +138,7 @@ public sealed record RunOutcome(RunVerdict Verdict, string Detail, string Eviden
 
             // Both grammatical forms written out, for the reason LiveTreeVeto's note records: a
             // sentence that reads correctly only on a machine with more than one of something is
-            // what driving the real window is for. The "(s)" shorthand the counts below use does
-            // not stretch to a clause that also has to agree in "it" and "them".
+            // what driving the real window is for.
             //
             // Nothing about the folder holding the path, and nothing about when it went. A path whose
             // folder went too, and one a running program removed from a folder the run emptied around
@@ -147,13 +150,10 @@ public sealed record RunOutcome(RunVerdict Verdict, string Detail, string Eviden
                 $"{count:N0} protected paths for {Names(outside)} went missing after the scan, and "
                 + "nothing in this run took them");
 
-            // What the run left behind stays on this one, because it is not an alarm and because
-            // both facts explain the same thing: why the figures are not what the preview implied.
             return new RunOutcome(
                 RunVerdict.RemovedFromOutside,
                 $"{did} {went}. Scan again to see the machine as it is now."
-                + NotChecked(results)
-                + LeftBehind(results),
+                + NotChecked(results),
                 evidence,
                 cancelled);
         }
@@ -161,15 +161,14 @@ public sealed record RunOutcome(RunVerdict Verdict, string Detail, string Eviden
         if (results.Any(r => r.Verification is { Unverified.Count: > 0 }))
         {
             return new RunOutcome(
-                RunVerdict.Unverified, did + NotChecked(results) + LeftBehind(results), evidence, cancelled);
+                RunVerdict.Unverified, did + NotChecked(results), evidence, cancelled);
         }
 
         // "Cleaned." is left off a pass: the heading has already said the run finished well, and a
         // detail of one word under it would only repeat that.
         return new RunOutcome(
             RunVerdict.AllSurvived,
-            ((cancelled ? "Clean cancelled part-way. Anything already removed stays removed." : string.Empty)
-                + LeftBehind(results)).TrimStart(),
+            cancelled ? "Clean cancelled part-way. Anything already removed stays removed." : string.Empty,
             evidence,
             cancelled);
     }
@@ -252,72 +251,4 @@ public sealed record RunOutcome(RunVerdict Verdict, string Detail, string Eviden
     /// <summary>Each provider that has something to answer for, because each one is a separate rule.</summary>
     private static string Names(IReadOnlyList<CleanupResult> results) =>
         string.Join(", ", results.Select(r => r.ProviderName));
-
-    /// <summary>
-    /// What the run did not remove, or nothing where it removed everything it named.
-    ///
-    /// <para>The causes are reported beside each other and never folded together. Another program
-    /// holding files open is answered by closing it. Windows refusing for any other reason is not
-    /// answered by waiting, and it is stated with its size, because a count of files reads as a
-    /// handful of locked ones whatever it holds — "252994 item(s) in use were left alone" was the
-    /// whole account of 5.9 GB a clean could not take, and the next preview offered it again. One
-    /// more cause is Deguffer honouring the setting the user chose, and the last is Deguffer declining
-    /// to touch an entry it found a program working in.</para>
-    ///
-    /// <para>What the next preview does with a refusal is said as well, because it is the answer to
-    /// the question a refusal raises: will this row keep offering what it cannot take?</para>
-    ///
-    /// <para>Folders Windows refused come after that promise, never before it. The promise is about
-    /// bytes the next preview leaves out of its figures, and a folder holds none, so a folder sentence
-    /// ahead of it would read as covered by it.</para>
-    /// </summary>
-    private static string LeftBehind(IReadOnlyList<CleanupResult> results)
-    {
-        var refused = results.Aggregate(Refusals.None, (total, result) => total + result.Refused);
-        var folders = results.Aggregate(FolderRefusals.None, (total, result) => total + result.RefusedFolders);
-        var unlisted = results.Sum(r => r.UnlistedCount);
-        var kept = results.Sum(r => r.KeptCount);
-        var spared = results.Sum(r => r.SparedCount);
-        var userWork = results.Sum(r => r.UserWorkCount);
-        var stores = results.Sum(r => r.MailStoreCount);
-
-        return (refused.InUse.Files > 0
-                ? $" Another program had {refused.InUse.Files:N0} file(s) "
-                  + $"({FreeSpace.Format(refused.InUse.Bytes)}) open, so they were left in place."
-                : string.Empty)
-            + (refused.Denied.Files > 0
-                ? $" Windows would not let Deguffer remove {refused.Denied.Files:N0} file(s) "
-                  + $"({FreeSpace.Format(refused.Denied.Bytes)})."
-                : string.Empty)
-            // Qualified, because one refusal is invisible to the preview's question: a running
-            // program's own files open for deletion and refuse only the deletion. See DeletionProbe.
-            + (refused.IsEmpty
-                ? string.Empty
-                : " The next scan leaves out whatever is still refused, apart from a running program's own files.")
-            + (folders.InUse > 0
-                ? $" Another program was using {folders.InUse:N0} folder(s), so they were left in place."
-                : string.Empty)
-            + (folders.Denied > 0
-                ? $" Windows would not let Deguffer remove {folders.Denied:N0} folder(s)."
-                : string.Empty)
-            + (unlisted > 0
-                ? $" Windows would not let Deguffer look inside {unlisted:N0} folder(s), so they were left in place."
-                : string.Empty)
-            + (kept > 0 ? $" {kept} file(s) changed too recently to remove." : string.Empty)
-
-            // Worded away from the first clause on purpose. Both are about something being in use,
-            // and side by side they read as one sentence printed twice — but one is Windows refusing
-            // to release a handle and the other is Deguffer declining to enter a folder it found a
-            // program working in, and only the second names a folder the user chose to keep.
-            + (spared > 0 ? $" {spared} folder(s) a running program is working in were kept." : string.Empty)
-            + (userWork > 0
-                ? $" {userWork} item(s) holding work that was never saved anywhere else were kept."
-                : string.Empty)
-
-            // Last, and with its reason, because it is the one cause that asks nothing of the reader:
-            // no program to close, no setting to change and nothing to wait for (§9).
-            + (stores > 0
-                ? $" {stores} Outlook data file(s) were left where they were, because Deguffer never removes one."
-                : string.Empty);
-    }
 }

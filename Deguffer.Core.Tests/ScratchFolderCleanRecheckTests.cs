@@ -119,7 +119,7 @@ public sealed class ScratchFolderCleanRecheckTests : IDisposable
 
         Assert.True(File.Exists(compiled), "the temporary files row took another row's entry");
         Assert.False(File.Exists(abandonedFile));
-        Assert.Equal(0, result.SparedCount);
+        Assert.Equal(0, result.Steps.Sum(step => step.Spared));
         Assert.DoesNotContain(result.Verification!.Checks, c => c.Subject.Equals(owned, StringComparison.OrdinalIgnoreCase));
         Assert.True(result.Verification.Passed, result.Verification.Summary);
     }

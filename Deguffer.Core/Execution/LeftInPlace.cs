@@ -38,54 +38,84 @@ internal static class LeftInPlace
         int userWork = 0,
         int unlisted = 0)
     {
-        var clauses = new List<string>(9);
+        var clauses = Each(refused, folders, kept, spared, mailStores, userWork, unlisted);
+
+        return clauses.Count == 0 ? string.Empty : ", " + string.Join(", ", clauses);
+    }
+
+    /// <summary>
+    /// Each cause of what was left behind as a clause of its own, in the order <see cref="Clauses"/>
+    /// joins them, or none where nothing was left.
+    ///
+    /// <para>Apart from the joined form because a finished clean lists them a line each under the row
+    /// they belong to (<see cref="RunRow"/>), and two wordings of the same cause would drift.</para>
+    /// </summary>
+    /// <param name="unreleased">What Windows kept that was measured but not counted. See <see cref="StepOutcome.Unreleased"/>.</param>
+    public static IReadOnlyList<string> Each(
+        Refusals refused,
+        FolderRefusals folders,
+        int kept,
+        int spared = 0,
+        int mailStores = 0,
+        int userWork = 0,
+        int unlisted = 0,
+        long unreleased = 0)
+    {
+        var clauses = new List<string>(10);
 
         if (refused.InUse.Files > 0)
         {
-            clauses.Add($"{Files(refused.InUse)} left in place because another program had them open");
+            clauses.Add($"{Files(refused.InUse)} left in place because another program had {Them(refused.InUse.Files)} open");
         }
 
         if (refused.Denied.Files > 0)
         {
-            clauses.Add($"{Files(refused.Denied)} left in place because Windows would not let Deguffer remove them");
+            clauses.Add($"{Files(refused.Denied)} left in place because Windows would not let Deguffer remove {Them(refused.Denied.Files)}");
+        }
+
+        if (unreleased > 0)
+        {
+            clauses.Add($"{FreeSpace.Format(unreleased)} left in place because Windows would not release it");
         }
 
         if (folders.InUse > 0)
         {
-            clauses.Add($"{folders.InUse:N0} folder(s) left in place because another program was using them");
+            clauses.Add($"{Folders(folders.InUse)} left in place because another program was using {Them(folders.InUse)}");
         }
 
         if (folders.Denied > 0)
         {
-            clauses.Add($"{folders.Denied:N0} folder(s) left in place because Windows would not let Deguffer remove them");
+            clauses.Add($"{Folders(folders.Denied)} left in place because Windows would not let Deguffer remove {Them(folders.Denied)}");
         }
 
         if (unlisted > 0)
         {
-            clauses.Add($"{unlisted:N0} folder(s) left in place because Windows would not let Deguffer look inside them");
+            clauses.Add($"{Folders(unlisted)} left in place because Windows would not let Deguffer look inside {Them(unlisted)}");
         }
 
         if (kept > 0)
         {
-            clauses.Add($"{kept} file(s) left alone because they changed recently");
+            clauses.Add($"{Counted.Of(kept, "file", "files")} left alone because {Counted.Form(kept, "it", "they")} changed recently");
         }
 
         if (spared > 0)
         {
-            clauses.Add($"{spared} item(s) left alone because something is using them");
+            clauses.Add($"{Counted.Of(spared, "item", "items")} left alone because something is using {Them(spared)}");
         }
 
         if (userWork > 0)
         {
-            clauses.Add($"{userWork} item(s) left alone because they hold work that was never saved anywhere else");
+            clauses.Add(
+                $"{Counted.Of(userWork, "item", "items")} left alone because "
+                + $"{Counted.Form(userWork, "it holds", "they hold")} work that was never saved anywhere else");
         }
 
         if (mailStores > 0)
         {
-            clauses.Add($"{mailStores} Outlook data file(s) left alone, because Deguffer never removes one");
+            clauses.Add($"{Counted.Of(mailStores, "Outlook data file", "Outlook data files")} left alone, because Deguffer never removes one");
         }
 
-        return clauses.Count == 0 ? string.Empty : ", " + string.Join(", ", clauses);
+        return clauses;
     }
 
     /// <summary>
@@ -120,22 +150,26 @@ internal static class LeftInPlace
 
         if (folders.Denied > 0)
         {
-            causes.Add($"Windows would not let Deguffer remove {folders.Denied:N0} folder(s)");
+            causes.Add($"Windows would not let Deguffer remove {Folders(folders.Denied)}");
         }
 
         if (folders.InUse > 0)
         {
-            causes.Add($"another program was using {folders.InUse:N0} folder(s)");
+            causes.Add($"another program was using {Folders(folders.InUse)}");
         }
 
         if (unlisted > 0)
         {
-            causes.Add($"Windows would not let Deguffer look inside {unlisted:N0} folder(s)");
+            causes.Add($"Windows would not let Deguffer look inside {Folders(unlisted)}");
         }
 
         return $"Nothing was removed: {string.Join(", and ", causes)}.";
     }
 
     private static string Files(RefusalTally tally) =>
-        $"{tally.Files:N0} file(s) ({FreeSpace.Format(tally.Bytes)})";
+        $"{Counted.Of(tally.Files, "file", "files")} ({FreeSpace.Format(tally.Bytes)})";
+
+    private static string Folders(int count) => Counted.Of(count, "folder", "folders");
+
+    private static string Them(int count) => Counted.Form(count, "it", "them");
 }

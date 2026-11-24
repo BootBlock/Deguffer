@@ -7534,8 +7534,8 @@ normally while the machine is online: opening it downloads it again.
 guarantee" it is freed straight away, and on a test sync root unpinning alone freed nothing: the
 sync app does the freeing.
 So the preview shows what the files hold on this PC, and after a clean the result card shows it as
-*Asked to release*, apart from *Removed by Deguffer*. The free space change beside them shows what
-OneDrive had freed by then, which can be less.
+*Asked to release*, apart from *Removed by Deguffer*. The free space line under the free space figure
+shows what OneDrive had freed by then, which can be less.
 
 **OneDrive must be running.** A request made while it is closed releases nothing. The row says so,
 offers nothing, and asks you to start it and scan again. Deguffer asks again at the moment of the

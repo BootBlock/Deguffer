@@ -19,12 +19,16 @@ namespace Deguffer.App.Converters;
 ///
 /// The verdict is always stated in words as well, because §6.5 requires it to survive a flat
 /// background and a high-contrast theme.
+///
+/// <para>The quiet style is the parameter's where one is given: the Storage card states its verdict
+/// as the heading over the line each location gets, and the Memory page states its report as a line
+/// of secondary text.</para>
 /// </summary>
 public sealed partial class RunStatementStyleConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, string language) =>
         (Style)Application.Current.Resources[
-            value is true ? "CriticalStatement" : "SecondaryText"];
+            value is true ? "CriticalStatement" : parameter as string ?? "SecondaryText"];
 
     public object ConvertBack(object value, Type targetType, object parameter, string language) =>
         throw new NotSupportedException("Verdict colour is display-only.");

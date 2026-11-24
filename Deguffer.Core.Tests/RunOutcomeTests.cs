@@ -134,135 +134,17 @@ public sealed class RunOutcomeTests
     }
 
     /// <summary>
-    /// What Windows would not release and what the guard window kept are different facts. One is
-    /// Windows declining, and the other is Deguffer honouring a setting the user chose. Folding them
-    /// together loses the only difference that matters.
+    /// Issue #858: what the run left behind belongs to the location that left it. The verdict states
+    /// what the check found and nothing else, and <see cref="RunRows"/> lists the rest a line per
+    /// location.
     /// </summary>
     [Fact]
-    public void ReportsWhatWindowsRefusedApartFromWhatWasKeptBack()
+    public void LeavesWhatWasLeftBehindToTheRowsThatLeftIt()
     {
-        var outcome = RunOutcome.For([Result("npm", refused: InUse(2, 2048)), Result("NuGet", kept: 5)]);
+        var result = Result("npm", refused: InUse(2, 2048) + Denied(1, 10), kept: 5, folders: new FolderRefusals(InUse: 1, Denied: 1));
+        result = result with { Steps = [result.Steps[0] with { Unlisted = 1, Spared = 1, UserWork = 1, MailStores = 1 }] };
 
-        Assert.Contains(
-            $"Another program had 2 file(s) ({FreeSpace.Format(2048)}) open, so they were left in place.",
-            outcome.Statement,
-            StringComparison.Ordinal);
-        Assert.Contains("5 file(s) changed too recently to remove.", outcome.Statement, StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// The defect in issue #117, in the words it produced: 5.9 GB that Windows would not
-    /// let go was reported as "252994 item(s) in use were left alone", which reads as a handful of
-    /// locked files — and the next scan offered all of it again. A denial is not a file in use,
-    /// its size is what tells the reader the run fell short, and the reader is owed the answer to
-    /// whether the row will keep offering it.
-    /// </summary>
-    [Fact]
-    public void SaysHowMuchWindowsWouldNotLetGoAndWhatTheNextScanDoesWithIt()
-    {
-        const long guarded = 6_340_000_000;
-
-        var statement = RunOutcome.For([Result("Temporary files", refused: Denied(252, guarded))]).Statement;
-
-        Assert.Contains(
-            $"Windows would not let Deguffer remove 252 file(s) ({FreeSpace.Format(guarded)}).",
-            statement,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "The next scan leaves out whatever is still refused, apart from a running program's own files.",
-            statement,
-            StringComparison.Ordinal);
-
-        Assert.DoesNotContain("in use", statement, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("Another program", statement, StringComparison.Ordinal);
-    }
-
-    /// <summary>Both kinds together are both stated, and the promise about the next scan once.</summary>
-    [Fact]
-    public void StatesBothKindsOfRefusalAndThePromiseOnce()
-    {
-        var statement = RunOutcome.For([Result("npm", refused: InUse(1, 10)), Result("NuGet", refused: Denied(2, 20))]).Statement;
-
-        Assert.Contains("Another program had 1 file(s)", statement, StringComparison.Ordinal);
-        Assert.Contains("Windows would not let Deguffer remove 2 file(s)", statement, StringComparison.Ordinal);
-        Assert.Equal(1, statement.Split("The next scan").Length - 1);
-    }
-
-    /// <summary>
-    /// Folders Windows would not let go are stated apart from files, in the same two kinds, and never
-    /// under the promise about the next scan. That promise is about bytes the scan leaves out,
-    /// and a folder holds none.
-    /// </summary>
-    [Fact]
-    public void StatesTheFoldersWindowsWouldNotLetGoApartFromTheFiles()
-    {
-        var statement = RunOutcome.For(
-            [Result("Temporary files", folders: new FolderRefusals(InUse: 2, Denied: 1))]).Detail;
-
-        Assert.Equal(
-            "Another program was using 2 folder(s), so they were left in place. "
-            + "Windows would not let Deguffer remove 1 folder(s).",
-            statement);
-    }
-
-    /// <summary>
-    /// A folder Windows would not let a removal list is stated beside the folders it refused, because
-    /// the run left it and whatever it holds where they were.
-    /// </summary>
-    [Fact]
-    public void StatesTheFoldersWindowsWouldNotLetDegufferLookInside()
-    {
-        var result = Result("Temporary files", folders: new FolderRefusals(InUse: 0, Denied: 1));
-        result = result with { Steps = [result.Steps[0] with { Unlisted = 2 }] };
-
-        Assert.Equal(
-            "Windows would not let Deguffer remove 1 folder(s). "
-            + "Windows would not let Deguffer look inside 2 folder(s), so they were left in place.",
-            RunOutcome.For([result]).Detail);
-    }
-
-    /// <summary>
-    /// With files refused as well, the folders come after the promise about the next scan, so the
-    /// promise does not read as covering them.
-    /// </summary>
-    [Fact]
-    public void PutsTheFoldersAfterThePromiseAboutTheNextScan()
-    {
-        var statement = RunOutcome.For(
-            [Result("Temporary files", refused: InUse(1, 10), folders: new FolderRefusals(InUse: 1, Denied: 0))]).Statement;
-
-        Assert.True(
-            statement.IndexOf("The next scan", StringComparison.Ordinal)
-            < statement.IndexOf("folder(s)", StringComparison.Ordinal),
-            statement);
-    }
-
-    [Fact]
-    public void SaysNothingAboutARefusalOrAKeepOfZero()
-    {
-        Assert.Empty(RunOutcome.For([Result("npm")]).Detail);
-
-        Assert.Equal(
-            "6 file(s) changed too recently to remove.",
-            RunOutcome.For([Result("npm", kept: 6)]).Detail);
-    }
-
-    /// <summary>
-    /// §9's stores are the run's to report as well as each step's, in words of their own: nothing
-    /// refused them, no setting kept them, and nothing was using them. Said nowhere, a folder that a
-    /// clean left standing reads as a clean that did not finish.
-    /// </summary>
-    [Fact]
-    public void SaysTheOutlookDataFilesItLeftAndWhy()
-    {
-        var result = Result("Temporary files") with
-        {
-            Steps = [new StepOutcome("Clear the folder", true, 1024, Refusals.None, MailStores: 2)],
-        };
-
-        Assert.Equal(
-            "2 Outlook data file(s) were left where they were, because Deguffer never removes one.",
-            RunOutcome.For([result]).Detail);
+        Assert.Empty(RunOutcome.For([result]).Detail);
     }
 
     /// <summary>
@@ -396,17 +278,19 @@ public sealed class RunOutcomeTests
     }
 
     /// <summary>
-    /// What the run left behind stays on this sentence, unlike the failure's. It is not an alarm to
-    /// bury, and both facts explain the same thing: why the figures are not what the preview said.
+    /// An outside removal's detail leaves what the run left behind to the rows as well. The lines
+    /// under it say which location left what, which one sentence could only total.
     /// </summary>
     [Fact]
-    public void KeepsWhatTheRunLeftBehindBesideAnOutsideRemoval()
+    public void LeavesWhatTheRunLeftBehindToTheRowsBesideAnOutsideRemoval()
     {
         var outcome = RunOutcome.For(
             [Result("npm", VerificationOutcome.RemovedFromOutside, InUse(2, 200), kept: 5)]);
 
-        Assert.Contains("Another program had 2 file(s)", outcome.Statement, StringComparison.Ordinal);
-        Assert.Contains("5 file(s) changed too recently to remove.", outcome.Statement, StringComparison.Ordinal);
+        Assert.Equal(RunVerdict.RemovedFromOutside, outcome.Verdict);
+        Assert.DoesNotContain("left in place", outcome.Statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("Another program", outcome.Statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("recently", outcome.Statement, StringComparison.Ordinal);
     }
 
     /// <summary>
