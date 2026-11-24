@@ -12,6 +12,9 @@
         <!-- The compact rows' figure column, one width down the whole list. See CompactFindingRow. -->
         <controls:WidthGroup x:Key="FigureWidths" />
 
+        <!-- Scan and the Cancel that takes its place while the page is busy. See the action bar. -->
+        <controls:WidthGroup x:Key="ScanSlotWidths" />
+
         <!--
             The compact row: the four things the user is choosing between, on one line — is it
             ticked, what is it, what class of thing is it, and how big is it.
@@ -568,7 +571,7 @@
 
                 <!-- How far through the run, under the line naming which cause is being cleaned.
                      Determinate because a clean knows its own extent before it starts, unlike a
-                     scan, which keeps the ring beside the Selected figure. Shown only while that run
+                     scan, which keeps the ring beside Scan. Shown only while that run
                      is in flight, so nothing here is drawn against a message about anything else.
 
                      The percentage is written out beside it for the same reason the capacity bar
@@ -669,27 +672,92 @@
             </Grid>
         </Border>
 
-        <!-- §7: the primary button scans and removes nothing. Deleting is a separate, deliberate
-             second step, so Scan carries the accent and Clean does not.
+        <!-- §7: the bar runs in the order of the flow. Scan, the primary action, comes first, and it
+             scans and removes nothing. Deleting is a separate, deliberate second step at the far end,
+             with what follows it, so Scan carries the accent and Clean does not. Clean states what the
+             ticked steps would give back, so the amount and the press that authorises it read as one.
 
-             On a window too narrow for one line, Clean, Scan and the choice of what follows a clean
-             move to a line of their own, right-aligned as they were, and the offer to elevate stays
-             beside the total (ReflowRow). Nothing the reader needs to start a scan or a clean is
-             drawn off the edge. -->
-        <controls:ReflowRow Grid.Row="4" ColumnSpacing="12" RowSpacing="{StaticResource ControlGap}" Margin="0,4,0,0"
-                            MiddleStaysWhole="True">
+             On a window too narrow for one line, the choice of what follows a clean and Clean move to
+             a line of their own, right-aligned as they were (ReflowRow). Nothing the reader needs to
+             start a scan or a clean is drawn off the edge. -->
+        <controls:ReflowRow Grid.Row="4" ColumnSpacing="{StaticResource RegionGap}" RowSpacing="{StaticResource ControlGap}" Margin="0,4,0,0">
 
-            <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                <ProgressRing IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
-                              Width="18" Height="18" VerticalAlignment="Center" />
-                <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="Selected" Style="{StaticResource FieldLabel}" />
-                    <TextBlock Text="{x:Bind ViewModel.Selection.TotalLabel, Mode=OneWay}"
-                               Style="{StaticResource Figure}" />
-                </StackPanel>
-            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}" VerticalAlignment="Center">
+                <!-- While the page is busy, Cancel takes Scan's place rather than joining the bar beside
+                     it. The two share the wider of their widths (WidthGroup), so the swap does not move
+                     the buttons after them. -->
+                <Grid VerticalAlignment="Center">
+                    <!-- The primary action, so it keeps the accent a plain Scan button had. The button
+                         scans every location, and the drop-down scans only the ones ticked in it, for a
+                         user who knows what they came to clear and need not measure every cache to clear
+                         it. WinUI ships no accent style for a split button, so its brushes are pointed at
+                         the accent button's own. The empty HighContrast dictionary leaves that theme the
+                         SDK's values, as the Explore page's notes do. Hidden rather than disabled while
+                         the page is busy: see CleanViewModel.IsIdle. -->
+                    <SplitButton Content="Scan"
+                                 HorizontalAlignment="Stretch"
+                                 Visibility="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
+                                 Command="{x:Bind ViewModel.PreviewCommand}"
+                                 controls:WidthGroup.Group="{StaticResource ScanSlotWidths}"
+                                 AutomationProperties.AutomationId="ScanButton"
+                                 AutomationProperties.HelpText="Scan every location Deguffer recognises. Open the drop-down to choose the locations to scan on their own.">
+                        <SplitButton.Resources>
+                            <ResourceDictionary>
+                                <ResourceDictionary.ThemeDictionaries>
+                                    <ResourceDictionary x:Key="Default">
+                                        <StaticResource x:Key="SplitButtonBackground" ResourceKey="AccentButtonBackground" />
+                                        <StaticResource x:Key="SplitButtonBackgroundPointerOver" ResourceKey="AccentButtonBackgroundPointerOver" />
+                                        <StaticResource x:Key="SplitButtonBackgroundPressed" ResourceKey="AccentButtonBackgroundPressed" />
+                                        <StaticResource x:Key="SplitButtonBackgroundDisabled" ResourceKey="AccentButtonBackgroundDisabled" />
+                                        <StaticResource x:Key="SplitButtonForeground" ResourceKey="AccentButtonForeground" />
+                                        <StaticResource x:Key="SplitButtonForegroundPointerOver" ResourceKey="AccentButtonForegroundPointerOver" />
+                                        <StaticResource x:Key="SplitButtonForegroundPressed" ResourceKey="AccentButtonForegroundPressed" />
+                                        <StaticResource x:Key="SplitButtonForegroundDisabled" ResourceKey="AccentButtonForegroundDisabled" />
+                                        <StaticResource x:Key="SplitButtonForegroundSecondary" ResourceKey="AccentButtonForeground" />
+                                        <StaticResource x:Key="SplitButtonForegroundSecondaryPressed" ResourceKey="AccentButtonForegroundPressed" />
+                                        <StaticResource x:Key="SplitButtonBorderBrush" ResourceKey="AccentButtonBorderBrush" />
+                                        <StaticResource x:Key="SplitButtonBorderBrushPointerOver" ResourceKey="AccentButtonBorderBrushPointerOver" />
+                                        <StaticResource x:Key="SplitButtonBorderBrushPressed" ResourceKey="AccentButtonBorderBrushPressed" />
+                                        <StaticResource x:Key="SplitButtonBorderBrushDisabled" ResourceKey="AccentButtonBorderBrushDisabled" />
+                                        <StaticResource x:Key="SplitButtonBorderBrushDivider" ResourceKey="ControlStrokeColorOnAccentDefaultBrush" />
+                                    </ResourceDictionary>
 
-            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <ResourceDictionary x:Key="Light">
+                                        <StaticResource x:Key="SplitButtonBackground" ResourceKey="AccentButtonBackground" />
+                                        <StaticResource x:Key="SplitButtonBackgroundPointerOver" ResourceKey="AccentButtonBackgroundPointerOver" />
+                                        <StaticResource x:Key="SplitButtonBackgroundPressed" ResourceKey="AccentButtonBackgroundPressed" />
+                                        <StaticResource x:Key="SplitButtonBackgroundDisabled" ResourceKey="AccentButtonBackgroundDisabled" />
+                                        <StaticResource x:Key="SplitButtonForeground" ResourceKey="AccentButtonForeground" />
+                                        <StaticResource x:Key="SplitButtonForegroundPointerOver" ResourceKey="AccentButtonForegroundPointerOver" />
+                                        <StaticResource x:Key="SplitButtonForegroundPressed" ResourceKey="AccentButtonForegroundPressed" />
+                                        <StaticResource x:Key="SplitButtonForegroundDisabled" ResourceKey="AccentButtonForegroundDisabled" />
+                                        <StaticResource x:Key="SplitButtonForegroundSecondary" ResourceKey="AccentButtonForeground" />
+                                        <StaticResource x:Key="SplitButtonForegroundSecondaryPressed" ResourceKey="AccentButtonForegroundPressed" />
+                                        <StaticResource x:Key="SplitButtonBorderBrush" ResourceKey="AccentButtonBorderBrush" />
+                                        <StaticResource x:Key="SplitButtonBorderBrushPointerOver" ResourceKey="AccentButtonBorderBrushPointerOver" />
+                                        <StaticResource x:Key="SplitButtonBorderBrushPressed" ResourceKey="AccentButtonBorderBrushPressed" />
+                                        <StaticResource x:Key="SplitButtonBorderBrushDisabled" ResourceKey="AccentButtonBorderBrushDisabled" />
+                                        <StaticResource x:Key="SplitButtonBorderBrushDivider" ResourceKey="ControlStrokeColorOnAccentDefaultBrush" />
+                                    </ResourceDictionary>
+
+                                    <ResourceDictionary x:Key="HighContrast" />
+                                </ResourceDictionary.ThemeDictionaries>
+                            </ResourceDictionary>
+                        </SplitButton.Resources>
+
+                        <SplitButton.Flyout>
+                            <Flyout x:Name="ScanChoiceFlyout" Placement="TopEdgeAlignedLeft" />
+                        </SplitButton.Flyout>
+                    </SplitButton>
+
+                    <Button Content="{x:Bind ViewModel.CancelLabel, Mode=OneWay}"
+                            HorizontalAlignment="Stretch"
+                            Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
+                            Command="{x:Bind ViewModel.CancelCommand}"
+                            controls:WidthGroup.Group="{StaticResource ScanSlotWidths}"
+                            AutomationProperties.AutomationId="CancelButton" />
+                </Grid>
+
                 <!-- §5.5's remedy for a slow scan, and a way to scan, so it sits with Scan. Offered
                      from the start, so an elevated preview is not reachable only through the
                      unelevated one it replaces, and hidden once a preview has shown that elevating
@@ -700,18 +768,19 @@
                         Command="{x:Bind ViewModel.ElevateAndRescanCommand}"
                         AutomationProperties.AutomationId="ElevateButton"
                         AutomationProperties.HelpText="Restart Deguffer as administrator and scan, so it can read the volume's file table and carry out steps only an administrator may perform." />
-                <Button Content="{x:Bind ViewModel.CancelLabel, Mode=OneWay}"
-                        Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
-                        Command="{x:Bind ViewModel.CancelCommand}"
-                        AutomationProperties.AutomationId="CancelButton" />
+
+                <!-- Last, so its space, kept while it is idle, moves nothing when it spins. -->
+                <ProgressRing IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
+                              Width="18" Height="18" VerticalAlignment="Center" />
             </StackPanel>
 
-            <controls:FlowRow ColumnSpacing="8" RowSpacing="{StaticResource ControlGap}" VerticalAlignment="Center">
+            <controls:FlowRow ColumnSpacing="{StaticResource ControlGap}" RowSpacing="{StaticResource ControlGap}" VerticalAlignment="Center">
                 <!-- Beside Clean, because it is part of starting one: what Deguffer does once the clean
                      it is about to start has finished. Read when the clean ends, so it can be changed
                      while one runs. -->
                 <TextBlock x:Name="WhenCompleteLabel"
                            Text="When complete"
+                           Style="{StaticResource FieldLabel}"
                            VerticalAlignment="Center" />
                 <ComboBox MinWidth="140"
                           VerticalAlignment="Center"
@@ -721,71 +790,9 @@
                           AutomationProperties.LabeledBy="{x:Bind WhenCompleteLabel}"
                           AutomationProperties.HelpText="{x:Bind ViewModel.WhenComplete.Explanation}"
                           ToolTipService.ToolTip="{x:Bind ViewModel.WhenComplete.Explanation}" />
-                <Button Content="Clean"
+                <Button Content="{x:Bind ViewModel.Selection.CleanLabel, Mode=OneWay}"
                         Command="{x:Bind ViewModel.CleanCommand}"
                         AutomationProperties.AutomationId="CleanButton" />
-                <!-- The primary action (§7), so it keeps the accent a plain Scan button had. The button
-                     scans every location, and the drop-down scans only the ones ticked in it, for a
-                     user who knows what they came to clear and need not measure every cache to clear
-                     it. WinUI ships no accent style for a split button, so its brushes are pointed at
-                     the accent button's own. The empty HighContrast dictionary leaves that theme the
-                     SDK's values, as the Explore page's notes do. It is disabled whole while the page
-                     is busy: the template takes the accent away only from a wholly disabled split
-                     button, so the command alone, switching off the primary half, left that half's
-                     disabled text on the accent. -->
-                <controls:EnabledAwareSplitButton Content="Scan"
-                                                  IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
-                                                  Command="{x:Bind ViewModel.PreviewCommand}"
-                                                  AutomationProperties.AutomationId="ScanButton"
-                                                  AutomationProperties.HelpText="Scan every location Deguffer recognises. Open the drop-down to choose the locations to scan on their own.">
-                    <controls:EnabledAwareSplitButton.Resources>
-                        <ResourceDictionary>
-                            <ResourceDictionary.ThemeDictionaries>
-                                <ResourceDictionary x:Key="Default">
-                                    <StaticResource x:Key="SplitButtonBackground" ResourceKey="AccentButtonBackground" />
-                                    <StaticResource x:Key="SplitButtonBackgroundPointerOver" ResourceKey="AccentButtonBackgroundPointerOver" />
-                                    <StaticResource x:Key="SplitButtonBackgroundPressed" ResourceKey="AccentButtonBackgroundPressed" />
-                                    <StaticResource x:Key="SplitButtonBackgroundDisabled" ResourceKey="AccentButtonBackgroundDisabled" />
-                                    <StaticResource x:Key="SplitButtonForeground" ResourceKey="AccentButtonForeground" />
-                                    <StaticResource x:Key="SplitButtonForegroundPointerOver" ResourceKey="AccentButtonForegroundPointerOver" />
-                                    <StaticResource x:Key="SplitButtonForegroundPressed" ResourceKey="AccentButtonForegroundPressed" />
-                                    <StaticResource x:Key="SplitButtonForegroundDisabled" ResourceKey="AccentButtonForegroundDisabled" />
-                                    <StaticResource x:Key="SplitButtonForegroundSecondary" ResourceKey="AccentButtonForeground" />
-                                    <StaticResource x:Key="SplitButtonForegroundSecondaryPressed" ResourceKey="AccentButtonForegroundPressed" />
-                                    <StaticResource x:Key="SplitButtonBorderBrush" ResourceKey="AccentButtonBorderBrush" />
-                                    <StaticResource x:Key="SplitButtonBorderBrushPointerOver" ResourceKey="AccentButtonBorderBrushPointerOver" />
-                                    <StaticResource x:Key="SplitButtonBorderBrushPressed" ResourceKey="AccentButtonBorderBrushPressed" />
-                                    <StaticResource x:Key="SplitButtonBorderBrushDisabled" ResourceKey="AccentButtonBorderBrushDisabled" />
-                                    <StaticResource x:Key="SplitButtonBorderBrushDivider" ResourceKey="ControlStrokeColorOnAccentDefaultBrush" />
-                                </ResourceDictionary>
-
-                                <ResourceDictionary x:Key="Light">
-                                    <StaticResource x:Key="SplitButtonBackground" ResourceKey="AccentButtonBackground" />
-                                    <StaticResource x:Key="SplitButtonBackgroundPointerOver" ResourceKey="AccentButtonBackgroundPointerOver" />
-                                    <StaticResource x:Key="SplitButtonBackgroundPressed" ResourceKey="AccentButtonBackgroundPressed" />
-                                    <StaticResource x:Key="SplitButtonBackgroundDisabled" ResourceKey="AccentButtonBackgroundDisabled" />
-                                    <StaticResource x:Key="SplitButtonForeground" ResourceKey="AccentButtonForeground" />
-                                    <StaticResource x:Key="SplitButtonForegroundPointerOver" ResourceKey="AccentButtonForegroundPointerOver" />
-                                    <StaticResource x:Key="SplitButtonForegroundPressed" ResourceKey="AccentButtonForegroundPressed" />
-                                    <StaticResource x:Key="SplitButtonForegroundDisabled" ResourceKey="AccentButtonForegroundDisabled" />
-                                    <StaticResource x:Key="SplitButtonForegroundSecondary" ResourceKey="AccentButtonForeground" />
-                                    <StaticResource x:Key="SplitButtonForegroundSecondaryPressed" ResourceKey="AccentButtonForegroundPressed" />
-                                    <StaticResource x:Key="SplitButtonBorderBrush" ResourceKey="AccentButtonBorderBrush" />
-                                    <StaticResource x:Key="SplitButtonBorderBrushPointerOver" ResourceKey="AccentButtonBorderBrushPointerOver" />
-                                    <StaticResource x:Key="SplitButtonBorderBrushPressed" ResourceKey="AccentButtonBorderBrushPressed" />
-                                    <StaticResource x:Key="SplitButtonBorderBrushDisabled" ResourceKey="AccentButtonBorderBrushDisabled" />
-                                    <StaticResource x:Key="SplitButtonBorderBrushDivider" ResourceKey="ControlStrokeColorOnAccentDefaultBrush" />
-                                </ResourceDictionary>
-
-                                <ResourceDictionary x:Key="HighContrast" />
-                            </ResourceDictionary.ThemeDictionaries>
-                        </ResourceDictionary>
-                    </controls:EnabledAwareSplitButton.Resources>
-
-                    <controls:EnabledAwareSplitButton.Flyout>
-                        <Flyout x:Name="ScanChoiceFlyout" Placement="TopEdgeAlignedRight" />
-                    </controls:EnabledAwareSplitButton.Flyout>
-                </controls:EnabledAwareSplitButton>
             </controls:FlowRow>
         </controls:ReflowRow>
     </Grid>
