@@ -46,7 +46,9 @@ public sealed class MapAppearanceWindow : Window, IToolWindow
         _view = new MapAppearanceView(viewModel);
         Content = _view;
 
+        // One name for the taskbar, Alt+Tab and the row drawn along the top.
         Title = "Map appearance";
+        _view.TitleBar.Title = Title;
         WindowIcon.Apply(this);
 
         // §6.5: the content runs into the title bar so the material runs the full height, as the main

@@ -18,26 +18,23 @@
             §6.5: the content extends into the title bar so the material runs the full height.
             This row is the drag region, and carries nothing but the app name — no information
             is placed where it would depend on the backdrop being present.
+
+            The platform's TitleBar rather than a row drawn here: it is as tall as the caption
+            buttons beside it, so the name lines up with their glyphs, and it dims its name and icon
+            while the window is in the background, as Windows dims its own (#928).
         -->
-        <Border x:Name="TitleBar" Grid.Row="0" Height="40" Padding="16,0">
-            <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+        <TitleBar x:Name="TitleBar" Grid.Row="0" Title="{x:Bind shell:DestinationNames.Application}">
+            <TitleBar.IconSource>
                 <!-- Decoded at the size it is drawn: the source is the 256px master, and without
-                     this the full bitmap is decoded to fill an 18px slot. -->
-                <Image Width="18" Height="18"
-                       AutomationProperties.AccessibilityView="Raw">
-                    <Image.Source>
+                     this the full bitmap is decoded to fill a 16px slot. -->
+                <ImageIconSource>
+                    <ImageIconSource.ImageSource>
                         <BitmapImage UriSource="ms-appx:///Assets/Deguffer-256.png"
-                                     DecodePixelWidth="18" DecodePixelHeight="18" />
-                    </Image.Source>
-                </Image>
-                <TextBlock
-                    Text="{x:Bind shell:DestinationNames.Application}"
-                    VerticalAlignment="Center"
-                    Style="{StaticResource CaptionTextBlockStyle}"
-                    FontWeight="SemiBold"
-                    Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-            </StackPanel>
-        </Border>
+                                     DecodePixelWidth="16" DecodePixelHeight="16" />
+                    </ImageIconSource.ImageSource>
+                </ImageIconSource>
+            </TitleBar.IconSource>
+        </TitleBar>
 
         <!--
             A rail with its labels showing on a wide window, so nothing has to be opened to find out
