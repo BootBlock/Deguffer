@@ -7,12 +7,13 @@ namespace Deguffer.App.Shell;
 /// The one place a <see cref="ContentDialog"/> is built, so none can open without what every dialog
 /// needs. <c>DesignDialogTests</c> fails on one built anywhere else.
 ///
-/// <para>Each needs three things a page cannot see go missing. A dialog built in code belongs to no
-/// window, so without its owner's <see cref="XamlRoot"/> it has nowhere to open. It opens in the popup
-/// layer rather than inside the page, so it does not inherit the theme applied to the window root, and
-/// without the owner's theme it renders dark over a light window. And its default button is Close, so
-/// Enter never confirms something the user has not read. Every dialog is shown through
-/// <see cref="ModalDialog"/>, which refuses a second one.</para>
+/// <para>Every dialog needs two things a page cannot see go missing. A dialog built in code belongs to
+/// no window, so without its owner's <see cref="XamlRoot"/> it has nowhere to open. It opens in the
+/// popup layer rather than inside the page, so it does not inherit the theme applied to the window
+/// root, and without the owner's theme it renders dark over a light window. A dialog built here also
+/// defaults to Close, so Enter never confirms something the user has not read. A dialog declared in
+/// XAML and passed to <see cref="Adopt{T}"/> keeps the default button its markup declares. Every dialog
+/// is shown through <see cref="ModalDialog"/>, which refuses a second one.</para>
 ///
 /// <para>No <c>Style</c> is set. WinUI's own samples set <c>DefaultContentDialogStyle</c> on a dialog
 /// built in code, a habit from WinUI 2, where the implicit style was the old one. WinUI 3's

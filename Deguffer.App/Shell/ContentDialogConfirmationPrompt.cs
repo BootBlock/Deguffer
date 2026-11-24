@@ -27,10 +27,19 @@ public sealed class ContentDialogConfirmationPrompt(FrameworkElement owner) : IC
             return null;
         }
 
-        var typing = requirement.Typing;
-        var typed = typing is null ? null : NewPhraseBox(typing);
+        var body = new StackPanel { Spacing = 12 };
+        body.Children.Add(DialogFactory.Paragraph(requirement.Consequence));
 
-        var dialog = DialogFactory.Question(owner, requirement.Title, NewBody(requirement.Consequence, typing, typed), requirement.Verb);
+        TextBox? typed = null;
+
+        if (requirement.Typing is { } typing)
+        {
+            typed = NewPhraseBox(typing);
+            body.Children.Add(DialogFactory.Paragraph(typing.Instruction));
+            body.Children.Add(typed);
+        }
+
+        var dialog = DialogFactory.Question(owner, requirement.Title, body, requirement.Verb);
 
         if (typed is not null)
         {
@@ -54,20 +63,5 @@ public sealed class ContentDialogConfirmationPrompt(FrameworkElement owner) : IC
 
         AutomationProperties.SetName(box, typing.BoxName);
         return box;
-    }
-
-    private static StackPanel NewBody(string consequence, PhraseWording? typing, TextBox? typed)
-    {
-        var panel = new StackPanel { Spacing = 12 };
-
-        panel.Children.Add(DialogFactory.Paragraph(consequence));
-
-        if (typing is not null && typed is not null)
-        {
-            panel.Children.Add(DialogFactory.Paragraph(typing.Instruction));
-            panel.Children.Add(typed);
-        }
-
-        return panel;
     }
 }
