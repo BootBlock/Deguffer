@@ -23,8 +23,6 @@ public sealed partial class SafetyCheckViewModel : ObservableObject
     /// <summary>The verdict, or null where no run's figures are on screen.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(
-        nameof(Statement),
-        nameof(VerificationFailed),
         nameof(HasDetail),
         nameof(OffersDiagnosticsLink),
         nameof(OffersDiagnosticsMenu),
@@ -38,16 +36,6 @@ public sealed partial class SafetyCheckViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowsDiagnosticsRow))]
     public partial string CopyResult { get; private set; } = string.Empty;
-
-    /// <summary>The whole verdict in one line, as the info bar and a report state it.</summary>
-    public string Statement => Outcome?.Statement ?? string.Empty;
-
-    /// <summary>
-    /// Whether the verdict is a failure, so the card can say so in more than words. The words carry
-    /// it on their own (§6.5), and the glyph beside them says the same, so the colour is the third cue
-    /// and never the only one.
-    /// </summary>
-    public bool VerificationFailed => Outcome?.VerificationFailed ?? false;
 
     /// <summary>Whether there is anything under the heading to say, so an empty line takes no room.</summary>
     public bool HasDetail => Outcome is { Detail.Length: > 0 };

@@ -43,8 +43,8 @@ public class CleanViewModelCleanTests
         var ran = Assert.Single(cache.Executed);
         Assert.Equal([taken.Path], ran.Steps.Select(step => step.SelectionKey));
         Assert.Contains(ran.ProtectedPaths, p => p.Path == unticked.Path);
-        Assert.Equal("Safety check passed: everything Deguffer was told to leave alone is still there.", page.ViewModel.SafetyCheck.Statement);
-        Assert.False(page.ViewModel.SafetyCheck.VerificationFailed);
+        Assert.Equal("Safety check passed: everything Deguffer was told to leave alone is still there.", page.ViewModel.SafetyCheck.Outcome?.Statement);
+        Assert.False(page.ViewModel.SafetyCheck.Outcome?.VerificationFailed);
         Assert.False(page.ViewModel.SafetyCheck.OffersDiagnosticsLink);
         Assert.Equal("1 KB", page.ViewModel.RemovedLabel);
     }
@@ -135,8 +135,8 @@ public class CleanViewModelCleanTests
         Assert.Equal(
             "Safety check passed: everything Deguffer was told to leave alone is still there. "
             + "Clean cancelled part-way. Anything already removed stays removed.",
-            page.ViewModel.SafetyCheck.Statement);
-        Assert.Equal(page.ViewModel.SafetyCheck.Statement, page.ViewModel.Status);
+            page.ViewModel.SafetyCheck.Outcome?.Statement);
+        Assert.Equal(page.ViewModel.SafetyCheck.Outcome?.Statement, page.ViewModel.Status);
         Assert.Equal(InfoBarSeverity.Warning, page.ViewModel.StatusSeverity);
 
         Assert.Equal(2, first.PlanCount);
@@ -231,7 +231,7 @@ public class CleanViewModelCleanTests
         page.Clean();
 
         Assert.False(Directory.Exists(taken.Path));
-        Assert.Equal("Safety check passed: everything Deguffer was told to leave alone is still there.", page.ViewModel.SafetyCheck.Statement);
+        Assert.Equal("Safety check passed: everything Deguffer was told to leave alone is still there.", page.ViewModel.SafetyCheck.Outcome?.Statement);
         Assert.DoesNotContain("cancelled", page.ViewModel.Status, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(2, cache.PlanCount);
         Assert.True(page.ViewModel.HasPreview);
@@ -259,8 +259,8 @@ public class CleanViewModelCleanTests
         first.AfterCleaning = () => first.WhilePlanning = () => page.ViewModel.CancelCommand.Execute(null);
         page.Clean();
 
-        Assert.True(page.ViewModel.SafetyCheck.VerificationFailed);
-        Assert.Equal(page.ViewModel.SafetyCheck.Statement, page.ViewModel.Status);
+        Assert.True(page.ViewModel.SafetyCheck.Outcome?.VerificationFailed);
+        Assert.Equal(page.ViewModel.SafetyCheck.Outcome?.Statement, page.ViewModel.Status);
         Assert.Equal(InfoBarSeverity.Error, page.ViewModel.StatusSeverity);
         Assert.False(page.ViewModel.HasPreview);
     }
@@ -840,17 +840,17 @@ public class CleanViewModelCleanTests
 
         page.Clean();
 
-        Assert.True(page.ViewModel.SafetyCheck.VerificationFailed);
+        Assert.True(page.ViewModel.SafetyCheck.Outcome?.VerificationFailed);
         Assert.True(page.ViewModel.SafetyCheck.OffersDiagnosticsLink);
         Assert.Equal(InfoBarSeverity.Error, page.ViewModel.StatusSeverity);
-        Assert.Equal(page.ViewModel.SafetyCheck.Statement, page.ViewModel.Status);
+        Assert.Equal(page.ViewModel.SafetyCheck.Outcome?.Statement, page.ViewModel.Status);
         Assert.Contains(page.ViewModel.SafetyCheck.Notes, check => check.Subject == inside);
 
         Assert.Equal("0 B", page.ViewModel.Selection.TotalLabel);
         page.Row("cache").Steps[0].IsSelected = true;
 
         Assert.Equal("1 KB", page.ViewModel.Selection.TotalLabel);
-        Assert.Equal(page.ViewModel.SafetyCheck.Statement, page.ViewModel.Status);
+        Assert.Equal(page.ViewModel.SafetyCheck.Outcome?.Statement, page.ViewModel.Status);
         Assert.Equal(InfoBarSeverity.Error, page.ViewModel.StatusSeverity);
     }
 
@@ -876,7 +876,7 @@ public class CleanViewModelCleanTests
 
         Assert.Contains("- Deguffer: 0.0.0-test", report, StringComparison.Ordinal);
         Assert.Contains("- Windows: Windows 11 (10.0.26100), x64, on an ARM64 processor", report, StringComparison.Ordinal);
-        Assert.Contains($"- Outcome: {page.ViewModel.SafetyCheck.Statement}", report, StringComparison.Ordinal);
+        Assert.Contains($"- Outcome: {Assert.IsType<RunOutcome>(page.ViewModel.SafetyCheck.Outcome).Statement}", report, StringComparison.Ordinal);
         Assert.Contains("- Failed: `%USERPROFILE%", report, StringComparison.Ordinal);
         Assert.DoesNotContain(page.Environment.UserProfile, report, StringComparison.OrdinalIgnoreCase);
 
