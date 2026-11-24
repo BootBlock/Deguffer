@@ -124,7 +124,7 @@ public sealed class StartupMemoryTests
     private static readonly StartupKey Key = new(StartupSource.UserRun, "Tool");
 
     private static StartupReading Reading(string program) => new(
-        [new StartupEntry(Key, "Tool", program, program, ProgramStanding.Present, null, StartupState.Starts, Approval.None)],
+        [new StartupEntry(Key, "Tool", program, program, ProgramStanding.Present, null, StartupState.Enabled, Approval.None)],
         []);
 
     private static ProcessMemoryTable Table(params ProcessMemory[] processes) => new(processes, ProcessFigures.Checked, Complete: true);

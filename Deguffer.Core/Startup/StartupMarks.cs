@@ -7,7 +7,7 @@ namespace Deguffer.Core.Startup;
 /// reason, a mark where its program is missing, a shield where a change needs administrator rights
 /// Deguffer has not got, and what its program holds in memory now.
 /// </summary>
-/// <param name="State">The badge's word.</param>
+/// <param name="State">The badge's word, from <see cref="StartupWording"/>.</param>
 /// <param name="StateReason">What the badge means for this entry, and where Deguffer read it.</param>
 /// <param name="Missing">That Windows says its program is not there, or null.</param>
 /// <param name="Shield">What needs administrator rights, or null where nothing does.</param>
@@ -34,7 +34,7 @@ public sealed record StartupMarks(
         ArgumentNullException.ThrowIfNull(entry);
 
         return new StartupMarks(
-            WordFor(entry.State),
+            StartupWording.For(entry.State),
             ReasonFor(entry),
             entry.Standing is ProgramStanding.Missing
                 ? $"Windows says its program, {entry.Program}, is not there, so nothing starts from this entry."
@@ -45,21 +45,13 @@ public sealed record StartupMarks(
             MemoryNoteFor(entry, running, figures));
     }
 
-    private static string WordFor(StartupState state) => state switch
-    {
-        StartupState.Starts => "Starts",
-        StartupState.Disabled => "Disabled",
-        StartupState.Unknown => "Unknown",
-        _ => throw new ArgumentOutOfRangeException(nameof(state), state, null),
-    };
-
     private static string ReasonFor(StartupEntry entry)
     {
         if (entry.IsPackaged)
         {
             return entry.State switch
             {
-                StartupState.Starts => "Windows starts this app's startup task at sign-in, as this account's own record of it says.",
+                StartupState.Enabled => "Windows starts this app's startup task at sign-in, as this account's own record of it says.",
                 StartupState.Disabled => "This app's startup task is disabled for this account, by you, by the app or by a policy.",
                 _ => "Windows has no record Deguffer can read of whether this app's startup task starts.",
             };
@@ -67,9 +59,9 @@ public sealed record StartupMarks(
 
         return entry.State switch
         {
-            StartupState.Starts when entry.Approval?.Value is null =>
+            StartupState.Enabled when entry.Approval?.Value is null =>
                 "Windows starts this entry at sign-in: nothing records that it should not.",
-            StartupState.Starts => "Windows starts this entry at sign-in, as its record beside the entry says.",
+            StartupState.Enabled => "Windows starts this entry at sign-in, as its record beside the entry says.",
             StartupState.Disabled when entry.DisabledAt is { } when =>
                 $"Disabled on {when.ToLocalTime():d}. The entry is still there, and Windows skips it at sign-in.",
             StartupState.Disabled => "Disabled. The entry is still there, and Windows skips it at sign-in.",

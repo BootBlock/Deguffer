@@ -113,9 +113,9 @@ public sealed class StartupTaskManifestTests
     [Theory]
     [InlineData(0, StartupState.Disabled)]
     [InlineData(1, StartupState.Disabled)]
-    [InlineData(2, StartupState.Starts)]
+    [InlineData(2, StartupState.Enabled)]
     [InlineData(3, StartupState.Disabled)]
-    [InlineData(4, StartupState.Starts)]
+    [InlineData(4, StartupState.Enabled)]
     [InlineData(5, StartupState.Unknown)]
     [InlineData(null, StartupState.Unknown)]
     public void TheStateIsStartupTaskStatesDocumentedMeaning(int? number, StartupState expected) =>

@@ -81,8 +81,8 @@ public sealed class StartupReaderTests : IDisposable
 
         Assert.Equal(StartupState.Disabled, states["ByTaskManager"]);
         Assert.Equal(StartupState.Disabled, states["BySettings"]);
-        Assert.Equal(StartupState.Starts, states["Enabled"]);
-        Assert.Equal(StartupState.Starts, states["NeverTouched"]);
+        Assert.Equal(StartupState.Enabled, states["Enabled"]);
+        Assert.Equal(StartupState.Enabled, states["NeverTouched"]);
     }
 
     /// <summary>
@@ -121,7 +121,7 @@ public sealed class StartupReaderTests : IDisposable
         var entries = Reader().Read(CancellationToken.None).Entries;
 
         Assert.Equal(StartupState.Disabled, entries.Single(e => e.Key.Source is StartupSource.MachineRun).State);
-        Assert.Equal(StartupState.Starts, entries.Single(e => e.Key.Source is StartupSource.MachineRun32).State);
+        Assert.Equal(StartupState.Enabled, entries.Single(e => e.Key.Source is StartupSource.MachineRun32).State);
     }
 
     [Fact]

@@ -64,7 +64,7 @@ public static class StartupTaskManifest
     public static StartupState StateOf(int? number) => number switch
     {
         0 or 1 or 3 => StartupState.Disabled,
-        2 or 4 => StartupState.Starts,
+        2 or 4 => StartupState.Enabled,
         _ => StartupState.Unknown,
     };
 

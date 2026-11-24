@@ -12,7 +12,7 @@ public enum StartupOrder
     /// <summary>By the title the row shows, A to Z.</summary>
     Name = 0,
 
-    /// <summary>Whether it starts: the entries that start, then the disabled ones, then the unknown.</summary>
+    /// <summary>By status: the enabled entries, then the disabled ones, then the unknown.</summary>
     State = 1,
 
     /// <summary>By the place it comes from, in the order the page reads them.</summary>
@@ -77,10 +77,10 @@ public static class StartupRowOrder
                 : a.Key.Source.CompareTo(b.Key.Source)),
         };
 
-    /// <summary>The entries that start first, because that is the question the page opens on.</summary>
+    /// <summary>The enabled entries first, because that is the question the page opens on.</summary>
     private static int Rank(StartupState state) => state switch
     {
-        StartupState.Starts => 0,
+        StartupState.Enabled => 0,
         StartupState.Disabled => 1,
         _ => 2,
     };

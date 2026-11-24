@@ -101,7 +101,7 @@ public sealed partial class StartupViewModel : ObservableObject
 
     /// <summary>The change button's word: the change the picked entry would get.</summary>
     [ObservableProperty]
-    public partial string ChangeLabel { get; private set; } = "Disable";
+    public partial string ChangeLabel { get; private set; } = StartupWording.For(StartupChange.Disable);
 
     /// <summary>The change button's icon, which names the same change as <see cref="ChangeLabel"/>.</summary>
     [ObservableProperty]
@@ -354,7 +354,7 @@ public sealed partial class StartupViewModel : ObservableObject
             _ => row.Entry.State is StartupState.Disabled,
         };
 
-        ChangeLabel = enables ? "Enable" : "Disable";
+        ChangeLabel = StartupWording.For(enables ? StartupChange.Enable : StartupChange.Disable);
         ChangeGlyph = enables ? EnableGlyph : DisableGlyph;
     }
 

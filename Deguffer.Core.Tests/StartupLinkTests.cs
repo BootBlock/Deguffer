@@ -14,7 +14,7 @@ public sealed class StartupLinkTests
     [Fact]
     public void AProgramAnEntryStartsLinksToThatEntry()
     {
-        var entry = Entry("Tool", StartupState.Starts);
+        var entry = Entry("Tool", StartupState.Enabled);
 
         var link = StartupLink.For(Tool, new StartupReading([entry], []));
 
@@ -33,7 +33,7 @@ public sealed class StartupLinkTests
     /// <summary>The image path Windows gives can carry the long-path prefix, which names the same file.</summary>
     [Fact]
     public void TheLongPathFormOfTheProgramIsTheSameProgram() =>
-        Assert.NotNull(StartupLink.For(@"\\?\" + Tool.ToUpperInvariant(), new StartupReading([Entry("Tool", StartupState.Starts)], [])));
+        Assert.NotNull(StartupLink.For(@"\\?\" + Tool.ToUpperInvariant(), new StartupReading([Entry("Tool", StartupState.Enabled)], [])));
 
     /// <summary>
     /// A <c>Run</c> value often names its program by its 8.3 alias, and Windows reports a running
@@ -46,7 +46,7 @@ public sealed class StartupLinkTests
         var program = temp.CreateFile(1, "Long Program Folder", "Long Program Name.exe");
         var asNamed = ShortPath.Of(program) ?? program;
         var entry = new StartupEntry(
-            new StartupKey(StartupSource.UserRun, "Tool"), "Tool", asNamed, asNamed, ProgramStanding.Present, null, StartupState.Starts, Approval.None);
+            new StartupKey(StartupSource.UserRun, "Tool"), "Tool", asNamed, asNamed, ProgramStanding.Present, null, StartupState.Enabled, Approval.None);
 
         Assert.NotNull(StartupLink.For(program, new StartupReading([entry], [])));
     }
@@ -54,8 +54,8 @@ public sealed class StartupLinkTests
     [Fact]
     public void AProgramNoEntryStartsHasNoLink()
     {
-        Assert.Null(StartupLink.For(@"C:\Other\other.exe", new StartupReading([Entry("Tool", StartupState.Starts)], [])));
-        Assert.Null(StartupLink.For(null, new StartupReading([Entry("Tool", StartupState.Starts)], [])));
+        Assert.Null(StartupLink.For(@"C:\Other\other.exe", new StartupReading([Entry("Tool", StartupState.Enabled)], [])));
+        Assert.Null(StartupLink.For(null, new StartupReading([Entry("Tool", StartupState.Enabled)], [])));
     }
 
     /// <summary>
@@ -63,7 +63,7 @@ public sealed class StartupLinkTests
     /// states what Windows does, and none suggests changing it.
     /// </summary>
     [Theory]
-    [InlineData(StartupState.Starts)]
+    [InlineData(StartupState.Enabled)]
     [InlineData(StartupState.Disabled)]
     [InlineData(StartupState.Unknown)]
     public void TheLinkNeverSuggestsAChange(StartupState state)

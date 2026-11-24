@@ -10,7 +10,7 @@ namespace Deguffer.App.Tests;
 public sealed class StartupRowStyleConverterTests
 {
     [Theory]
-    [InlineData(StartupState.Starts, "StartupRowStarts")]
+    [InlineData(StartupState.Enabled, "StartupRowStarts")]
     [InlineData(StartupState.Disabled, "StartupRowDisabled")]
     [InlineData(StartupState.Unknown, "StartupRowUnknown")]
     public void Each_state_has_its_own_tint(StartupState state, string style) =>

@@ -15,7 +15,7 @@ public sealed partial class StartupRowStyleConverter : IValueConverter
     /// <summary>The <c>App.xaml</c> style that tints a row in <paramref name="state"/>.</summary>
     public static string KeyFor(StartupState state) => state switch
     {
-        StartupState.Starts => "StartupRowStarts",
+        StartupState.Enabled => "StartupRowStarts",
         StartupState.Disabled => "StartupRowDisabled",
         _ => "StartupRowUnknown",
     };

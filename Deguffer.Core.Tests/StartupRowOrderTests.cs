@@ -8,10 +8,10 @@ namespace Deguffer.Core.Tests;
 /// </summary>
 public sealed class StartupRowOrderTests
 {
-    private static readonly StartupEntry Zulu = Entry("Zulu", StartupState.Starts, StartupSource.UserRun, "Contoso");
+    private static readonly StartupEntry Zulu = Entry("Zulu", StartupState.Enabled, StartupSource.UserRun, "Contoso");
     private static readonly StartupEntry Alpha = Entry("Alpha", StartupState.Disabled, StartupSource.PackagedTask, null);
     private static readonly StartupEntry Mike = Entry("Mike", StartupState.Unknown, StartupSource.MachineRun, "Fabrikam");
-    private static readonly StartupEntry Bravo = Entry("Bravo", StartupState.Starts, StartupSource.UserStartupFolder, null);
+    private static readonly StartupEntry Bravo = Entry("Bravo", StartupState.Enabled, StartupSource.UserStartupFolder, null);
     private static readonly StartupEntry Echo = Entry("Echo", StartupState.Disabled, StartupSource.UserRun, "Contoso");
 
     private static readonly StartupEntry[] All = [Zulu, Alpha, Mike, Bravo, Echo];
@@ -41,8 +41,8 @@ public sealed class StartupRowOrderTests
     [Fact]
     public void TwoEntriesOfOneTitleGoBySourceAsTheReadingPutsThem()
     {
-        var machine = Entry("Same", StartupState.Starts, StartupSource.MachineRun, null);
-        var user = Entry("Same", StartupState.Starts, StartupSource.UserRun, null);
+        var machine = Entry("Same", StartupState.Enabled, StartupSource.MachineRun, null);
+        var user = Entry("Same", StartupState.Enabled, StartupSource.UserRun, null);
 
         Assert.Equal([user, machine], new[] { machine, user }.Order(StartupRowOrder.Comparer(StartupOrder.Name, StartupOrderDirection.Ascending)));
         Assert.Equal([user, machine], new[] { machine, user }.Order(StartupRowOrder.Comparer(StartupOrder.Name, StartupOrderDirection.Descending)));
