@@ -87,9 +87,9 @@ public sealed partial class AboutPage : Page
     /// Puts the version card's details on the clipboard, says so beside the button, and announces it,
     /// because a screen reader otherwise hears nothing happen when the button is pressed.
     /// </summary>
-    private void OnCopyDetails(object sender, RoutedEventArgs e)
+    private async void OnCopyDetails(object sender, RoutedEventArgs e)
     {
-        var said = ClipboardText.Put(Details.ToClipboardText()) ?? "Copied. Paste it into your report.";
+        var said = await ClipboardText.PutAsync(Details.ToClipboardText()) ?? "Copied. Paste it into your report.";
 
         CopyDetailsResult.Text = said;
         FrameworkElementAutomationPeer.FromElement(CopyDetailsButton)?.RaiseNotificationEvent(

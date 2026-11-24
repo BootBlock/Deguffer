@@ -313,7 +313,7 @@ public sealed class StartupViewModelTests : IDisposable
             new ShellHandoff(
                 path => Hand(path),
                 path => Hand(path),
-                text => Hand(text)));
+                text => Task.FromResult(Hand(text))));
     }
 
     private string? Hand(string value)

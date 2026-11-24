@@ -11,14 +11,14 @@ namespace Deguffer.App.Shell;
 /// </summary>
 /// <param name="Reveal">Show a file selected in its folder.</param>
 /// <param name="Properties">Open a file's Windows properties.</param>
-/// <param name="Copy">Put text on the clipboard.</param>
+/// <param name="Copy">Put text on the clipboard, which may wait a moment for another program to let go of it.</param>
 public sealed record ShellHandoff(
     Func<string, string?> Reveal,
     Func<string, string?> Properties,
-    Func<string, string?> Copy)
+    Func<string, Task<string?>> Copy)
 {
     public static ShellHandoff Windows { get; } = new(
         path => ShellActions.Reveal(path, isDirectory: false),
         ShellActions.Properties,
-        ClipboardText.Put);
+        ClipboardText.PutAsync);
 }

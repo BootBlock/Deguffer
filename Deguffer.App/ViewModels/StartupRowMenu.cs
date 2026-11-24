@@ -49,7 +49,7 @@ public sealed partial class StartupRowMenu : ObservableObject
     private void Properties() => HandOff(entry => StartupFiles.Program(entry), _shell.Properties);
 
     [RelayCommand(CanExecute = nameof(HasRow))]
-    private void Copy() => HandOff(entry => StartupFiles.Command(entry), _shell.Copy);
+    private Task CopyAsync() => HandOffAsync(entry => StartupFiles.Command(entry), _shell.Copy);
 
     /// <summary>
     /// Hand <paramref name="decide"/>'s answer for the row to <paramref name="to"/>, or say why not.
@@ -57,21 +57,42 @@ public sealed partial class StartupRowMenu : ObservableObject
     /// </summary>
     private void HandOff(Func<StartupEntry, StartupHandoff?> decide, Func<string, string?> to)
     {
+        if (Decided(decide) is { } value)
+        {
+            Report(to(value));
+        }
+    }
+
+    /// <inheritdoc cref="HandOff" />
+    private async Task HandOffAsync(Func<StartupEntry, StartupHandoff?> decide, Func<string, Task<string?>> to)
+    {
+        if (Decided(decide) is { } value)
+        {
+            Report(await to(value));
+        }
+    }
+
+    /// <summary>What to hand over for the row, or null, having said why where Core refused.</summary>
+    private string? Decided(Func<StartupEntry, StartupHandoff?> decide)
+    {
         if (Row is not { } row || decide(row.Entry) is not { } handoff)
         {
-            return;
+            return null;
         }
 
-        if (handoff.Value is { } value)
-        {
-            if (to(value) is { } failed)
-            {
-                _say(failed, InfoBarSeverity.Warning);
-            }
-        }
-        else if (handoff.Refusal is { } refusal)
+        if (handoff.Value is null && handoff.Refusal is { } refusal)
         {
             _say(refusal, InfoBarSeverity.Informational);
+        }
+
+        return handoff.Value;
+    }
+
+    private void Report(string? failed)
+    {
+        if (failed is not null)
+        {
+            _say(failed, InfoBarSeverity.Warning);
         }
     }
 }
