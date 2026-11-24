@@ -33,6 +33,13 @@
                 glance without drowning the text, and translucent, so the list's own pointer-over and
                 selection backplates still show through. Each row's badge says the state in words, so
                 the tint is never the only cue. High Contrast draws none, leaving the user's colours.
+
+                About's cards over its starfield: the tertiary solid fill (the colour the layer fill
+                comes to over the window's own) at 70%, so the stars drifting behind a card show
+                through it faintly instead of the card reading as a flat block. The alpha is on the
+                brush, never the card's Opacity, which would fade its text too (DesignOpacityTests).
+                The layer fill itself is too thin: a star behind a line would compete with the text
+                (§6.5). High Contrast keeps the card solid.
             -->
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Default">
@@ -44,6 +51,7 @@
                     <SolidColorBrush x:Key="ElevateButtonBorderBrushPressed" Color="#86501F" />
                     <SolidColorBrush x:Key="StartupRowEnabledBackground" Color="#186CCB5F" />
                     <SolidColorBrush x:Key="StartupRowDisabledBackground" Color="#18FF99A4" />
+                    <SolidColorBrush x:Key="StarfieldCardBackground" Color="{StaticResource SolidBackgroundFillColorTertiary}" Opacity="0.7" />
                 </ResourceDictionary>
 
                 <ResourceDictionary x:Key="Light">
@@ -55,6 +63,7 @@
                     <SolidColorBrush x:Key="ElevateButtonBorderBrushPressed" Color="#C97A36" />
                     <SolidColorBrush x:Key="StartupRowEnabledBackground" Color="#140F7B0F" />
                     <SolidColorBrush x:Key="StartupRowDisabledBackground" Color="#14C42B1C" />
+                    <SolidColorBrush x:Key="StarfieldCardBackground" Color="{StaticResource SolidBackgroundFillColorTertiary}" Opacity="0.7" />
                 </ResourceDictionary>
 
                 <ResourceDictionary x:Key="HighContrast">
@@ -66,6 +75,7 @@
                     <StaticResource x:Key="ElevateButtonBorderBrushPressed" ResourceKey="ButtonBorderBrushPressed" />
                     <SolidColorBrush x:Key="StartupRowEnabledBackground" Color="Transparent" />
                     <SolidColorBrush x:Key="StartupRowDisabledBackground" Color="Transparent" />
+                    <SolidColorBrush x:Key="StarfieldCardBackground" Color="{ThemeResource SystemColorWindowColor}" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 
@@ -293,12 +303,9 @@
                 <Setter Property="Padding" Value="{StaticResource CardPadding}" />
             </Style>
 
-            <!-- A card standing over a picture of its own, such as About's starfield, takes a solid
-                 fill rather than the translucent layer fill: a star behind a line of text would show
-                 through the layer, and the text is what the card is for (§6.5). The tertiary solid
-                 fill is the colour the layer fill comes to over the window's own. -->
-            <Style x:Key="SolidCardStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
-                <Setter Property="Background" Value="{ThemeResource SolidBackgroundFillColorTertiaryBrush}" />
+            <!-- A card standing over About's starfield: see StarfieldCardBackground. -->
+            <Style x:Key="StarfieldCardStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
+                <Setter Property="Background" Value="{ThemeResource StarfieldCardBackground}" />
             </Style>
 
             <!-- One piece of a card drawn as a run of list rows. The fill and stroke are the card's;
