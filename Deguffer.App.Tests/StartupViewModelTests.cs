@@ -61,11 +61,11 @@ public sealed class StartupViewModelTests : IDisposable
         var row = Assert.Single(page.Rows);
         Assert.Equal("Tool Tray", row.Title);
         Assert.Equal("ToolTray · Contoso · Registry, this user", row.Detail);
-        Assert.Equal("Starts", row.State);
+        Assert.Equal("Enabled", row.State);
         Assert.Equal("3.0 MB", row.Memory);
         Assert.True(row.HasMemory);
         Assert.False(row.IsNotRunning);
-        Assert.StartsWith("1 entry: 1 starts at sign-in", page.Headline, StringComparison.Ordinal);
+        Assert.StartsWith("1 entry: 1 is enabled and 0 are disabled.", page.Headline, StringComparison.Ordinal);
 
         // §7.5: nothing is picked for the user, and the note says where the change comes from.
         Assert.Null(page.SelectedRow);
@@ -277,15 +277,41 @@ public sealed class StartupViewModelTests : IDisposable
         Assert.Equal(InfoBarSeverity.Informational, page.ReportSeverity);
     });
 
+    /// <summary>
+    /// The offer follows each reading (§7.5): nothing before the first, none for a list of this
+    /// account's own entries, and the offer once a machine-wide entry is listed.
+    /// </summary>
     [Fact]
-    public void ReopeningElevatedAsksForThisPage()
+    public void TheOfferToReopenElevatedFollowsTheReading() => UiThread.Run(async () =>
     {
+        _registry.WithRun(StartupSource.UserRun, "ToolTray", Tool);
         var page = Page();
+
+        Assert.False(page.CanElevate);
+
+        await page.RefreshAsync();
+
+        Assert.False(page.CanElevate);
+        Assert.False(page.ElevateCommand.CanExecute(null));
+
+        _registry.WithRun(StartupSource.MachineRun, "Shared", Tool);
+        await page.RefreshAsync();
+
+        Assert.True(page.CanElevate);
+        Assert.True(page.ElevateCommand.CanExecute(null));
+    });
+
+    [Fact]
+    public void ReopeningElevatedAsksForThisPage() => UiThread.Run(async () =>
+    {
+        _registry.WithRun(StartupSource.MachineRun, "ToolTray", Tool);
+        var page = Page();
+        await page.RefreshAsync();
 
         page.ElevateCommand.Execute(null);
 
         Assert.Equal([ElevationRequest.Startup], _relaunches);
-    }
+    });
 
     private StartupViewModel Page()
     {

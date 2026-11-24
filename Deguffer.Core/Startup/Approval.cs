@@ -12,7 +12,7 @@ public enum StartupState
     /// </summary>
     Unknown,
 
-    Starts,
+    Enabled,
 
     Disabled,
 }
@@ -76,9 +76,9 @@ public sealed record Approval
 
     /// <summary>Whether the entry starts: no value says it does, and the low bit of the state says it does not.</summary>
     public StartupState State => !_readable ? StartupState.Unknown
-        : Value is null ? StartupState.Starts
+        : Value is null ? StartupState.Enabled
         : Code is not { } code ? StartupState.Unknown
-        : (code & 1) == 0 ? StartupState.Starts
+        : (code & 1) == 0 ? StartupState.Enabled
         : StartupState.Disabled;
 
     /// <summary>

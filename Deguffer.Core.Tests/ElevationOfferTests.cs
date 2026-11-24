@@ -3,6 +3,8 @@ using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.Startup;
+using Microsoft.Win32;
 
 namespace Deguffer.Core.Tests;
 
@@ -202,6 +204,49 @@ public sealed class ElevationOfferTests
             isElevated: true,
             [FindingWith(FallbackReason.None, requiresElevation: true)]));
     }
+
+    /// <summary>
+    /// The Startup page offers the relaunch only for an entry that rights alone keep from changing
+    /// (§7.5). A list of this account's own entries has nothing to gain, and a machine-wide entry
+    /// makes the offer.
+    /// </summary>
+    [Fact]
+    public void OffersOnStartupOnlyForAMachineWideEntry()
+    {
+        var own = StartupEntryFrom(StartupSource.UserRun, Approval.None);
+        var shared = StartupEntryFrom(StartupSource.UserStartupFolder, Approval.None);
+
+        Assert.False(ElevationOffer.ShouldOffer(isElevated: false, [own, shared]));
+        Assert.False(ElevationOffer.ShouldOffer(isElevated: false, Array.Empty<StartupEntry>()));
+
+        foreach (var source in (StartupSource[])[StartupSource.MachineRun, StartupSource.MachineRun32, StartupSource.CommonStartupFolder])
+        {
+            Assert.True(ElevationOffer.ShouldOffer(isElevated: false, [own, StartupEntryFrom(source, Approval.None)]));
+            Assert.False(ElevationOffer.ShouldOffer(isElevated: true, [own, StartupEntryFrom(source, Approval.None)]));
+        }
+    }
+
+    /// <summary>
+    /// A machine-wide entry whose record Deguffer would not replace even elevated, one unread or in a
+    /// form not measured, and a packaged app's task, which only Windows changes: elevating changes
+    /// none of them, so none of them makes the offer.
+    /// </summary>
+    [Fact]
+    public void DoesNotOfferOnStartupForAnEntryElevatingWouldNotMakeChangeable()
+    {
+        var unmeasured = new byte[Approval.Length];
+        BitConverter.GetBytes(6u).CopyTo(unmeasured, 0);
+
+        Assert.False(ElevationOffer.ShouldOffer(isElevated: false, [
+            StartupEntryFrom(StartupSource.MachineRun, Approval.Unreadable),
+            StartupEntryFrom(StartupSource.MachineRun, Approval.Of(new StoredValue(RegistryValueKind.Binary, unmeasured))),
+            StartupEntryFrom(StartupSource.PackagedTask, null),
+        ]));
+    }
+
+    private static StartupEntry StartupEntryFrom(StartupSource source, Approval? approval) => new(
+        new StartupKey(source, "Tool"), "Tool", "tool.exe", null, ProgramStanding.Unknown, null,
+        approval?.State ?? StartupState.Enabled, approval);
 
     private static Finding FindingWith(FallbackReason reason, bool requiresElevation = false) =>
         new(new StubProvider(), IsPresent: true, new CleanupPlan

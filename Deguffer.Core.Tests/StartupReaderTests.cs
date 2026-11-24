@@ -81,12 +81,12 @@ public sealed class StartupReaderTests : IDisposable
 
         Assert.Equal(StartupState.Disabled, states["ByTaskManager"]);
         Assert.Equal(StartupState.Disabled, states["BySettings"]);
-        Assert.Equal(StartupState.Starts, states["Enabled"]);
-        Assert.Equal(StartupState.Starts, states["NeverTouched"]);
+        Assert.Equal(StartupState.Enabled, states["Enabled"]);
+        Assert.Equal(StartupState.Enabled, states["NeverTouched"]);
     }
 
     /// <summary>
-    /// A reading arrives in the page's shipped order, the entries that start first and then by name, so
+    /// A reading arrives in the page's shipped order, the enabled entries first and then by name, so
     /// the page shows its first reading without moving a row.
     /// </summary>
     [Fact]
@@ -121,7 +121,7 @@ public sealed class StartupReaderTests : IDisposable
         var entries = Reader().Read(CancellationToken.None).Entries;
 
         Assert.Equal(StartupState.Disabled, entries.Single(e => e.Key.Source is StartupSource.MachineRun).State);
-        Assert.Equal(StartupState.Starts, entries.Single(e => e.Key.Source is StartupSource.MachineRun32).State);
+        Assert.Equal(StartupState.Enabled, entries.Single(e => e.Key.Source is StartupSource.MachineRun32).State);
     }
 
     [Fact]
