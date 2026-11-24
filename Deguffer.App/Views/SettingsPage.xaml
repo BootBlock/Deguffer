@@ -18,16 +18,11 @@
                  and the control drifts so far from the label that they stop reading as one row. -->
             <StackPanel Spacing="{StaticResource ControlGap}" MaxWidth="{StaticResource FormReadingWidth}" HorizontalAlignment="Left">
 
-                <InfoBar IsOpen="{x:Bind ViewModel.SaveFailed, Mode=OneWay}"
-                         IsClosable="False"
-                         Severity="Warning"
-                         Title="Not saved"
-                         Message="Your choice could not be written to disk, so it has not been applied. Check that %LOCALAPPDATA%\Deguffer is writable." />
-
                 <TextBlock Text="Appearance" Style="{StaticResource GroupHeading}" />
 
                 <views:SettingsRow Glyph="&#xE771;"
                                    Title="Theme"
+                                   SaveFailed="{x:Bind ViewModel.ThemeSave.Failed, Mode=OneWay}"
                                    Description="Light, dark, or whatever Windows is set to.">
                     <views:SettingsRow.Control>
                         <ComboBox SelectedIndex="{x:Bind ViewModel.ThemeIndex, Mode=TwoWay}"
@@ -45,6 +40,7 @@
                      description says rather than leaving the toggle looking broken. -->
                 <views:SettingsRow Glyph="&#xE790;"
                                    Title="Translucent background"
+                                   SaveFailed="{x:Bind ViewModel.BackdropEnabledSave.Failed, Mode=OneWay}"
                                    Description="Blurs the desktop behind the window. Always off in high contrast, and Windows drops it on battery saver or over Remote Desktop.">
                     <views:SettingsRow.Control>
                         <ToggleSwitch IsOn="{x:Bind ViewModel.BackdropEnabled, Mode=TwoWay}"
@@ -57,6 +53,7 @@
                      window offers the same setting, so both rows take their words from one place. -->
                 <views:SettingsRow Glyph="{x:Bind views:TreemapSpacingSetting.Glyph}"
                                    Title="{x:Bind views:TreemapSpacingSetting.Title}"
+                                   SaveFailed="{x:Bind ViewModel.TreemapSpacingSave.Failed, Mode=OneWay}"
                                    Description="{x:Bind views:TreemapSpacingSetting.Description}">
                     <views:SettingsRow.Control>
                         <ComboBox x:Name="TreemapSpacingBox"
@@ -89,6 +86,7 @@
                      because six others measure zero without being clear at all. -->
                 <views:SettingsRow Glyph="&#xE71C;"
                                    Title="Show items that are already clear"
+                                   SaveFailed="{x:Bind ViewModel.ShowAlreadyClearSave.Failed, Mode=OneWay}"
                                    Description="List locations Deguffer has nothing left to reclaim from. They are hidden by default, as they offer nothing to decide."
                                    Details="Some rows are listed whatever this is set to: one that could not be read, one Deguffer did not look at, and one whose files are all too recent to touch, that Windows would not let Deguffer remove, on your keep list, or Outlook data files.">
                     <views:SettingsRow.Control>
@@ -99,6 +97,7 @@
 
                 <views:SettingsRow Glyph="&#xE7E6;"
                                    Title="Follow the clean down the list"
+                                   SaveFailed="{x:Bind ViewModel.SpotlightCleanedRowSave.Failed, Mode=OneWay}"
                                    Description="While a clean runs, scroll to the location being cleaned and light it up.">
                     <views:SettingsRow.Control>
                         <ToggleSwitch IsOn="{x:Bind ViewModel.SpotlightCleanedRow, Mode=TwoWay}"
@@ -112,6 +111,7 @@
 
                 <views:SettingsRow Glyph="&#xE730;"
                                    Title="Confirm before cleaning"
+                                   SaveFailed="{x:Bind ViewModel.ConfirmBeforeCleaningSave.Failed, Mode=OneWay}"
                                    Description="Lists what is about to be removed and asks once more. Deleting cannot be undone — what Deguffer removes is gone outright.">
                     <views:SettingsRow.Control>
                         <ToggleSwitch IsOn="{x:Bind ViewModel.ConfirmBeforeCleaning, Mode=TwoWay}"
@@ -127,6 +127,7 @@
                      setting. -->
                 <views:SettingsRow Glyph="&#xE765;"
                                    Title="Type a name to delete user data"
+                                   SaveFailed="{x:Bind ViewModel.RequireTypedConfirmationSave.Failed, Mode=OneWay}"
                                    Description="Ask for an item's name to be typed before deleting a log, history or Recycle Bin. When off, Confirm before cleaning covers them."
                                    Details="Logs, histories and Recycle Bins are user data, and removing them is permanent.">
                     <views:SettingsRow.Control>
@@ -143,6 +144,7 @@
                      what it removes — a guard whose gap is unstated is worse than no guard. -->
                 <views:SettingsRow Glyph="&#xE81C;"
                                    Title="Leave recently changed files alone"
+                                   SaveFailed="{x:Bind ViewModel.KeepFilesChangedWithinHoursSave.Failed, Mode=OneWay}"
                                    Description="Leave files changed in the last few hours alone, as they may be in use. Set 0 for none. A tool's own clean is not covered."
                                    Details="A file written in the last few hours may still be in use, and nothing else about it says so. A tool that clears its own cache decides for itself what it removes, so this cannot hold its files back."
                                    Unit="{x:Bind text:SettingUnit.Hours(ViewModel.KeepFilesChangedWithinHours), Mode=OneWay}">
@@ -165,6 +167,7 @@
                      Storage Sense apply. See AppPreferences.MinimumTemporaryFileAgeDays. -->
                 <views:SettingsRow Glyph="&#xE7B8;"
                                    Title="Only offer temporary files older than"
+                                   SaveFailed="{x:Bind ViewModel.MinimumTemporaryFileAgeSave.Failed, Mode=OneWay}"
                                    Description="How long a temporary file must sit untouched before it is offered. 0 also offers files a program wrote seconds ago and still needs."
                                    Details="Windows and every program on it leave scratch files in the temporary folders and are meant to clear up afterwards. With no age limit, nothing tells a file a program still expects to find from one it abandoned, as age is the only sign. Anything a running program is working in, or holds open, is left alone whatever this is set to."
                                    Unit="{x:Bind text:SettingUnit.Days(ViewModel.MinimumTemporaryFileAge), Mode=OneWay}">
@@ -191,6 +194,7 @@
                      anything the user has since moved or deleted. -->
                 <views:SettingsRow Glyph="&#xE777;"
                                    Title="Keep File History versions for"
+                                   SaveFailed="{x:Bind ViewModel.FileHistoryRetentionDaysSave.Failed, Mode=OneWay}"
                                    Description="How old a saved File History version must be before Windows may drop it. A version it drops is gone for good."
                                    Details="File History saves a copy of every protected file each time it changes, and is set never to delete an old one. Windows always keeps the newest copy of a file it is still protecting. A superseded version older than this is removed."
                                    Unit="{x:Bind text:SettingUnit.Days(ViewModel.FileHistoryRetentionDays), Mode=OneWay}">
@@ -216,6 +220,7 @@
                      feature: it is Deguffer having nowhere it is allowed to look. -->
                 <views:SettingsRow Glyph="&#xE8B7;"
                                    Title="Where to look for build output"
+                                   SaveFailed="{x:Bind ViewModel.SourceRootsSave.Failed, Mode=OneWay}"
                                    Description="Deguffer looks for build output only inside these folders. Nothing outside them is offered, even when it is plainly build output."
                                    Details="A project something is using is left alone. A folder does not have to hold your own code: a machine-learning or image-generation application installs outside your code folders, and the Python virtual environment it builds there is usually the largest one on the machine, so add that application's folder too if you want it considered. Git LFS's old file versions are removed through Git LFS's own prune. Inside these folders, Deguffer looks for:"
                                    DetailItems="{x:Bind configuration:DeclaredFolderSearch.InSourceFolders}">
@@ -285,6 +290,7 @@
                 <views:SettingsRow Margin="{StaticResource RegionGapAbove}"
                                    Glyph="&#xE7FC;"
                                    Title="Where your emulators are installed"
+                                   SaveFailed="{x:Bind ViewModel.EmulatorFoldersSave.Failed, Mode=OneWay}"
                                    Description="Add the folder of a portable emulator, or of an RPCS3, Vita3K or RetroArch install Deguffer cannot find by itself."
                                    Details="Deguffer finds most emulators where each keeps its data by default, and RetroArch where Steam installed it. RPCS3, Vita3K, any other RetroArch and every portable install keep everything beside the program, so only a folder added here finds them. Deguffer looks in each folder only for the emulator's own settings file or program, or the file that names PPSSPP's memory stick. It removes only the caches the emulator compiled and RetroArch's downloads, never saves, memory cards, firmware or games. The emulators Deguffer knows:"
                                    DetailItems="{x:Bind configuration:DeclaredFolderSearch.Emulators}">
@@ -339,6 +345,7 @@
                 <views:SettingsRow Margin="{StaticResource RegionGapAbove}"
                                    Glyph="&#xE718;"
                                    Title="Items Deguffer never offers"
+                                   SaveFailed="{x:Bind ViewModel.KeptItemsSave.Failed, Mode=OneWay}"
                                    Description="Items you keep from a row's list on the Storage page. Deguffer leaves them out of every clean, and checks each is still there."
                                    Details="Only items Deguffer can recognise wherever they are stored can be kept: a browser build, a downloaded tooling release, or an application version the updater replaced." />
 
@@ -480,6 +487,7 @@
                      AppPreferences.EmptyRecycleBinsDirectly. -->
                 <views:SettingsRow Glyph="&#xE74D;"
                                    Title="Empty Recycle Bins without Windows"
+                                   SaveFailed="{x:Bind ViewModel.EmptyRecycleBinsDirectlySave.Failed, Mode=OneWay}"
                                    Description="Remove a Recycle Bin's files directly rather than through Windows. Much faster on a full bin, but Windows notices in its own time."
                                    Details="Deguffer normally asks Windows to empty a Recycle Bin, so an open Recycle Bin window and the desktop icon update straight away. That call is slow on a full bin, and slower the more it holds. The same folder is emptied either way, and other accounts' bins are untouched by both. Leaving recently changed files alone always uses the direct route, as Windows cannot empty a bin partially.">
                     <views:SettingsRow.Control>
@@ -488,7 +496,7 @@
                     </views:SettingsRow.Control>
                 </views:SettingsRow>
 
-                <views:ScanSettingsSection />
+                <views:ScanSettingsSection Scanning="{x:Bind Scanning}" />
 
                 <TextBlock Style="{StaticResource Caption}"
                            Margin="4,12,0,0"

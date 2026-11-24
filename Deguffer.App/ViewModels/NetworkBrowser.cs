@@ -175,7 +175,7 @@ public sealed partial class NetworkBrowser : ObservableObject, IDisposable
             return;
         }
 
-        if (!_preferences.Update(current => current with { Locations = current.Locations.WithComputer(name) }))
+        if (_preferences.Update(current => current with { Locations = current.Locations.WithComputer(name) }) is SaveOutcome.Refused)
         {
             ComputerRefusal = NetworkText.NotKept;
 
@@ -202,7 +202,7 @@ public sealed partial class NetworkBrowser : ObservableObject, IDisposable
     private void RemoveComputer(NetworkNodeRow computer)
     {
         if (!computer.IsRemovable
-            || !_preferences.Update(current => current with { Locations = current.Locations.WithoutComputer(computer.Place!.Name) }))
+            || _preferences.Update(current => current with { Locations = current.Locations.WithoutComputer(computer.Place!.Name) }) is SaveOutcome.Refused)
         {
             return;
         }

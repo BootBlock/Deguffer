@@ -13,7 +13,7 @@
     </UserControl.Resources>
 
     <Border Style="{StaticResource CardStyle}" Padding="{StaticResource CardRowPadding}">
-        <Grid ColumnSpacing="16" ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto">
+        <Grid ColumnSpacing="16" ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto">
 
             <FontIcon Grid.Column="0"
                       Glyph="{x:Bind Glyph, Mode=OneWay}"
@@ -44,9 +44,22 @@
                            Visibility="{x:Bind views:SettingsRow.IsShown(Unit), Mode=OneWay}" />
             </StackPanel>
 
+            <!-- On the row that made the change, beside the value that went back, rather than once at
+                 the top of the page, where someone changing a value several screens down cannot see
+                 it. Opened from code, which brings it into view once it has been laid out. -->
+            <InfoBar x:Name="SaveNotice"
+                     Grid.Row="1"
+                     Grid.Column="1"
+                     Grid.ColumnSpan="2"
+                     Margin="{StaticResource ControlGapAbove}"
+                     IsClosable="False"
+                     Severity="Warning"
+                     Title="Not saved"
+                     Message="Your choice could not be written to disk, so it has not been applied. Check that %LOCALAPPDATA%\Deguffer is writable." />
+
             <!-- Under the control as well as the words, so its chevron sits at the card's right edge
                  where a settings card's chevron is, and the explanation opens across the full row. -->
-            <controls:ExplanationDisclosure Grid.Row="1"
+            <controls:ExplanationDisclosure Grid.Row="2"
                                             Grid.Column="1"
                                             Grid.ColumnSpan="2"
                                             Subject="{x:Bind Title, Mode=OneWay}"

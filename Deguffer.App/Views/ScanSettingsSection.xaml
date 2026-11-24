@@ -46,14 +46,9 @@
         </Expander.Header>
 
         <StackPanel Spacing="{StaticResource ControlGap}">
-            <InfoBar IsOpen="{x:Bind Scanning.SaveFailed, Mode=OneWay}"
-                     IsClosable="False"
-                     Severity="Warning"
-                     Title="Not saved"
-                     Message="Your choice could not be written to disk, so it has not been applied. Check that %LOCALAPPDATA%\Deguffer is writable." />
-
             <views:SettingsRow Glyph="&#xE721;"
                                Title="How to scan"
+                               SaveFailed="{x:Bind Scanning.RouteSave.Failed, Mode=OneWay}"
                                Description="Whether a scan walks folders, reads the file table, or both. None of the choices changes what is found."
                                Details="Reading a volume's file table needs Deguffer to run as administrator on an NTFS volume. Auto walks folders while it reads the table and uses whichever answers first, and walks everywhere the table cannot be read. Walk folders only is slower on a large folder, and is the choice if you doubt what the file table says. File table first waits for the table instead, which may suit a spinning disk.">
                 <views:SettingsRow.Control>
@@ -68,6 +63,7 @@
 
             <views:SettingsRow Glyph="&#xE950;"
                                Title="File table parse threads"
+                               SaveFailed="{x:Bind Scanning.TableParseThreadsSave.Failed, Mode=OneWay}"
                                Description="Threads that turn a file table into folders and sizes, on every kind of drive. Administrator only. Empty the box for Auto."
                                Unit="{x:Bind text:SettingUnit.Threads(Scanning.TableParseThreads, Scanning.AutoTableParseThreadsCount), Mode=OneWay}">
                 <views:SettingsRow.Control>
@@ -104,6 +100,7 @@
                     <StackPanel x:Name="KindValues" Spacing="{StaticResource ControlGap}" Margin="{StaticResource NestedRowIndent}">
                         <views:SettingsRow Glyph="&#xE8B7;"
                                            Title="Folders read at once"
+                                           SaveFailed="{x:Bind Scanning.WalkThreadsSave.Failed, Mode=OneWay}"
                                            Description="How many folders a walk reads at the same time on this kind of drive. Empty the box to go back to Auto."
                                            Unit="{x:Bind text:SettingUnit.Threads(Scanning.WalkThreads, Scanning.AutoWalkThreadsCount), Mode=OneWay}">
                             <views:SettingsRow.Control>
@@ -124,6 +121,7 @@
 
                         <views:SettingsRow Glyph="&#xE8FD;"
                                            Title="Listing buffer"
+                                           SaveFailed="{x:Bind Scanning.ListingBufferSave.Failed, Mode=OneWay}"
                                            Description="How much of a folder's listing Windows hands over in each call on this kind of drive. Empty the box for Auto."
                                            Details="A larger buffer means fewer calls, and each call costs the whole buffer however few entries the folder holds."
                                            Unit="KB">
@@ -145,6 +143,7 @@
 
                         <views:SettingsRow Glyph="&#xE9F5;"
                                            Title="File table read size"
+                                           SaveFailed="{x:Bind Scanning.TableReadSave.Failed, Mode=OneWay}"
                                            Description="How much of a volume's file table each read asks for on this kind of drive. Administrator only. Empty the box for Auto."
                                            Unit="KB">
                             <views:SettingsRow.Control>
@@ -165,6 +164,7 @@
 
                         <views:SettingsRow Glyph="&#xE9D5;"
                                            Title="File table reads at once"
+                                           SaveFailed="{x:Bind Scanning.TableReadsInFlightSave.Failed, Mode=OneWay}"
                                            Description="How many file table reads wait at once on this kind of drive. Administrator only. Empty the box for Auto."
                                            Details="Each read and each parse thread holds a buffer of the read size until the scan ends."
                                            Unit="{x:Bind text:SettingUnit.Reads(Scanning.TableReadsInFlight, Scanning.AutoTableReadsInFlightCount), Mode=OneWay}">
@@ -186,6 +186,7 @@
 
                         <views:SettingsRow Glyph="&#xE8FD;"
                                            Title="Attribute list reads at once"
+                                           SaveFailed="{x:Bind Scanning.TableListReadsInFlightSave.Failed, Mode=OneWay}"
                                            Description="How many lists kept outside the file table are read at once on this kind of drive. Used only when Deguffer runs as administrator."
                                            Unit="{x:Bind text:SettingUnit.Reads(Scanning.TableListReadsInFlight, Scanning.AutoTableListReadsInFlightCount), Mode=OneWay}">
                             <views:SettingsRow.Control>

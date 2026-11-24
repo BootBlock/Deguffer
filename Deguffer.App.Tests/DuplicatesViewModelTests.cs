@@ -148,6 +148,25 @@ public sealed class DuplicatesViewModelTests : DuplicatesPageScene
     }
 
     /// <summary>
+    /// A filter put back after a refused write sends the value already stored. That asks for nothing new,
+    /// so the warning that the choices were not saved stays rather than closing at once.
+    /// </summary>
+    [Fact]
+    public void AFilterPutBackAfterARefusedWriteLeavesTheWarningStanding()
+    {
+        var page = Page();
+        Directory.CreateDirectory(Path.Combine(_temp.Path, "profile", "AppData", "Local", "Deguffer", "preferences.json"));
+
+        page.Filters.MatchName = !page.Filters.MatchName;
+
+        Assert.True(page.Filters.Save.Failed);
+
+        page.Filters.MatchName = page.Filters.MatchName;
+
+        Assert.True(page.Filters.Save.Failed);
+    }
+
+    /// <summary>
     /// The reader's place holds while groups stream in: each group arriving is one insertion, at the
     /// place the marks put it, and no row already shown is moved, replaced or rebuilt.
     /// </summary>

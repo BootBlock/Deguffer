@@ -11,8 +11,12 @@ public sealed partial class SettingsPage : Page
 {
     public SettingsPage()
     {
+        // One notice of a failed save for the whole page, so the scanning section and the rest of the
+        // page never state one failure twice, and a save in either clears it.
+        var latest = new LatestSave();
         ViewModel = new SettingsViewModel(
-            App.Preferences, App.SourceRoots, App.EmulatorFolders, App.Keeps, VolumeInventory.Current);
+            App.Preferences, App.SourceRoots, App.EmulatorFolders, App.Keeps, VolumeInventory.Current, latest);
+        Scanning = new ScanSettingsViewModel(App.Preferences, App.ScanTuning, VolumeInventory.Current, latest);
         History = new ScanHistorySettingsViewModel(App.ScanHistory);
         Sizes = new SizeHistorySettingsViewModel(App.ProviderSizes);
         InitializeComponent();
@@ -70,6 +74,8 @@ public sealed partial class SettingsPage : Page
     }
 
     public SettingsViewModel ViewModel { get; }
+
+    public ScanSettingsViewModel Scanning { get; }
 
     public ScanHistorySettingsViewModel History { get; }
 

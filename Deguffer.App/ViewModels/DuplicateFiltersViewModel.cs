@@ -149,8 +149,9 @@ public sealed partial class DuplicateFiltersViewModel : ObservableObject
     }
 
     /// <summary>Whether the last change could not be stored, so the page can say it will not last.</summary>
-    [ObservableProperty]
-    public partial bool SaveFailed { get; private set; }
+    public SettingSave Save { get; } = new();
+
+    private readonly LatestSave _latest = new();
 
     private static int IndexOf(ChecksumAlgorithm algorithm)
     {
@@ -175,11 +176,11 @@ public sealed partial class DuplicateFiltersViewModel : ObservableObject
     /// <param name="setting">The property whose control made the change, which is the setter calling this.</param>
     private void Apply(Func<DuplicatePreferences, DuplicatePreferences> change, [CallerMemberName] string setting = "")
     {
-        SaveFailed = !_preferences.Update(current => current with { Duplicates = change(current.Duplicates) });
+        var outcome = _latest.Report(Save, _preferences.Update(current => current with { Duplicates = change(current.Duplicates) }));
 
         // A rejected write puts every control back to what holds, and an accepted one reads back what
         // was stored.
-        OnPropertyChanged(SaveFailed ? string.Empty : setting);
+        OnPropertyChanged(outcome is SaveOutcome.Refused ? string.Empty : setting);
 
         Changed?.Invoke(this, EventArgs.Empty);
     }

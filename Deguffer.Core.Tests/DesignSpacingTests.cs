@@ -90,17 +90,22 @@ public sealed class DesignSpacingTests
         var declared = ApplicationResources();
 
         Assert.All(
-            ["LabelGap", "ControlGap", "RegionGap", "RegionGapAbove", "CardPadding", "CardRowPadding", "RowPadding"],
+            ["LabelGap", "ControlGap", "ControlGapAbove", "RegionGap", "RegionGapAbove", "CardPadding", "CardRowPadding", "RowPadding"],
             role => Assert.True(declared.ContainsKey(role), $"App.xaml's spacing scale has no {role}."));
     }
 
-    /// <summary>The region gap is written twice, as a length and as a margin, and the two are one gap.</summary>
-    [Fact]
-    public void TheRegionGapAndItsMarginAgree()
+    /// <summary>
+    /// The control and region gaps are each written twice, as a length and as a margin, and each pair is
+    /// one gap.
+    /// </summary>
+    [Theory]
+    [InlineData("RegionGap")]
+    [InlineData("ControlGap")]
+    public void EachGapAndItsMarginAgree(string gap)
     {
         var declared = ApplicationResources();
 
-        Assert.Equal(new double[] { 0, double.Parse(declared["RegionGap"], CultureInfo.InvariantCulture), 0, 0 }, ShellMarkup.Lengths(declared["RegionGapAbove"]));
+        Assert.Equal(new double[] { 0, double.Parse(declared[gap], CultureInfo.InvariantCulture), 0, 0 }, ShellMarkup.Lengths(declared[gap + "Above"]));
     }
 
     private static Dictionary<string, string> ApplicationResources() => ShellMarkup.Files

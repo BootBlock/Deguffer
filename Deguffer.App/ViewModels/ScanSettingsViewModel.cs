@@ -36,17 +36,20 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
     private readonly PreferenceService _preferences;
     private readonly ScanTuner _tuner;
     private readonly IVolumeInventory _volumes;
+    private readonly LatestSave _latest;
 
     /// <summary>The drives present and their kinds, as last found.</summary>
     private IReadOnlyList<DriveKind> _drives = [];
 
     /// <param name="tuner">The tuner the scans run with, so the drives listed are described as they will be scanned.</param>
     /// <param name="volumes">The inventory <paramref name="tuner"/> reads, dropped before each listing so a drive attached since is listed.</param>
-    public ScanSettingsViewModel(PreferenceService preferences, ScanTuner tuner, IVolumeInventory volumes)
+    /// <param name="latest">The page's one notice of a failed save, shared with every form on the page.</param>
+    public ScanSettingsViewModel(PreferenceService preferences, ScanTuner tuner, IVolumeInventory volumes, LatestSave latest)
     {
         _preferences = preferences;
         _tuner = tuner;
         _volumes = volumes;
+        _latest = latest;
     }
 
     public IReadOnlyList<string> KindNames { get; } = (string[])[.. Kinds.Select(ScanTuningText.MediaName)];
@@ -64,7 +67,7 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
     public int RouteIndex
     {
         get => (int)Scanning.Route;
-        set => Apply(current => current with { Route = (ScanRoute)value });
+        set => Apply(RouteSave, current => current with { Route = (ScanRoute)value });
     }
 
     /// <summary>Which kind of drive the five boxes below set. Not stored: it is where the reader is looking.</summary>
@@ -112,7 +115,7 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
     public double TableParseThreads
     {
         get => Shown(Scanning.TableParseThreads);
-        set => Apply(current => current with { TableParseThreads = EnteredSetting.TableParseThreads(value) });
+        set => Apply(TableParseThreadsSave, current => current with { TableParseThreads = EnteredSetting.TableParseThreads(value) });
     }
 
     /// <summary>
@@ -122,28 +125,28 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
     public double WalkThreads
     {
         get => Shown(Chosen.WalkThreads);
-        set => ApplyChosen(chosen => chosen with { WalkThreads = EnteredSetting.WalkThreads(value) });
+        set => ApplyChosen(WalkThreadsSave, chosen => chosen with { WalkThreads = EnteredSetting.WalkThreads(value) });
     }
 
     /// <summary>The chosen kind's listing buffer in KiB, on the terms <see cref="WalkThreads"/> states.</summary>
     public double ListingBufferKiB
     {
         get => Shown(Chosen.ListingBufferKiB);
-        set => ApplyChosen(chosen => chosen with { ListingBufferKiB = EnteredSetting.ListingBufferKiB(value) });
+        set => ApplyChosen(ListingBufferSave, chosen => chosen with { ListingBufferKiB = EnteredSetting.ListingBufferKiB(value) });
     }
 
     /// <summary>The chosen kind's file-table read size in KiB, on the terms <see cref="WalkThreads"/> states.</summary>
     public double TableReadKiB
     {
         get => Shown(Chosen.TableReadKiB);
-        set => ApplyChosen(chosen => chosen with { TableReadKiB = EnteredSetting.TableReadKiB(value) });
+        set => ApplyChosen(TableReadSave, chosen => chosen with { TableReadKiB = EnteredSetting.TableReadKiB(value) });
     }
 
     /// <summary>The chosen kind's file-table reads in flight, on the terms <see cref="WalkThreads"/> states.</summary>
     public double TableReadsInFlight
     {
         get => Shown(Chosen.TableReadsInFlight);
-        set => ApplyChosen(chosen => chosen with { TableReadsInFlight = EnteredSetting.TableReadsInFlight(value) });
+        set => ApplyChosen(TableReadsInFlightSave, chosen => chosen with { TableReadsInFlight = EnteredSetting.TableReadsInFlight(value) });
     }
 
     /// <summary>
@@ -152,7 +155,7 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
     public double TableListReadsInFlight
     {
         get => Shown(Chosen.TableListReadsInFlight);
-        set => ApplyChosen(chosen => chosen with { TableListReadsInFlight = EnteredSetting.TableListReadsInFlight(value) });
+        set => ApplyChosen(TableListReadsInFlightSave, chosen => chosen with { TableListReadsInFlight = EnteredSetting.TableListReadsInFlight(value) });
     }
 
     /// <summary>What an empty box means for the chosen kind, as its placeholder: <c>Auto (16)</c>.</summary>
@@ -186,9 +189,23 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
     /// </summary>
     public ObservableCollection<DriveLine> Drives { get; } = [];
 
-    /// <summary>Shown only when a write failed, as the rest of the page does.</summary>
-    [ObservableProperty]
-    public partial bool SaveFailed { get; set; }
+    /// <summary>
+    /// Whether the last change made through each row could not be saved, for that row to say so, as
+    /// the rest of the page does, through the page's one <see cref="LatestSave"/>.
+    /// </summary>
+    public SettingSave RouteSave { get; } = new();
+
+    public SettingSave TableParseThreadsSave { get; } = new();
+
+    public SettingSave WalkThreadsSave { get; } = new();
+
+    public SettingSave ListingBufferSave { get; } = new();
+
+    public SettingSave TableReadSave { get; } = new();
+
+    public SettingSave TableReadsInFlightSave { get; } = new();
+
+    public SettingSave TableListReadsInFlightSave { get; } = new();
 
     /// <summary>
     /// Find the drives present and their kinds, then describe them. Off the UI thread, because the
@@ -228,24 +245,26 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
     private static string AutoText(int value) => $"Auto ({value:N0})";
 
     private void ApplyChosen(
+        SettingSave row,
         Func<MediaScanPreferences, MediaScanPreferences> change,
         [CallerMemberName] string setting = "")
     {
         var kind = Kind;
-        Apply(current => current.With(kind, change(current.For(kind))), setting);
+        Apply(row, current => current.With(kind, change(current.For(kind))), setting);
     }
 
+    /// <param name="row">The row whose control made the change, which says so if it was not saved.</param>
     /// <param name="setting">The property whose control made the change, which is the setter calling this.</param>
-    private void Apply(Func<ScanPreferences, ScanPreferences> change, [CallerMemberName] string setting = "")
+    private void Apply(SettingSave row, Func<ScanPreferences, ScanPreferences> change, [CallerMemberName] string setting = "")
     {
-        SaveFailed = !_preferences.Update(current => current with { Scanning = change(current.Scanning) });
+        var outcome = _latest.Report(row, _preferences.Update(current => current with { Scanning = change(current.Scanning) }));
 
         // As the rest of the page does: a rejected write puts every control back to what holds, and
         // an accepted one reads back what was stored, which the clamp can make differ from what was
         // typed.
-        OnPropertyChanged(SaveFailed ? string.Empty : setting);
+        OnPropertyChanged(outcome is SaveOutcome.Refused ? string.Empty : setting);
 
-        if (!SaveFailed)
+        if (outcome is SaveOutcome.Saved)
         {
             OnPropertyChanged(nameof(Summary));
             DescribeDrives();
