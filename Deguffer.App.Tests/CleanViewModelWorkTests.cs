@@ -95,7 +95,7 @@ public class CleanViewModelWorkTests
 
         page.Clean();
 
-        Assert.True(page.ViewModel.SafetyCheck.Outcome?.VerificationFailed);
+        Assert.True(page.ViewModel.RunResult.SafetyCheck.Outcome?.VerificationFailed);
         Assert.True(page.Work.IsIdle);
         Assert.Equal(1, failures());
     }

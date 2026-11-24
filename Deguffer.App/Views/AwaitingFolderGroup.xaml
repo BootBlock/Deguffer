@@ -34,13 +34,27 @@
               Visibility="{x:Bind Group.HasRows, Mode=OneWay}"
               AutomationProperties.Name="Waiting for a source folder"
               AutomationProperties.HelpText="{x:Bind Group.Summary, Mode=OneWay}">
+        <!-- The button is on the header, so the one thing every row in the group asks for can be
+             done with the group closed. One button for the group rather than one on each row: every
+             provider in it reads the same approved folders, so one folder answers them all, and the
+             button adds it from the page where its figures arrive. Beside the chevron as a Windows
+             settings card puts its control, and the summary wraps rather than giving it up. -->
         <Expander.Header>
-            <StackPanel Padding="0,12" Spacing="4">
-                <TextBlock Text="Waiting for a source folder"
-                           Style="{StaticResource BodyStrongTextBlockStyle}" />
-                <TextBlock Text="{x:Bind Group.Summary, Mode=OneWay}"
-                           Style="{StaticResource SecondaryText}" />
-            </StackPanel>
+            <Grid Padding="0,12" ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource ControlGap}">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Waiting for a source folder"
+                               Style="{StaticResource BodyStrongTextBlockStyle}" />
+                    <TextBlock Text="{x:Bind Group.Summary, Mode=OneWay}"
+                               Style="{StaticResource SecondaryText}"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+                <Button Grid.Column="1"
+                        Content="Add source folder…"
+                        VerticalAlignment="Center"
+                        Command="{x:Bind AddCommand, Mode=OneWay}"
+                        AutomationProperties.Name="Add source folder"
+                        AutomationProperties.AutomationId="AwaitingFolderGroupAdd" />
+            </Grid>
         </Expander.Header>
 
         <!-- Sized to its rows rather than scrolled: the list it sits in does the scrolling, and a

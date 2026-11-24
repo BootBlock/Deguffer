@@ -1,3 +1,4 @@
+using System.Windows.Input;
 using Deguffer.App.Controls;
 using Deguffer.App.Shell;
 using Deguffer.App.ViewModels;
@@ -17,6 +18,12 @@ public sealed partial class AwaitingFolderGroup
         typeof(AwaitingFolderGroup),
         new PropertyMetadata(null));
 
+    public static readonly DependencyProperty AddCommandProperty = DependencyProperty.Register(
+        nameof(AddCommand),
+        typeof(ICommand),
+        typeof(AwaitingFolderGroup),
+        new PropertyMetadata(null));
+
     public AwaitingFolderGroup()
     {
         InitializeComponent();
@@ -30,6 +37,16 @@ public sealed partial class AwaitingFolderGroup
     {
         get => (AwaitingFolderGroupViewModel?)GetValue(GroupProperty);
         set => SetValue(GroupProperty, value);
+    }
+
+    /// <summary>
+    /// What the header's button does: asks for a source folder and plans the group's rows again. The
+    /// page's command, so the button is off while the page is busy, as Scan is.
+    /// </summary>
+    public ICommand? AddCommand
+    {
+        get => (ICommand?)GetValue(AddCommandProperty);
+        set => SetValue(AddCommandProperty, value);
     }
 
     /// <summary>

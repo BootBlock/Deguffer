@@ -12,7 +12,7 @@ namespace Deguffer.App.Views;
 public sealed partial class RunRowsView : UserControl
 {
     public static readonly DependencyProperty ResultProperty =
-        DependencyProperty.Register(nameof(Result), typeof(RunResultViewModel), typeof(RunRowsView), new PropertyMetadata(null));
+        DependencyProperty.Register(nameof(Result), typeof(CleanRunResultViewModel), typeof(RunRowsView), new PropertyMetadata(null));
 
     public RunRowsView()
     {
@@ -21,9 +21,9 @@ public sealed partial class RunRowsView : UserControl
     }
 
     /// <summary>Set once, by the Storage page, as it binds.</summary>
-    public RunResultViewModel? Result
+    public CleanRunResultViewModel? Result
     {
-        get => (RunResultViewModel?)GetValue(ResultProperty);
+        get => (CleanRunResultViewModel?)GetValue(ResultProperty);
         set => SetValue(ResultProperty, value);
     }
 }

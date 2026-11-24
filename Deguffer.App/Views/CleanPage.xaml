@@ -422,7 +422,7 @@
                                       Grid.Column="1"
                                       VerticalAlignment="Center"
                                       Result="{x:Bind ViewModel.RunResult}"
-                                      Visibility="{x:Bind ViewModel.RunResult.IsShown, Mode=OneWay}" />
+                                      Visibility="{x:Bind ViewModel.RunResult.HasRunResult, Mode=OneWay}" />
 
                 <!-- §5.6's verdict on the run those figures describe, and under it the line each
                      location gets, for as long as they stand. See SafetyCheckView for why the info
@@ -438,8 +438,8 @@
                             Grid.ColumnSpan="2"
                             Margin="{StaticResource RegionGapAbove}"
                             Spacing="{StaticResource ControlGap}"
-                            Visibility="{x:Bind ViewModel.RunResult.IsShown, Mode=OneWay}">
-                    <views:SafetyCheckView Report="{x:Bind ViewModel.SafetyCheck}" />
+                            Visibility="{x:Bind ViewModel.RunResult.HasRunResult, Mode=OneWay}">
+                    <views:SafetyCheckView Report="{x:Bind ViewModel.RunResult.SafetyCheck}" />
                     <views:RunRowsView Result="{x:Bind ViewModel.RunResult}" />
                 </StackPanel>
 
@@ -596,7 +596,7 @@
                             <views:RowDisclosures />
                         </ListView.Resources>
                         <ListView.Footer>
-                            <views:AwaitingFolderGroup x:Name="AwaitingGroup" Group="{x:Bind ViewModel.AwaitingFolders}" />
+                            <views:AwaitingFolderGroup x:Name="AwaitingGroup" Group="{x:Bind ViewModel.AwaitingFolders}" AddCommand="{x:Bind ViewModel.AddSourceFolderCommand}" />
                         </ListView.Footer>
                     </ListView>
                 </Grid>

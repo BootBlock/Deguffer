@@ -77,7 +77,7 @@ public sealed class WhenCompleteTests
 
         page.Clean();
 
-        Assert.True(page.ViewModel.SafetyCheck.Outcome?.VerificationFailed);
+        Assert.True(page.ViewModel.RunResult.SafetyCheck.Outcome?.VerificationFailed);
         Assert.Empty(countdowns);
         Assert.Empty(page.Session.Performed);
     }
@@ -119,7 +119,7 @@ public sealed class WhenCompleteTests
 
         page.Clean();
 
-        Assert.True(page.ViewModel.RunResult.IsShown);
+        Assert.True(page.ViewModel.RunResult.HasRunResult);
         Assert.Empty(countdowns);
         Assert.Empty(page.Session.Performed);
     }

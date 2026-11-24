@@ -167,7 +167,7 @@ public sealed class VisualStudioSolutionCacheProvider : CleanupProviderBase
         if (ApprovedRoots.Count == 0)
         {
             return EmptyPlan(
-                "No source folders have been added yet. Add them in Settings and Deguffer will look for " +
+                "No source folders have been added yet. Add them on the Storage page or in Settings and Deguffer will look for " +
                 "Visual Studio solutions inside them, and nowhere else.");
         }
 

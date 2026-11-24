@@ -22,13 +22,12 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly SourceRootService _sourceRoots;
     private readonly EmulatorFolderService _emulatorFolders;
     private readonly KeepService _keeps;
-    private readonly IVolumeInventory _volumes;
+    private readonly SourceFolderAddition _sourceFolderAddition;
     private readonly LatestSave _latest;
 
-    /// <param name="volumes">
-    /// The machine's volumes, so that approving a folder can say what the folder is stored on.
-    /// Required rather than defaulted, as <see cref="ExploreViewModel"/> takes it: the page passes
-    /// the machine's own and a test passes a fake, and neither is the one to fall back to.
+    /// <param name="sourceFolderAddition">
+    /// How a folder the user picks is approved, the same way the Storage page approves one. Built
+    /// over <paramref name="sourceRoots"/>, so the folder it stores is the one this page lists.
     /// </param>
     /// <param name="latest">The page's one notice of a failed save, shared with every form on the page.</param>
     public SettingsViewModel(
@@ -36,14 +35,14 @@ public sealed partial class SettingsViewModel : ObservableObject
         SourceRootService sourceRoots,
         EmulatorFolderService emulatorFolders,
         KeepService keeps,
-        IVolumeInventory volumes,
+        SourceFolderAddition sourceFolderAddition,
         LatestSave latest)
     {
         _preferences = preferences;
         _sourceRoots = sourceRoots;
         _emulatorFolders = emulatorFolders;
         _keeps = keeps;
-        _volumes = volumes;
+        _sourceFolderAddition = sourceFolderAddition;
         _latest = latest;
 
         _announcedSpacing = preferences.Current.TreemapSpacing;
@@ -122,33 +121,6 @@ public sealed partial class SettingsViewModel : ObservableObject
     public bool HasNoSourceRoots => SourceRoots.Count == 0;
 
     /// <summary>
-    /// What the user has to be told before <paramref name="folder"/> is approved, if anything. The
-    /// page shows it and asks; nothing is stored by asking. Null where the choice was not a folder on
-    /// a disk, which <see cref="SourceRootNotOnDisk"/> then states.
-    ///
-    /// <para>The volumes are read again first. The list is kept for the life of a planning pass, so
-    /// a cloud client that mounted itself since the last one would be missing from it and the folder
-    /// would be stored with no warning shown. One enumeration of the machine's drives per folder the
-    /// user picks by hand is not a cost worth a stale answer, and it is taken off the UI thread,
-    /// since it asks every volume the machine has mounted.</para>
-    /// </summary>
-    /// <param name="folder">What the picker returned, which may name nothing on a disk.</param>
-    public async Task<SourceRootApproval?> ApprovalForAsync(string folder, CancellationToken ct)
-    {
-        var onDisk = PickedFolder.OnDisk(folder);
-        SourceRootNotOnDisk = onDisk is null;
-
-        if (onDisk is null)
-        {
-            return null;
-        }
-
-        await _volumes.RefreshAsync(ct);
-
-        return SourceRootApproval.For(_volumes, onDisk);
-    }
-
-    /// <summary>
     /// Whether the last folder chosen for <see cref="SourceRoots"/> was not a folder on a disk. The
     /// row says so rather than the choice vanishing, because the picker let the user make it and
     /// nothing else on the page would explain why the list did not change.
@@ -157,34 +129,37 @@ public sealed partial class SettingsViewModel : ObservableObject
     public partial bool SourceRootNotOnDisk { get; set; }
 
     /// <summary>
-    /// Approve the folder <paramref name="approval"/> names, once the user has read whatever it had to
-    /// say about it.
-    ///
-    /// <para>It takes the approval rather than a path, so that a folder cannot be stored as approved
-    /// for a cloud mount unless the sentence explaining that was built for it — see
-    /// <see cref="SourceRootApproval.Accepted"/>. Re-approving an already-approved folder is passed
-    /// through rather than short-circuited here, because that is how a folder a plan refused comes to
-    /// carry the approval.</para>
+    /// Ask for a folder and approve it. See <see cref="SourceFolderAddition.AddAsync"/> for what is
+    /// asked, and why the approval goes through it rather than straight to the store.
     /// </summary>
-    public void AddSourceRoot(SourceRootApproval approval)
+    public async Task AddSourceRootAsync(CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(approval);
+        var added = await _sourceFolderAddition.AddAsync(ct);
 
-        Apply(() => _sourceRoots.Add(approval.Accepted()));
+        if (added.WasChosen)
+        {
+            SourceRootNotOnDisk = added.Choice == SourceFolderChoice.NotOnDisk;
+        }
+
+        if (added.Choice == SourceFolderChoice.Approved)
+        {
+            Apply(added.Saved);
+        }
     }
 
-    public void RemoveSourceRoot(string root) => Apply(() => _sourceRoots.Remove(root));
+    public void RemoveSourceRoot(string root) => Apply(_sourceRoots.Remove(root));
 
     /// <summary>
-    /// Run a change and re-read the result from the service rather than assuming it took.
+    /// Report how a change to the folders was saved, and re-read the result from the service rather
+    /// than assuming it took.
     ///
     /// The service adopts what the store actually kept, which is not always what was asked for, so
     /// mirroring the requested value here would let this list drift from the folders Deguffer will
     /// really search — the one place that drift is invisible to the user.
     /// </summary>
-    private void Apply(Func<SaveOutcome> change)
+    private void Apply(SaveOutcome outcome)
     {
-        _latest.Report(SourceRootsSave, change());
+        _latest.Report(SourceRootsSave, outcome);
 
         LiveList.Show(SourceRoots, (SourceRoot[])[.. _sourceRoots.Current], root => root.Path);
 
@@ -220,7 +195,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public void RemoveEmulatorFolder(string folder) => ApplyEmulatorFolders(() => _emulatorFolders.Remove(folder));
 
-    /// <summary>Run a change and re-read the list from the service, for the reason <see cref="Apply(Func{SaveOutcome})"/> does.</summary>
+    /// <summary>Run a change and re-read the list from the service, for the reason <see cref="Apply(SaveOutcome)"/> does.</summary>
     private void ApplyEmulatorFolders(Func<SaveOutcome> change)
     {
         _latest.Report(EmulatorFoldersSave, change());

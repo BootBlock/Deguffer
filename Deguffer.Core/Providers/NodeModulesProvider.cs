@@ -79,6 +79,6 @@ public sealed class NodeModulesProvider : BuildDirectoryProvider
     protected override string Subject => "installed Node.js dependencies";
 
     protected override string NothingApprovedGuidance =>
-        "No source folders have been added yet. Add them in Settings and Deguffer will look for " +
+        "No source folders have been added yet. Add them on the Storage page or in Settings and Deguffer will look for " +
         "Node.js projects inside them, and nowhere else.";
 }

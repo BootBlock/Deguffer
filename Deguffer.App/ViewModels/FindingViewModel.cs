@@ -308,6 +308,13 @@ public sealed partial class FindingViewModel : ObservableObject
     /// </summary>
     public bool OffersItems => Finding.Provider.Grain.OffersEachStep(Steps.Count);
 
+    /// <summary>
+    /// Whether this row offers to add a source folder: it searches only folders the user approves,
+    /// and the scan found none (§7). The finding's record of that, never the provider's answer now,
+    /// for the reason <see cref="Finding.AwaitingSourceFolders"/> gives.
+    /// </summary>
+    public bool OffersSourceFolder => Finding.AwaitingSourceFolders;
+
     /// <summary>What this row says about itself in words that change only with its plan. See <see cref="FindingRowText"/>.</summary>
     public FindingRowText Text { get; private set; }
 

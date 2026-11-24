@@ -15,7 +15,12 @@ public sealed partial class SettingsPage : Page
         // page never state one failure twice, and a save in either clears it.
         var latest = new LatestSave();
         ViewModel = new SettingsViewModel(
-            App.Preferences, App.SourceRoots, App.EmulatorFolders, App.Keeps, VolumeInventory.Current, latest);
+            App.Preferences,
+            App.SourceRoots,
+            App.EmulatorFolders,
+            App.Keeps,
+            new SourceFolderAddition(App.SourceRoots, VolumeInventory.Current, () => new ContentDialogSourceFolderPrompt(this)),
+            latest);
         Scanning = new ScanSettingsViewModel(App.Preferences, App.ScanTuning, VolumeInventory.Current, latest);
         Restore = new SettingsRestore(App.Preferences, latest);
         History = new ScanHistorySettingsViewModel(App.ScanHistory);
@@ -128,44 +133,11 @@ public sealed partial class SettingsPage : Page
     private void OnRemoveSizeHistory(object sender, RoutedEventArgs e) => Sizes.RemoveAll();
 
     /// <summary>
-    /// Approving a folder goes through the system picker rather than a text box, so the path is one
-    /// the user navigated to and the shell confirmed exists. This is the only setting that widens
-    /// what Deguffer will delete, which is reason enough not to accept a typed string.
-    ///
-    /// The picking lives here rather than in the view model: it is a WinUI dialog needing a window
-    /// handle, and the view model stays testable by knowing only about the path that comes back.
+    /// The picker and the warning are <see cref="ContentDialogSourceFolderPrompt"/>'s, handed to the
+    /// view-model at construction, so this handler only starts the request.
     /// </summary>
-    private async void OnAddSourceRoot(object sender, RoutedEventArgs e)
-    {
-        if (await PickFolderAsync() is not { } folder || await ViewModel.ApprovalForAsync(folder, CancellationToken.None) is not { } approval)
-        {
-            return;
-        }
-
-        if (approval.Consequence is { } consequence && !await AcceptsAsync(approval, consequence))
-        {
-            return;
-        }
-
-        ViewModel.AddSourceRoot(approval);
-    }
-
-    /// <summary>
-    /// Ask before approving a folder Deguffer has something to warn about, and report whether the user
-    /// said yes.
-    ///
-    /// <para>A dialog rather than a sentence on the row afterwards. The warning is about a cost the
-    /// folder's own contents decide — the user knows what is in it and Deguffer does not — so it has to
-    /// be read before the approval, not discovered after it. Cancel is the default button, on
-    /// <see cref="ContentDialogExploreConfirmation"/>'s reasoning: a reader who presses Enter on a
-    /// dialog they have not read must not consent by reflex.</para>
-    /// </summary>
-    private async Task<bool> AcceptsAsync(SourceRootApproval approval, string consequence)
-    {
-        var dialog = DialogFactory.Question(this, approval.Title, DialogFactory.Paragraph(consequence), approval.ConfirmLabel);
-
-        return await ModalDialog.ShowAsync(dialog) == ContentDialogResult.Primary;
-    }
+    private async void OnAddSourceRoot(object sender, RoutedEventArgs e) =>
+        await ViewModel.AddSourceRootAsync(CancellationToken.None);
 
     /// <summary>
     /// An emulator folder goes through the picker for the reason a source folder does. No warning is

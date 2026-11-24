@@ -43,11 +43,11 @@ public class CleanViewModelCleanTests
         var ran = Assert.Single(cache.Executed);
         Assert.Equal([taken.Path], ran.Steps.Select(step => step.SelectionKey));
         Assert.Contains(ran.ProtectedPaths, p => p.Path == unticked.Path);
-        Assert.Equal("Safety check passed: everything Deguffer was told to leave alone is still there.", page.ViewModel.SafetyCheck.Outcome?.Statement);
-        Assert.False(page.ViewModel.SafetyCheck.Outcome?.VerificationFailed);
-        Assert.False(page.ViewModel.SafetyCheck.OffersDiagnosticsLink);
-        Assert.Equal("1 KB", page.ViewModel.RunResult.RemovedLabel);
+        Assert.Equal("Safety check passed: everything Deguffer was told to leave alone is still there.", page.ViewModel.RunResult.SafetyCheck.Outcome?.Statement);
+        Assert.False(page.ViewModel.RunResult.SafetyCheck.Outcome?.VerificationFailed);
+        Assert.False(page.ViewModel.RunResult.SafetyCheck.OffersDiagnosticsLink);
         Assert.False(page.ViewModel.RunResult.IsDetailsOpen);
+        Assert.Equal("1 KB", page.ViewModel.RunResult.RemovedLabel);
     }
 
     /// <summary>
@@ -70,9 +70,9 @@ public class CleanViewModelCleanTests
         };
         page.Scan();
         var mayEndAsTheVerdictLands = new List<bool>();
-        page.ViewModel.SafetyCheck.PropertyChanged += (_, changed) =>
+        page.ViewModel.RunResult.SafetyCheck.PropertyChanged += (_, changed) =>
         {
-            if (changed.PropertyName == nameof(page.ViewModel.SafetyCheck.Outcome) && page.ViewModel.SafetyCheck.Outcome is not null)
+            if (changed.PropertyName == nameof(page.ViewModel.RunResult.SafetyCheck.Outcome) && page.ViewModel.RunResult.SafetyCheck.Outcome is not null)
             {
                 mayEndAsTheVerdictLands.Add(page.Running.MayEndProcess);
             }
@@ -84,7 +84,7 @@ public class CleanViewModelCleanTests
         Assert.False(elevateWhileDeleting);
         Assert.Equal([false], mayEndAsTheVerdictLands);
         Assert.True(page.Running.MayEndProcess);
-        Assert.True(page.ViewModel.RunResult.IsShown);
+        Assert.True(page.ViewModel.RunResult.HasRunResult);
     }
 
     /// <summary>
@@ -131,13 +131,13 @@ public class CleanViewModelCleanTests
         Assert.True(Directory.Exists(untouched.Path));
         Assert.Empty(second.Executed);
 
-        Assert.True(page.ViewModel.RunResult.IsShown);
+        Assert.True(page.ViewModel.RunResult.HasRunResult);
         Assert.Equal("4 KB", page.ViewModel.RunResult.RemovedLabel);
         Assert.Equal(
             "Safety check passed: everything Deguffer was told to leave alone is still there. "
             + "Clean cancelled part-way. Anything already removed stays removed.",
-            page.ViewModel.SafetyCheck.Outcome?.Statement);
-        Assert.Equal(page.ViewModel.SafetyCheck.Outcome?.Statement, page.ViewModel.Status);
+            page.ViewModel.RunResult.SafetyCheck.Outcome?.Statement);
+        Assert.Equal(page.ViewModel.RunResult.SafetyCheck.Outcome?.Statement, page.ViewModel.Status);
         Assert.Equal(InfoBarSeverity.Warning, page.ViewModel.StatusSeverity);
 
         Assert.Equal(2, first.PlanCount);
@@ -232,7 +232,7 @@ public class CleanViewModelCleanTests
         page.Clean();
 
         Assert.False(Directory.Exists(taken.Path));
-        Assert.Equal("Safety check passed: everything Deguffer was told to leave alone is still there.", page.ViewModel.SafetyCheck.Outcome?.Statement);
+        Assert.Equal("Safety check passed: everything Deguffer was told to leave alone is still there.", page.ViewModel.RunResult.SafetyCheck.Outcome?.Statement);
         Assert.DoesNotContain("cancelled", page.ViewModel.Status, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(2, cache.PlanCount);
         Assert.True(page.ViewModel.HasPreview);
@@ -260,9 +260,9 @@ public class CleanViewModelCleanTests
         first.AfterCleaning = () => first.WhilePlanning = () => page.ViewModel.CancelCommand.Execute(null);
         page.Clean();
 
-        Assert.True(page.ViewModel.SafetyCheck.Outcome?.VerificationFailed);
+        Assert.True(page.ViewModel.RunResult.SafetyCheck.Outcome?.VerificationFailed);
         Assert.True(page.ViewModel.RunResult.IsDetailsOpen);
-        Assert.Equal(page.ViewModel.SafetyCheck.Outcome?.Statement, page.ViewModel.Status);
+        Assert.Equal(page.ViewModel.RunResult.SafetyCheck.Outcome?.Statement, page.ViewModel.Status);
         Assert.Equal(InfoBarSeverity.Error, page.ViewModel.StatusSeverity);
         Assert.False(page.ViewModel.HasPreview);
     }
@@ -288,7 +288,7 @@ public class CleanViewModelCleanTests
             page.ViewModel.RunResult.FreeSpaceMoveText);
         Assert.Equal(FreeSpace.Format(1024), page.ViewModel.RunResult.RemovedLabel);
         Assert.Equal(410_240, page.ViewModel.FreeSpaceNow);
-        Assert.True(page.ViewModel.RunResult.IsShown);
+        Assert.True(page.ViewModel.RunResult.HasRunResult);
     }
 
     /// <summary>
@@ -337,7 +337,7 @@ public class CleanViewModelCleanTests
         Assert.Empty(freed.LeftBehind);
         Assert.Equal($"{FreeSpace.Format(2048)} removed", kept.Removed);
         Assert.Equal([$"1 file ({FreeSpace.Format(2048)}) left in place because another program had it open."], kept.LeftBehind);
-        Assert.Empty(Assert.IsType<RunOutcome>(page.ViewModel.SafetyCheck.Outcome).Detail);
+        Assert.Empty(Assert.IsType<RunOutcome>(page.ViewModel.RunResult.SafetyCheck.Outcome).Detail);
         Assert.Equal("What each of the 2 locations removed, and what 1 of them left behind", page.ViewModel.RunResult.RowsHeading);
         Assert.True(page.ViewModel.RunResult.HasRowsNote);
 
@@ -974,17 +974,17 @@ public class CleanViewModelCleanTests
 
         page.Clean();
 
-        Assert.True(page.ViewModel.SafetyCheck.Outcome?.VerificationFailed);
-        Assert.True(page.ViewModel.SafetyCheck.OffersDiagnosticsLink);
+        Assert.True(page.ViewModel.RunResult.SafetyCheck.Outcome?.VerificationFailed);
+        Assert.True(page.ViewModel.RunResult.SafetyCheck.OffersDiagnosticsLink);
         Assert.Equal(InfoBarSeverity.Error, page.ViewModel.StatusSeverity);
-        Assert.Equal(page.ViewModel.SafetyCheck.Outcome?.Statement, page.ViewModel.Status);
-        Assert.Contains(page.ViewModel.SafetyCheck.Notes, check => check.Subject == inside);
+        Assert.Equal(page.ViewModel.RunResult.SafetyCheck.Outcome?.Statement, page.ViewModel.Status);
+        Assert.Contains(page.ViewModel.RunResult.SafetyCheck.Notes, check => check.Subject == inside);
 
         Assert.Equal("Clean", page.ViewModel.Selection.CleanLabel);
         page.Row("cache").Steps[0].IsSelected = true;
 
         Assert.Equal("Clean 1 KB", page.ViewModel.Selection.CleanLabel);
-        Assert.Equal(page.ViewModel.SafetyCheck.Outcome?.Statement, page.ViewModel.Status);
+        Assert.Equal(page.ViewModel.RunResult.SafetyCheck.Outcome?.Statement, page.ViewModel.Status);
         Assert.Equal(InfoBarSeverity.Error, page.ViewModel.StatusSeverity);
     }
 
@@ -1006,17 +1006,17 @@ public class CleanViewModelCleanTests
 
         page.Clean();
 
-        var report = page.ViewModel.SafetyCheck.Diagnostics;
+        var report = page.ViewModel.RunResult.SafetyCheck.Diagnostics;
 
         Assert.Contains("- Deguffer: 0.0.0-test", report, StringComparison.Ordinal);
         Assert.Contains("- Windows: Windows 11 (10.0.26100), x64, on an ARM64 processor", report, StringComparison.Ordinal);
-        Assert.Contains($"- Outcome: {Assert.IsType<RunOutcome>(page.ViewModel.SafetyCheck.Outcome).Statement}", report, StringComparison.Ordinal);
+        Assert.Contains($"- Outcome: {Assert.IsType<RunOutcome>(page.ViewModel.RunResult.SafetyCheck.Outcome).Statement}", report, StringComparison.Ordinal);
         Assert.Contains("- Failed: `%USERPROFILE%", report, StringComparison.Ordinal);
         Assert.DoesNotContain(page.Environment.UserProfile, report, StringComparison.OrdinalIgnoreCase);
 
         page.Scan();
 
-        Assert.Empty(page.ViewModel.SafetyCheck.Diagnostics);
+        Assert.Empty(page.ViewModel.RunResult.SafetyCheck.Diagnostics);
     }
 
     /// <summary>

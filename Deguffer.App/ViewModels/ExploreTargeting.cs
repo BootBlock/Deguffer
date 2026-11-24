@@ -153,8 +153,7 @@ public sealed partial class ExploreTargeting : ObservableObject
     /// Point the next scan at <paramref name="folder"/> and everything below it.
     ///
     /// <para>The picking itself belongs to the page: it is a WinUI dialog needing a window handle,
-    /// and this stays testable by knowing only about the path that comes back — the arrangement
-    /// <see cref="SettingsViewModel.AddSourceRoot"/> already uses for the same dialog.</para>
+    /// and this stays testable by knowing only about the path that comes back.</para>
     ///
     /// <para>A choice that is not a folder on a disk leaves the target where it was and says so,
     /// by <see cref="PickedFolder.OnDisk"/>.</para>
