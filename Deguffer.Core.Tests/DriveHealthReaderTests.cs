@@ -389,7 +389,7 @@ public sealed class DriveHealthReaderTests : IDisposable
 
         await ReadAll();
 
-        // A volume mounted only in a folder keeps the folder, so a drive with no letter still names its volume.
+        // A volume mounted only in a folder keeps the folder, so it is named even without a letter of its own.
         Assert.Equal(@"C:, E:\Games", Assert.Single(_placed.Reports).Names);
     }
 
