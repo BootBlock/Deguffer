@@ -157,6 +157,36 @@ public sealed class ScanSettingsViewModelTests : IDisposable
         Assert.Equal(route, preferences.Current.Scanning.Route);
     }
 
+    /// <summary>
+    /// The folded section's header follows each change as it is stored, the route's and each box's,
+    /// so a value set on one kind of drive still shows once the section is closed.
+    /// </summary>
+    [Fact]
+    public void TheHeaderSummaryFollowsEachStoredChange()
+    {
+        var (section, _, _) = Section();
+        var summaries = new List<string>();
+        section.PropertyChanged += (_, changed) =>
+        {
+            if (changed.PropertyName == nameof(ScanSettingsViewModel.Summary))
+            {
+                summaries.Add(section.Summary);
+            }
+        };
+
+        Assert.Equal("Auto", section.Summary);
+
+        section.RouteIndex = (int)ScanRoute.WalkOnly;
+        section.KindIndex = KindIndex(section, StorageMedia.Rotational);
+        section.WalkThreads = 2;
+        section.TableParseThreads = 3;
+        section.WalkThreads = double.NaN;
+
+        Assert.Equal(
+            ["Walk folders only", "Walk folders only, 1 value set", "Walk folders only, 2 values set", "Walk folders only, 1 value set"],
+            summaries);
+    }
+
     [Fact]
     public void AWriteThatFailsSaysSoAndPutsEveryControlBack()
     {

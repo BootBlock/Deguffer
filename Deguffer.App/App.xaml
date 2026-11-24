@@ -92,7 +92,9 @@
                 two move together. Page padding is the inset of every page the rail opens, and the
                 page notice margin is the account notice above the pages at the same side inset, so
                 its edge and the page's are one line. Page bleed undoes the page padding for
-                decoration that runs to the page's edges under the padded content.
+                decoration that runs to the page's edges under the padded content. Nested row indent
+                sets rows that answer to the row above them, such as the values a picker governs,
+                in from it, so they read as its and not as settings of their own.
             -->
             <x:Double x:Key="LabelGap">4</x:Double>
             <x:Double x:Key="ControlGap">8</x:Double>
@@ -102,6 +104,7 @@
             <Thickness x:Key="CardBleed">-20,0</Thickness>
             <Thickness x:Key="CardRowPadding">16,12</Thickness>
             <Thickness x:Key="RowPadding">12,8</Thickness>
+            <Thickness x:Key="NestedRowIndent">32,0,0,0</Thickness>
             <Thickness x:Key="PagePadding">28,8,28,20</Thickness>
             <Thickness x:Key="PageNoticeMargin">28,8,28,0</Thickness>
             <Thickness x:Key="PageBleed">-28,0,-28,-20</Thickness>
