@@ -127,11 +127,11 @@ public class StorageSelectionTests
 
         Assert.Equal("Clean 1 KB", Menu(page).CleanLabel);
 
-        page.Row("sdk").IsSelected = true;
-        page.Row("logs").IsSelected = true;
-        page.Row("cache").IsSelected = false;
-        page.Row("sdk").IsSelected = false;
-        page.Row("logs").IsSelected = false;
+        page.Row("sdk").SetTicked(true);
+        page.Row("logs").SetTicked(true);
+        page.Row("cache").SetTicked(false);
+        page.Row("sdk").SetTicked(false);
+        page.Row("logs").SetTicked(false);
 
         Assert.Equal(["Clean 2 KB", "Clean 3 KB", "Clean 2 KB", "Clean 1 KB", "Clean"], told);
     }
