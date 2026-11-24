@@ -3,6 +3,7 @@ using Deguffer.Core.Exploring.Hidden;
 using Deguffer.Core.Health;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.Startup;
 
 namespace Deguffer.Core.Execution;
 
@@ -55,6 +56,14 @@ public static class ElevationOffer
     /// </summary>
     public static bool ShouldOffer(bool isElevated, IEnumerable<DriveHealth> drives) =>
         !isElevated && drives.Any(drive => drive.MoreWhenElevated);
+
+    /// <summary>
+    /// What the Startup page has read. Only a machine-wide entry that rights alone keep from changing
+    /// would become changeable, the one a row's shield marks, so a list without one has nothing to
+    /// ask for (§7.5). Nothing is offered before the first reading, which is quick and needs no rights.
+    /// </summary>
+    public static bool ShouldOffer(bool isElevated, IEnumerable<StartupEntry> entries) =>
+        entries.Any(entry => StartupChangePolicy.WantsAdministrator(entry, isElevated));
 
     /// <summary>
     /// What a finished Storage preview found. Two unrelated things are improved by elevating, and
