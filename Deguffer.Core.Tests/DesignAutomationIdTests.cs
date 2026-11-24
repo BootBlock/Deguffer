@@ -19,8 +19,8 @@ namespace Deguffer.Core.Tests;
 public sealed class DesignAutomationIdTests
 {
     /// <summary>
-    /// The controls a user operates, matched by the end of the element's name, so a control derived
-    /// from one (<c>EnabledAwareSplitButton</c>) is held to the rule its base is.
+    /// The controls a user operates, matched by the end of the element's name, so a control whose name
+    /// ends in one (<c>SplitButton</c>) is held to the rule <c>Button</c> is.
     /// </summary>
     private static readonly string[] Operated =
     [
@@ -57,8 +57,8 @@ public sealed class DesignAutomationIdTests
 
     /// <summary>
     /// The rule's own reading of the Storage page, so a change to how the sweep matches cannot pass
-    /// every file by matching nothing: the Scan split button is a derived control, and a row's tick is
-    /// in a template.
+    /// every file by matching nothing: the Scan split button is matched by the end of its name, and a
+    /// row's tick is in a template.
     /// </summary>
     [Fact]
     public void TheRuleReadsTheScanButtonAndTheRowTicks()
@@ -66,7 +66,7 @@ public sealed class DesignAutomationIdTests
         var page = Assert.Single(ShellMarkup.Files, file => file.Name == "Deguffer.App/Views/CleanPage.xaml");
         var operated = page.Elements.Where(IsOperated).ToList();
 
-        var scan = Assert.Single(operated, control => control.Name.LocalName == "EnabledAwareSplitButton");
+        var scan = Assert.Single(operated, control => control.Name.LocalName == "SplitButton");
         Assert.Equal("ScanButton", scan.Attribute("AutomationProperties.AutomationId")?.Value);
 
         var ticks = operated.Where(control => control.Name.LocalName == "CheckBox" && IsTemplated(control)).ToList();

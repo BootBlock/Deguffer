@@ -71,6 +71,8 @@
 
             <converters:TierChipStyleConverter x:Key="TierChipStyle" />
             <converters:RunStatementStyleConverter x:Key="RunStatementStyle" />
+            <converters:SafetyCheckGlyphStyleConverter x:Key="SafetyCheckGlyphStyle" />
+            <converters:SafetyCheckHeadingStyleConverter x:Key="SafetyCheckHeadingStyle" />
             <converters:StandingChipStyleConverter x:Key="StandingChipStyle" />
             <converters:StartupChipStyleConverter x:Key="StartupChipStyle" />
             <converters:StartupRowStyleConverter x:Key="StartupRowStyle" />
@@ -381,6 +383,17 @@
                 <Setter Property="FontWeight" Value="SemiBold" />
             </Style>
 
+            <!-- The verdict a clean's result card leads with (SafetyCheckHeadingStyleConverter).
+                 Strong, because it is the outcome the rest of the card explains, and critical in
+                 colour for a failure alone. -->
+            <Style x:Key="SafetyCheckHeading" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+
+            <Style x:Key="SafetyCheckFailedHeading" TargetType="TextBlock" BasedOn="{StaticResource SafetyCheckHeading}">
+                <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+            </Style>
+
             <!-- A line of secondary text nobody sees, laid in the same cell as a line that comes and
                  goes, so the cell is always one line high at the reader's own text size. A MinHeight
                  in pixels cannot do that: an empty TextBlock measures nothing, the line it reserved
@@ -437,6 +450,26 @@
             <x:Double x:Key="GlyphSizeStandard">16</x:Double>
             <x:Double x:Key="GlyphSizeLarge">20</x:Double>
             <x:Double x:Key="GlyphSizeEmptyState">44</x:Double>
+
+            <!-- The glyph beside a safety check heading (SafetyCheckGlyphStyleConverter), at an info
+                 bar's icon size. Its shape says the verdict and its colour backs the shape up. Raw for
+                 assistive technology, because the heading beside it says the same in words. -->
+            <Style x:Key="SafetyCheckGlyph" TargetType="FontIcon">
+                <Setter Property="FontSize" Value="{StaticResource GlyphSizeStandard}" />
+                <Setter Property="AutomationProperties.AccessibilityView" Value="Raw" />
+            </Style>
+
+            <Style x:Key="SafetyCheckPassedGlyph" TargetType="FontIcon" BasedOn="{StaticResource SafetyCheckGlyph}">
+                <Setter Property="Foreground" Value="{ThemeResource SystemFillColorSuccessBrush}" />
+            </Style>
+
+            <Style x:Key="SafetyCheckIncompleteGlyph" TargetType="FontIcon" BasedOn="{StaticResource SafetyCheckGlyph}">
+                <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCautionBrush}" />
+            </Style>
+
+            <Style x:Key="SafetyCheckFailedGlyph" TargetType="FontIcon" BasedOn="{StaticResource SafetyCheckGlyph}">
+                <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+            </Style>
 
             <!-- The parts of EmptyState, the banner a list or a picture shows in place of its contents. -->
             <Style x:Key="EmptyStateGlyph" TargetType="FontIcon">

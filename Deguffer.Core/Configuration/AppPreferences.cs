@@ -142,20 +142,20 @@ public enum StorageOrder
 /// preference.
 /// </param>
 /// <param name="ConfirmBeforeCleaning">
-/// Whether Clean raises a confirmation naming what is about to go — covering exactly the rows §7
-/// does not ask about itself, so nothing is confirmed twice and nothing goes unconfirmed. §7
-/// already makes preview the primary action; this is the second belt for a step that has no undo,
-/// and the only prompt a Tier 1 selection gets.
+/// Whether a clean whose rows need no answer of their own is still confirmed. A row §7 asks something
+/// of (Tier 2, and Tier 3 with the typed phrase on) is confirmed whatever this says, in the same one
+/// dialog (<see cref="Execution.CleanConfirmation"/>). §7 already makes preview the primary action;
+/// this is the second belt for a step that has no undo, and the only prompt a Tier 1 selection gets.
 /// </param>
 /// <param name="RequireTypedConfirmation">
 /// Whether §7's typed phrase is demanded of Tier 3. Off by default: typing a provider's name for
 /// every emptied Recycle Bin becomes a transcription chore rather than a decision, and a gate the
 /// user resents is a gate they learn to get past without reading.
 ///
-/// Switching it off retires Tier 3's <em>own</em> question, not the question. The row then falls to
-/// <paramref name="ConfirmBeforeCleaning"/>, which names it and quotes the same
-/// <see cref="Execution.ConfirmationRequirement.ConsequenceOf"/> sentence the typed dialog would
-/// have carried — §7 leaves how hard the confirmation is to give to the user, and never left saying
+/// Switching it off retires Tier 3's <em>own</em> box, not the question. The row then needs no answer
+/// of its own, so it is confirmed as <paramref name="ConfirmBeforeCleaning"/> says, in a dialog that
+/// names it and quotes the same <see cref="Execution.ConfirmationRequirement.Consequence"/>
+/// sentence — §7 leaves how hard the confirmation is to give to the user, and never left saying
 /// what is unrecoverable to anybody. Turning both off is a deliberate pair of choices, and leaves
 /// the preview and Tier 3 never being pre-selected as what stands between the user and the
 /// deletion.
