@@ -77,4 +77,25 @@ public sealed class SourceRootApprovalTests
         Assert.Contains("downloads every file", SourceRootApproval.RemoteStorageWarning);
         Assert.Contains("space in the cloud rather than space on this disk", SourceRootApproval.RemoteStorageWarning);
     }
+
+    /// <summary>
+    /// The dialog names the folder before the warning, so the reader knows which pick it is about,
+    /// and its button names what it does rather than saying yes.
+    /// </summary>
+    [Fact]
+    public void TheQuestionNamesTheFolderThenTheWarning()
+    {
+        var approval = SourceRootApproval.For(Machine, @"V:\work");
+
+        Assert.Equal("Add this folder anyway?", approval.Title);
+        Assert.Equal($"V:\\work\n\n{SourceRootApproval.RemoteStorageWarning}", approval.Consequence);
+        Assert.Equal("Add folder", approval.ConfirmLabel);
+    }
+
+    /// <summary>A folder approved in silence has nothing to ask, so it shows no question.</summary>
+    [Fact]
+    public void AFolderWithNothingToWarnAboutHasNoQuestion()
+    {
+        Assert.Null(SourceRootApproval.For(Machine, @"C:\Users\testuser\src").Consequence);
+    }
 }

@@ -42,9 +42,18 @@ internal static class ModalDialog
     /// <summary>
     /// Show <paramref name="dialog"/> and report what the user chose, or report
     /// <see cref="ContentDialogResult.None"/> without showing anything if a dialog is already open.
+    /// Cancelling <paramref name="ct"/> takes the dialog down, which reports
+    /// <see cref="ContentDialogResult.None"/> as a dismissal does.
     /// </summary>
-    internal static async Task<ContentDialogResult> ShowAsync(ContentDialog dialog)
+    /// <exception cref="OperationCanceledException">
+    /// <paramref name="ct"/> was already cancelled. Checked before the registration, which would
+    /// otherwise call Hide at once against a dialog not yet open, and leave up a modal the cancel path
+    /// can no longer take down.
+    /// </exception>
+    internal static async Task<ContentDialogResult> ShowAsync(ContentDialog dialog, CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
+
         if (_showing)
         {
             return ContentDialogResult.None;
@@ -54,6 +63,8 @@ internal static class ModalDialog
 
         try
         {
+            using var registration = ct.Register(dialog.Hide);
+
             return await dialog.ShowAsync();
         }
         finally

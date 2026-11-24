@@ -285,9 +285,7 @@ public sealed partial class MainWindow : Window
         // Before the first await: the close is decided when this handler returns, not when it ends.
         args.Cancel = true;
 
-        var root = (FrameworkElement)Content;
-
-        switch (await ContentDialogClosePrompt.AskAsync(ClosePrompt.For(App.Running.Current), root.XamlRoot, root.ActualTheme))
+        switch (await ContentDialogClosePrompt.AskAsync(ClosePrompt.For(App.Running.Current), (FrameworkElement)Content))
         {
             case true:
                 _closeGuard.CloseWhenIdle();

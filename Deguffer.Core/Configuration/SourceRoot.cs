@@ -72,6 +72,18 @@ public sealed record SourceRootApproval(string Path, string? Warning)
     /// <summary>Whether the user has to be asked before this folder is stored.</summary>
     public bool NeedsConfirming => Warning is not null;
 
+    /// <summary>The question put where <see cref="NeedsConfirming"/>.</summary>
+    public string Title => "Add this folder anyway?";
+
+    /// <summary>
+    /// The folder, then what it is warned about, so the reader knows which pick the warning is for.
+    /// Null where there is nothing to ask.
+    /// </summary>
+    public string? Consequence => Warning is null ? null : $"{Path}\n\n{Warning}";
+
+    /// <summary>The button that approves the folder.</summary>
+    public string ConfirmLabel => "Add folder";
+
     /// <summary>
     /// The folder as it is stored, once the user has said yes to whatever <see cref="Warning"/> said.
     ///

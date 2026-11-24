@@ -46,7 +46,7 @@ public sealed partial class DuplicatesPage : Page
 
             // The dialog is built per ask: a XamlRoot captured here would be the one from before a
             // theme change or a reparent.
-            DuplicateActions.ForThisMachine(() => new ContentDialogDuplicateConfirmation(XamlRoot, ActualTheme), App.Running),
+            DuplicateActions.ForThisMachine(() => new ContentDialogDuplicateConfirmation(this), App.Running),
             ChooseCsvAsync,
             App.Preferences,
             new DriveList(VolumeInventory.Current, TimeProvider.System, NetworkDrives.LeftOut, App.DriveHealth),
