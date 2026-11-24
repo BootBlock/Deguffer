@@ -24,6 +24,7 @@ public sealed partial class MainWindow : Window
     private readonly TaskbarButton _taskbarButton;
     private readonly ToolWindowOpener _mapAppearance;
     private readonly RailFolding _rail;
+    private readonly LinkHistory _history;
 
     /// <summary>The page each destination shows.</summary>
     private static readonly Dictionary<Destination, Type> Pages = new()
@@ -144,7 +145,10 @@ public sealed partial class MainWindow : Window
             (_, _) => _rail.Changed(Navigation.IsPaneOpen));
         Navigation.SizeChanged += (_, e) => _rail.Fit(e.NewSize.Width);
 
-        OpenWhereTheLaunchAsked();
+        var start = LaunchDestination();
+        _history = new LinkHistory(start, destination => Move(destination));
+        BackGestures.Answer((UIElement)Content, Navigation, _history.BackCommand);
+        Move(start);
 
         // Last, because restoring a maximised placement shows the window: the theme, the backdrop
         // and the first page all have to be in place before anything is on screen. Sizing alone
@@ -189,13 +193,27 @@ public sealed partial class MainWindow : Window
     public void CloseWhenIdle() => _closeGuard.CloseWhenIdle();
 
     /// <summary>
-    /// Open on the destination this instance was started for: Storage ordinarily, and the page an
-    /// elevated replacement was told to resume on otherwise.
+    /// The destination this instance was started for: Storage ordinarily, and the page an elevated
+    /// replacement was told to resume on otherwise.
     ///
     /// <para>An elevated instance always replaces one the user was already using, because §6.3 does
     /// not elevate at startup. Opening it at the default destination throws away where they were,
     /// and on Explore that includes a folder they chose through a dialog. See
     /// <see cref="ElevationRequest"/> for what survives the relaunch.</para>
+    /// </summary>
+    private static Destination LaunchDestination() => ElevatedRelaunch.Requested switch
+    {
+        ExploreRequest => Destination.Explore,
+        DuplicatesRequest => Destination.Duplicates,
+        InstalledAppsRequest => Destination.InstalledApps,
+        HealthRequest => Destination.Health,
+        StartupRequest => Destination.Startup,
+        _ => Destination.Storage,
+    };
+
+    /// <summary>
+    /// Show <paramref name="destination"/> and select it on the rail, for a move the window makes
+    /// rather than one the reader made on the rail: the launch, a link and Back.
     ///
     /// <para>Two measurements shape how the rail is moved, and neither reports an error when it is
     /// got wrong. Setting <c>IsSelected</c> on the item from here does not move the rail at all: it
@@ -204,24 +222,14 @@ public sealed partial class MainWindow : Window
     /// reported both items selected. Hence the rail's own property, assigned here, and no starting
     /// selection in the markup.</para>
     /// </summary>
-    private void OpenWhereTheLaunchAsked()
+    private void Move(Destination destination, object? parameter = null)
     {
-        var destination = ElevatedRelaunch.Requested switch
-        {
-            ExploreRequest => Destination.Explore,
-            DuplicatesRequest => Destination.Duplicates,
-            InstalledAppsRequest => Destination.InstalledApps,
-            HealthRequest => Destination.Health,
-            StartupRequest => Destination.Startup,
-            _ => Destination.Storage,
-        };
-
-        Go(destination);
+        Go(destination, parameter);
 
         // The rail second. Assigning it raises OnDestinationChanged, which finds the frame already
-        // where it is going and does nothing further. The selection is what the user reads as "where
-        // am I", and a frame showing Explore under a rail highlighting Storage is worse than either
-        // of them alone.
+        // where it is going and so takes it for no choice of the reader's. The selection is what the
+        // user reads as "where am I", and a frame showing Explore under a rail highlighting Storage
+        // is worse than either of them alone.
         Navigation.SelectedItem = _items[destination];
     }
 
@@ -255,13 +263,13 @@ public sealed partial class MainWindow : Window
     };
 
     /// <summary>
-    /// Open Startup on <paramref name="entry"/>, for Memory's link to it (§7.5). The page first, then
-    /// the rail, in the order <see cref="OpenWhereTheLaunchAsked"/> gives and for its reason.
+    /// Open Startup on <paramref name="entry"/>, for Memory's link to it (§7.5), with Back offered to
+    /// return to where the link was.
     /// </summary>
     public void ShowStartupEntry(StartupKey entry)
     {
-        Go(Destination.Startup, entry);
-        Navigation.SelectedItem = _items[Destination.Startup];
+        _history.Follow(Destination.Startup);
+        Move(Destination.Startup, entry);
     }
 
     /// <summary>
@@ -318,6 +326,7 @@ public sealed partial class MainWindow : Window
         // user may be part-way through acting on.
         if (ContentFrame.CurrentSourcePageType != Pages[destination])
         {
+            _history.Choose(destination);
             Go(destination);
         }
     }

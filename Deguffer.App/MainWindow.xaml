@@ -51,6 +51,9 @@
             sound like disk space. So every item carries that question as its help text, and as a
             tooltip that leads with the label, because the tooltip is the only name a collapsed item
             shows. DesignRailTests holds the two to each other.
+
+            Its back button starts hidden and is shown only while a link from one page to another
+            has somewhere to return to (LinkHistory, BackGestures). The rail itself is no history.
         -->
         <NavigationView x:Name="Navigation"
                         Grid.Row="1"
