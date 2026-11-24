@@ -152,9 +152,9 @@ public sealed partial class DuplicatesViewModel : ObservableObject
     [ObservableProperty]
     public partial bool StageProgressIsUnknown { get; private set; } = true;
 
+    /// <summary>What the search came to, over the groups once there are any and in their place until then.</summary>
     [ObservableProperty]
-    public partial string Headline { get; private set; } =
-        "Choose the drives and folders to search, and what two files must share to be a match.";
+    public partial DuplicateSearchHeadline Headline { get; private set; } = DuplicateSearchHeadline.NotSearched;
 
     /// <summary>What the space figures are, and that a removal may free less (§7.4).</summary>
     public string SpaceNote => SpaceSentence;
@@ -227,7 +227,7 @@ public sealed partial class DuplicatesViewModel : ObservableObject
         IsSetupOpen = false;
         Marking.Started(search.Asked);
         IsSearching = true;
-        Headline = "Searching…";
+        Headline = DuplicateSearchHeadline.Searching;
         Show(new DuplicateSearchProgress(DuplicateSearchStage.Finding, 0, Total: null));
 
         // Its own span, ended whether or not the search is still the page's when it ends.
@@ -267,7 +267,7 @@ public sealed partial class DuplicatesViewModel : ObservableObject
         {
             if (ReferenceEquals(_search, search))
             {
-                Headline = "Stopped before the files to compare were all found, so nothing was confirmed.";
+                Headline = DuplicateSearchHeadline.StoppedWhileFinding;
             }
         }
 
@@ -278,10 +278,7 @@ public sealed partial class DuplicatesViewModel : ObservableObject
         {
             if (ReferenceEquals(_search, search))
             {
-                Headline = Groups.Count == 0
-                    ? "The search ran out of memory before it confirmed any duplicates. Search fewer locations at once."
-                    : "The search ran out of memory and did not finish, so files not in a group may still have copies. "
-                        + "Search fewer locations at once to find them.";
+                Headline = DuplicateSearchHeadline.OutOfMemory(anyGroup: Groups.Count > 0);
             }
         }
         finally
@@ -391,7 +388,7 @@ public sealed partial class DuplicatesViewModel : ObservableObject
         if (ReferenceEquals(_search, search))
         {
             Totals.Show();
-            Headline = "Searching. Each group appears as soon as it is confirmed, in order of the space it could free.";
+            Headline = DuplicateSearchHeadline.Arriving;
         }
 
         // A batch is posted only with a group queued, and Confirmed counts each one first, so the
@@ -438,11 +435,7 @@ public sealed partial class DuplicatesViewModel : ObservableObject
         Marks = marks;
         ShowNotes(DuplicateSearchNotes.Of(result));
 
-        var found = Groups.Count == 0
-            ? "No duplicates found."
-            : "Mark the copies to remove, by hand or with a rule from Mark. Nothing goes until you confirm the list.";
-
-        Headline = result.Stopped ? "Stopped. " + found : found;
+        Headline = DuplicateSearchHeadline.Finished(result.Stopped, anyGroup: Groups.Count > 0);
     }
 
     /// <summary>

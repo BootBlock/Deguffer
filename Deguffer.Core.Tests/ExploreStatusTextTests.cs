@@ -10,6 +10,18 @@ public sealed class ExploreStatusTextTests
     private const string Refused = "Deguffer does not scan this drive.";
 
     /// <summary>
+    /// Before anything is measured the line says nothing, because the page's empty state already says
+    /// what to do. The same instruction said a second time, in other words and at another size, sends
+    /// the reader to check whether the two say different things.
+    /// </summary>
+    [Fact]
+    public void TheIdleLineLeavesTheInstructionToTheEmptyState()
+    {
+        Assert.Empty(ExploreStatusText.Idle.Sentence);
+        Assert.Empty(ExploreStatusText.Idle.Checks);
+    }
+
+    /// <summary>
     /// A choice that is not a folder on a disk says so, and a refusal of the target the page keeps is
     /// said after it: Scan stays greyed out, and the reason must not go with the choice.
     /// </summary>
@@ -28,13 +40,13 @@ public sealed class ExploreStatusTextTests
     [Fact]
     public void ARefusalIsStatedAndTakenBackButNothingElseIs()
     {
-        var prompt = StatusLine.Said(ExploreStatusText.Prompt);
+        var idle = ExploreStatusText.Idle;
         var other = StatusLine.Said("Something another part of the page said.");
         var removal = StatusLine.After("Moved 'old' to the Recycle Bin.", new VerificationResult { Checks = [] });
 
-        Assert.Equal(StatusLine.Refused(Refused), ExploreStatusText.Retargeted(prompt, Refused));
+        Assert.Equal(StatusLine.Refused(Refused), ExploreStatusText.Retargeted(idle, Refused));
         Assert.Equal(StatusLine.Refused(Refused), ExploreStatusText.Retargeted(other, Refused));
-        Assert.Equal(prompt, ExploreStatusText.Retargeted(StatusLine.Refused(Refused), refusal: null));
+        Assert.Equal(idle, ExploreStatusText.Retargeted(StatusLine.Refused(Refused), refusal: null));
         Assert.Same(other, ExploreStatusText.Retargeted(other, refusal: null));
         Assert.Same(removal, ExploreStatusText.Retargeted(removal, refusal: null));
     }

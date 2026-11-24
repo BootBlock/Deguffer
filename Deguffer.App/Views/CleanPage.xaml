@@ -556,9 +556,10 @@
                  which is why the failure is stated twice. A clean that verified cleanly leaves the bar
                  to the fresh preview's totals and says so in the card alone, where it survives the next
                  scan. It sits on its own solid surface because §6.5 forbids text that needs the blur to
-                 read. -->
+                 read. Closed while there is nothing to say, as before a scan, when the empty state
+                 below already says what to press and that nothing is removed until asked. -->
             <InfoBar Grid.Column="0"
-                     IsOpen="True"
+                     IsOpen="{x:Bind ViewModel.HasStatus, Mode=OneWay}"
                      IsClosable="False"
                      Severity="{x:Bind ViewModel.StatusSeverity, Mode=OneWay}"
                      Message="{x:Bind ViewModel.Status, Mode=OneWay}">

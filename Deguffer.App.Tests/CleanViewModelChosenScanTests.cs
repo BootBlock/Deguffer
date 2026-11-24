@@ -181,6 +181,23 @@ public class CleanViewModelChosenScanTests
         Assert.True(later.Shown.SelectMany(group => group).Single(row => row.Provider == steam).IsChosen);
     }
 
+    /// <summary>A search that hides every location offers the press that clears it, and the press lists them all again.</summary>
+    [Fact]
+    public void ClearingASearchThatHidesEveryLocationListsThemAgain()
+    {
+        var steam = new FakeCleanupProvider("steam") { Name = "Steam HTTP cache", Category = ProviderCategory.Games };
+        using var page = new StoragePage([steam]);
+        var choice = page.ViewModel.ScanChoice;
+        choice.Search = "nothing like it";
+
+        Assert.True(choice.HasNoMatches);
+
+        choice.ClearSearchCommand.Execute(null);
+
+        Assert.Empty(choice.Search);
+        Assert.False(choice.HasNoMatches);
+    }
+
     /// <summary>
     /// A heading's tick takes every row the search shows under it, and only those. A search for one
     /// word and a tick on its heading must not choose rows the reader cannot see.

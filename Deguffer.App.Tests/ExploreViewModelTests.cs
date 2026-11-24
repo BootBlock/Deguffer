@@ -21,7 +21,6 @@ namespace Deguffer.App.Tests;
 /// </summary>
 public sealed class ExploreViewModelTests : IDisposable
 {
-    private const string ScanPrompt = ExploreStatusText.Prompt;
 
     private readonly ExploreFixture _explore = new();
 
@@ -44,7 +43,7 @@ public sealed class ExploreViewModelTests : IDisposable
 
         Assert.Equal(@"C:\", page.Targeting.SelectedDrive?.RootPath);
         Assert.Null(page.Targeting.ScopeFolder);
-        Assert.Equal(ScanPrompt, page.Status.Sentence);
+        Assert.Empty(page.Status.Sentence);
         Assert.True(page.ScanCommand.CanExecute(null));
         Assert.True(page.Elevation.CanElevate);
         Assert.Equal(ElevationOffer.Label(hasScanned: false), page.Elevation.ElevateLabel);
@@ -186,7 +185,7 @@ public sealed class ExploreViewModelTests : IDisposable
         page.Targeting.ScopeTo(@"C:\Users\testuser");
 
         Assert.Equal(@"C:\Users\testuser", page.Targeting.ScopeFolder);
-        Assert.Equal(ScanPrompt, page.Status.Sentence);
+        Assert.Empty(page.Status.Sentence);
     }
 
     /// <summary>
@@ -207,7 +206,7 @@ public sealed class ExploreViewModelTests : IDisposable
 
         page.Targeting.ScopeTo(@"C:\Users\testuser");
 
-        Assert.Equal(ScanPrompt, page.Status.Sentence);
+        Assert.Empty(page.Status.Sentence);
     }
 
     /// <summary>
@@ -227,7 +226,7 @@ public sealed class ExploreViewModelTests : IDisposable
 
         page.Targeting.ScopeTo(@"C:\Users\testuser");
 
-        Assert.Equal(ScanPrompt, page.Status.Sentence);
+        Assert.Empty(page.Status.Sentence);
         Assert.True(page.ScanCommand.CanExecute(null));
 
         page.Targeting.ScopeTo(@"C:\Cloud\Photos");

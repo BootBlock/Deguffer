@@ -283,6 +283,10 @@ public class CleanViewModelScanTests
         Assert.True(empty.IsShown);
         Assert.Equal("Nothing scanned yet", empty.Title);
 
+        // The empty state says what to press, so the status bar does not say it again over it.
+        Assert.Empty(page.ViewModel.Status);
+        Assert.False(page.ViewModel.HasStatus);
+
         page.Scan();
 
         Assert.True(empty.IsShown);

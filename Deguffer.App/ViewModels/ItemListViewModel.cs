@@ -103,6 +103,10 @@ public sealed partial class ItemListViewModel : ObservableObject, IDisposable
 
     public void Dispose() => Row.SelectionChanged -= OnRowSelectionChanged;
 
+    /// <summary>Empty the search, so the list shows every item again. Offered where it hides them all.</summary>
+    [RelayCommand]
+    private void ClearSearch() => Query = string.Empty;
+
     [RelayCommand]
     private void ToggleAllShown() => Row.SetSelected(ShownItems, ItemSelection.ValueForClick(AllShownState));
 

@@ -342,15 +342,9 @@
                 </TreeView>
 
                 <!-- Before the first reading arrives, and where one failed outright. -->
-                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="{StaticResource ControlGap}"
-                            Visibility="{x:Bind ViewModel.HasNoTree, Mode=OneWay}">
-                    <TextBlock Text="Reading where memory is"
-                               HorizontalAlignment="Center"
-                               Style="{StaticResource SubtitleTextBlockStyle}" />
-                    <TextBlock Text="Nothing is changed by looking. Deguffer asks a program to close only when you pick it and say so."
-                               HorizontalAlignment="Center"
-                               Style="{StaticResource SecondaryText}" />
-                </StackPanel>
+                <controls:EmptyState Glyph="&#xE964;" Title="Reading where memory is"
+                                     Message="Nothing is changed by looking. Deguffer asks a program to close only when you pick it and say so."
+                                     Visibility="{x:Bind ViewModel.HasNoTree, Mode=OneWay}" />
             </Grid>
         </Border>
 

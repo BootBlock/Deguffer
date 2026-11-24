@@ -156,6 +156,8 @@
                                          Glyph="{x:Bind ViewModel.StaleEmptyGlyph, Mode=OneWay}"
                                          Title="{x:Bind ViewModel.StaleEmpty.Title, Mode=OneWay, FallbackValue=''}"
                                          Message="{x:Bind ViewModel.StaleEmpty.Message, Mode=OneWay, FallbackValue=''}"
+                                         ActionLabel="{x:Bind ViewModel.StaleEmpty.Remedy, Mode=OneWay, FallbackValue=''}"
+                                         ActionCommand="{x:Bind ViewModel.ShowWhatTheStaleListKeepsBackCommand}"
                                          Visibility="{x:Bind ViewModel.HasNoStaleRows, Mode=OneWay}" />
 
                     <Grid Grid.Row="2" ColumnSpacing="12" ColumnDefinitions="*,Auto">

@@ -333,15 +333,14 @@ public sealed partial class CleanViewModel : ObservableObject
         ShownItems = null;
     }
 
+    /// <summary>Empty before a scan, so the bar is closed while the empty state says what to do.</summary>
     [ObservableProperty]
-    public partial string Status { get; set; } =
-        "Scan to see what can be reclaimed. Nothing is removed until you say so.";
+    [NotifyPropertyChangedFor(nameof(HasStatus))]
+    public partial string Status { get; set; } = string.Empty;
 
-    /// <summary>
-    /// How loudly to say it. A §5.6 verification failure and a routine progress message used to
-    /// render identically, which is the one distinction on this screen that must never be missed.
-    /// Severity is carried by the info bar's icon and text as well as its colour (§6.5).
-    /// </summary>
+    public bool HasStatus => Status.Length > 0;
+
+    /// <summary>How loudly to say it: a §5.6 failure never reads as routine progress, so icon and text carry it as well as colour (§6.5).</summary>
     [ObservableProperty]
     public partial InfoBarSeverity StatusSeverity { get; set; } = InfoBarSeverity.Informational;
 

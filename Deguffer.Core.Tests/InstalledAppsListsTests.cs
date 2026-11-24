@@ -64,7 +64,8 @@ public sealed class InstalledAppsListsTests
         Assert.Equal(new EmptyListNote(
             EmptyListCause.Nothing,
             "No stale entries",
-            "Every entry belongs to a program that is still there, or that nothing proves gone."), note);
+            "Every entry belongs to a program that is still there, or that nothing proves gone.",
+            Remedy: null), note);
     }
 
     /// <summary>A key Windows would not open may hold stale entries, so "none" is said of what was read.</summary>
@@ -89,10 +90,11 @@ public sealed class InstalledAppsListsTests
 
         Assert.Equal(EmptyListCause.Filtered, note.Cause);
         Assert.Equal("No stale entry matches the filter", note.Title);
+        Assert.Equal("Clear the filter", note.Remedy);
     }
 
     [Fact]
-    public void AHiddenStaleEntryIsCountedAndTheSwitchNamed()
+    public void AHiddenStaleEntryIsCountedAndTheSwitchOffered()
     {
         var reading = new InstalledAppsReading(
             [Entry("One", EntryStanding.Stale, EntryVisibility.SystemComponent), Entry("Two", EntryStanding.Stale, EntryVisibility.NoName)],
@@ -103,7 +105,8 @@ public sealed class InstalledAppsListsTests
         Assert.Equal(new EmptyListNote(
             EmptyListCause.Hidden,
             "No stale entries in the list Windows shows",
-            "2 stale entries are hidden. Turn on Show entries Windows hides to list hidden entries too."), note);
+            "2 stale entries are among the entries Windows hides from its list.",
+            "Show hidden entries"), note);
     }
 
     /// <summary>

@@ -427,7 +427,7 @@
             <x:Double x:Key="GlyphSizeLarge">20</x:Double>
             <x:Double x:Key="GlyphSizeEmptyState">44</x:Double>
 
-            <!-- The parts of EmptyState, the banner a list shows in place of its rows. -->
+            <!-- The parts of EmptyState, the banner a list or a picture shows in place of its contents. -->
             <Style x:Key="EmptyStateGlyph" TargetType="FontIcon">
                 <Setter Property="FontSize" Value="{StaticResource GlyphSizeEmptyState}" />
                 <Setter Property="HorizontalAlignment" Value="Center" />

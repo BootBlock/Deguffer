@@ -11,9 +11,15 @@ public static class ExploreStatusText
 {
     /// <summary>
     /// What the line says before anything has been measured, and what it goes back to when a refusal
-    /// is taken off it. See <see cref="Retargeted"/>.
+    /// is taken off it: nothing. See <see cref="Retargeted"/>.
+    ///
+    /// <para>Before a scan the page's empty state says what to do, and once one has drawn, the map,
+    /// its readout and its rows say what there is. The same instruction said again here, in other
+    /// words and at another size, would send the reader to check whether the two meant different
+    /// things. The line is kept for what neither says: a refusal, a scan's progress or failure, a
+    /// removal's report.</para>
     /// </summary>
-    public const string Prompt = "Choose a drive or a folder and scan it to see what is using the space.";
+    public static StatusLine Idle => StatusLine.Empty;
 
     /// <summary>
     /// What the line says when the folder picker returned something that is not a folder on a disk.
@@ -47,8 +53,8 @@ public static class ExploreStatusText
 
     /// <summary>
     /// What the line says once the page is pointed somewhere new: why the page will not scan it, or
-    /// the prompt where the line still holds a refusal the page stated and nothing refuses now, or
-    /// whatever it said before.
+    /// nothing (<see cref="Idle"/>) where the line still holds a refusal the page stated and nothing
+    /// refuses now, or whatever it said before.
     ///
     /// <para>§7.1 asks a refusal to say what it is, and a greyed-out Scan button says nothing at all.
     /// The retraction is the other half of that: the line describes what pressing Scan would do, so
@@ -69,7 +75,7 @@ public static class ExploreStatusText
         ArgumentNullException.ThrowIfNull(shown);
 
         return refusal is not null ? StatusLine.Refused(refusal)
-            : shown.Origin == StatusOrigin.Refusal ? StatusLine.Said(Prompt)
+            : shown.Origin == StatusOrigin.Refusal ? Idle
             : shown;
     }
 }

@@ -516,7 +516,7 @@
                 <Border Grid.Column="3" Width="1" Margin="0,4" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
 
                 <StackPanel Grid.Column="4" Spacing="4" VerticalAlignment="Center">
-                    <TextBlock Text="{x:Bind ViewModel.Headline, Mode=OneWay}" TextWrapping="Wrap" />
+                    <TextBlock Text="{x:Bind ViewModel.Headline.Sentence, Mode=OneWay}" TextWrapping="Wrap" />
                     <TextBlock Text="{x:Bind ViewModel.SpaceNote}" Style="{StaticResource Caption}" />
                 </StackPanel>
             </Grid>
@@ -584,7 +584,8 @@
             </ListView>
 
             <controls:EmptyState Grid.Row="2" Glyph="&#xE8C8;"
-                                 Title="{x:Bind ViewModel.Headline, Mode=OneWay}"
+                                 Title="{x:Bind ViewModel.Headline.Title, Mode=OneWay}"
+                                 Message="{x:Bind ViewModel.Headline.Sentence, Mode=OneWay}"
                                  Visibility="{x:Bind ViewModel.HasNoGroups, Mode=OneWay}" />
         </Grid>
 
