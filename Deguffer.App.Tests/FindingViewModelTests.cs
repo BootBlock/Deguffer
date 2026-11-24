@@ -3,6 +3,7 @@ using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 using Deguffer.Testing;
 
 namespace Deguffer.App.Tests;
@@ -52,9 +53,9 @@ public class FindingViewModelTests
 
         Assert.False(row.IsSelected);
         Assert.False(Assert.Single(row.Steps).IsSelected);
-        Assert.True(row.IsResearched);
-        Assert.Equal("Researched", row.BasisLabel);
-        Assert.False(Rows.Row(Rows.Found(Cache, Rows.Folder("a", 10))).IsResearched);
+        Assert.True(row.Facts.IsResearched);
+        Assert.Equal("Researched", row.Facts.BasisLabel);
+        Assert.False(Rows.Row(Rows.Found(Cache, Rows.Folder("a", 10))).Facts.IsResearched);
     }
 
     /// <summary>
@@ -94,7 +95,7 @@ public class FindingViewModelTests
             Downloads, Rows.Folder("a", 10), Rows.Folder("b", 20, requiresElevation: true), Rows.Folder("c", 0)));
         var events = row.SelectionEvents();
 
-        row.IsSelected = true;
+        row.ToggleCommand.Execute(null);
 
         Assert.Equal([true, false, false], row.Steps.Select(step => step.IsSelected));
         Assert.Single(events);
@@ -107,7 +108,7 @@ public class FindingViewModelTests
         var row = Rows.Row(Rows.Found(Cache, Rows.Folder("a", 10), Rows.Folder("b", 20)));
         var events = row.SelectionEvents();
 
-        row.IsSelected = false;
+        row.ToggleCommand.Execute(null);
 
         Assert.All(row.Steps, step => Assert.False(step.IsSelected));
         Assert.Single(events);
@@ -173,6 +174,105 @@ public class FindingViewModelTests
         row.SetSelected(row.Steps, true);
 
         Assert.Equal([true, false], row.Steps.Select(step => step.IsSelected));
+    }
+
+    /// <summary>
+    /// A row with some of its items ticked shows a mixed checkbox and the size that will go against the
+    /// whole, so the list never shows a full tick beside "18.4 GB" for a clean that takes 300 MB.
+    /// </summary>
+    [Fact]
+    public void ARowWithSomeItemsTickedIsMixedAndStatesWhatIsChosen()
+    {
+        var row = Rows.Row(Rows.Found(Cache, Rows.Folder("a", 1024), Rows.Folder("b", 2048), Rows.Folder("c", 4096)));
+
+        row.Steps[1].IsSelected = false;
+
+        Assert.Null(row.SelectionState);
+        Assert.True(row.IsSelected);
+        Assert.Equal($"{FreeSpace.Format(5120)} of {FreeSpace.Format(7168)}", row.SizeLabel);
+        Assert.Equal("2 of 3 items", row.ItemsLinkLabel);
+    }
+
+    /// <summary>A row ticked or cleared whole states the whole, and its checkbox is not mixed.</summary>
+    [Fact]
+    public void ARowTickedOrClearedWholeStatesTheWhole()
+    {
+        var row = Rows.Row(Rows.Found(Cache, Rows.Folder("a", 1024), Rows.Folder("b", 2048)));
+
+        Assert.True(row.SelectionState);
+        Assert.Equal(FreeSpace.Format(3072), row.SizeLabel);
+        Assert.Equal("2 items", row.ItemsLinkLabel);
+
+        row.SetTicked(false);
+
+        Assert.False(row.SelectionState);
+        Assert.Equal(FreeSpace.Format(3072), row.SizeLabel);
+        Assert.Equal("2 items", row.ItemsLinkLabel);
+    }
+
+    /// <summary>
+    /// A step nobody can tick does not hold the checkbox short of full: its own checkbox is disabled, so
+    /// a row that counted it could never be ticked by any click. It still counts towards what the row
+    /// holds, so the figure states the part a clean takes against that, and the link the items ticked.
+    /// </summary>
+    [Fact]
+    public void AStepThatCannotBeTickedLeavesTheBoxFullAndTheFigureAPart()
+    {
+        var row = Rows.Row(Rows.Found(Cache, Rows.Folder("a", 1024), Rows.Folder("b", 8192, requiresElevation: true)));
+
+        Assert.True(row.SelectionState);
+        Assert.Equal($"{FreeSpace.Format(1024)} of {FreeSpace.Format(9216)}", row.SizeLabel);
+        Assert.Equal("1 of 2 items", row.ItemsLinkLabel);
+    }
+
+    /// <summary>
+    /// A row nothing in which can be ticked states what it holds, which is the figure that decides
+    /// whether reopening as administrator is worth it.
+    /// </summary>
+    [Fact]
+    public void ARowNeedingRightsForEveryStepStatesItsWhole()
+    {
+        var row = Rows.Row(Rows.Found(Cache, Rows.Folder("a", 8192, requiresElevation: true)));
+
+        Assert.Equal(FreeSpace.Format(8192), row.SizeLabel);
+    }
+
+    /// <summary>
+    /// A click on a mixed row clears it, as a group heading in the item list does. Ticking the rest
+    /// would add items to the run the user may never have looked at.
+    /// </summary>
+    [Fact]
+    public void ClickingAMixedRowClearsItAsOneChange()
+    {
+        var row = Rows.Row(Rows.Found(Cache, Rows.Folder("a", 10), Rows.Folder("b", 20)));
+        row.Steps[0].IsSelected = false;
+        var events = row.SelectionEvents();
+
+        row.ToggleCommand.Execute(null);
+
+        Assert.All(row.Steps, step => Assert.False(step.IsSelected));
+        Assert.False(row.SelectionState);
+        Assert.False(row.IsSelected);
+        Assert.Single(events);
+    }
+
+    /// <summary>
+    /// A tick that leaves a row as mixed as it was changes neither of its states, and still moves the
+    /// figures on it, which are announced with the size rather than with the states.
+    /// </summary>
+    [Fact]
+    public void ATickThatLeavesTheRowMixedStillMovesItsFigures()
+    {
+        var row = Rows.Row(Rows.Found(Cache, Rows.Folder("a", 10), Rows.Folder("b", 20), Rows.Folder("c", 40)));
+        row.Steps[0].IsSelected = false;
+        var raised = row.Notifications();
+
+        row.Steps[1].IsSelected = false;
+
+        Assert.Null(row.SelectionState);
+        Assert.Contains(nameof(FindingViewModel.SizeLabel), raised);
+        Assert.Contains(nameof(FindingViewModel.ItemsLinkLabel), raised);
+        Assert.DoesNotContain(nameof(FindingViewModel.SelectionState), raised);
     }
 
     /// <summary>
@@ -305,8 +405,8 @@ public class FindingViewModelTests
     {
         var parts = new FakeCleanupProvider("parts") { Grain = StepGrain.Parts };
 
-        Assert.NotNull(Rows.Row(Rows.Found(parts, Rows.Folder("a", 10))).SoleStep);
-        Assert.Null(Rows.Row(Rows.Found(parts, Rows.Folder("a", 10), Rows.Folder("b", 10))).SoleStep);
-        Assert.Null(Rows.Row(Rows.Found(Cache, Rows.Folder("a", 10))).SoleStep);
+        Assert.NotNull(Rows.Row(Rows.Found(parts, Rows.Folder("a", 10))).Contents.SoleStep);
+        Assert.Null(Rows.Row(Rows.Found(parts, Rows.Folder("a", 10), Rows.Folder("b", 10))).Contents.SoleStep);
+        Assert.Null(Rows.Row(Rows.Found(Cache, Rows.Folder("a", 10))).Contents.SoleStep);
     }
 }

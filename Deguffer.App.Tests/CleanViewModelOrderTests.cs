@@ -55,7 +55,7 @@ public class CleanViewModelOrderTests
         eta.Steps = [Rows.Folder("e", 100)];
         page.Scan();
         var rows = page.ViewModel.Findings.ToList();
-        page.Row("e").IsSelected = false;
+        page.Row("e").SetTicked(false);
         Assert.True(page.Row("z").IsSelected);
         Assert.Equal(["z", "e", "m"], Ids(page.ViewModel.Findings));
         Assert.Equal(["z", "e"], Ids(page.ViewModel.Listed));

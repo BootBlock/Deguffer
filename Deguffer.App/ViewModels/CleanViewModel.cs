@@ -1063,7 +1063,7 @@ public sealed partial class CleanViewModel : ObservableObject
     /// never offer.
     /// </summary>
     private OrderedRow OrderedRowOf(FindingViewModel row) =>
-        new(row.Name, row.Finding.EstimatedBytes, row.Tier, _planner.PlaceOf(row.Finding.Provider));
+        new(row.Name, row.Finding.EstimatedBytes, row.Facts.Tier, _planner.PlaceOf(row.Finding.Provider));
 
     /// <summary>
     /// Each row's bar is drawn relative to the largest finding, so the biggest cause fills the bar

@@ -97,7 +97,7 @@ public class StorageSelectionTests
         page.Scan();
         var row = page.Row("cache");
         row.Steps[0].IsSelected = false;
-        page.Row("sdk").IsSelected = !all;
+        page.Row("sdk").SetTicked(!all);
 
         Run(menu => all ? menu.SelectAllCommand : menu.SelectRecommendedCommand, page);
 
@@ -127,11 +127,11 @@ public class StorageSelectionTests
 
         Assert.Equal("Clean 1 KB", Menu(page).CleanLabel);
 
-        page.Row("sdk").IsSelected = true;
-        page.Row("logs").IsSelected = true;
-        page.Row("cache").IsSelected = false;
-        page.Row("sdk").IsSelected = false;
-        page.Row("logs").IsSelected = false;
+        page.Row("sdk").SetTicked(true);
+        page.Row("logs").SetTicked(true);
+        page.Row("cache").SetTicked(false);
+        page.Row("sdk").SetTicked(false);
+        page.Row("logs").SetTicked(false);
 
         Assert.Equal(["Clean 2 KB", "Clean 3 KB", "Clean 2 KB", "Clean 1 KB", "Clean"], told);
     }
@@ -158,8 +158,8 @@ public class StorageSelectionTests
     public void SelectRecommendedPutsBackTheFirstScansSelection()
     {
         using var page = Scanned();
-        page.Row("cache").IsSelected = false;
-        page.Row("logs").IsSelected = true;
+        page.Row("cache").SetTicked(false);
+        page.Row("logs").SetTicked(true);
 
         Run(menu => menu.SelectRecommendedCommand, page);
 
@@ -212,7 +212,7 @@ public class StorageSelectionTests
         Run(menu => menu.SelectNoneCommand, page);
         Assert.False(Menu(page).SelectNoneCommand.CanExecute(null));
 
-        page.Row("cache").IsSelected = true;
+        page.Row("cache").SetTicked(true);
         Assert.True(Menu(page).SelectNoneCommand.CanExecute(null));
     }
 

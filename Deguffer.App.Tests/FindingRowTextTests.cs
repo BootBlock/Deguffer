@@ -8,8 +8,6 @@ public class FindingRowTextTests
     [Fact]
     public void TheItemCountReadsAsEnglishForOneAndForMany()
     {
-        Assert.Equal("1 item", new FindingRowText("npm", 1, awaitingSourceFolders: false).ItemsLinkLabel);
-        Assert.Equal("40 items", new FindingRowText("npm", 40, awaitingSourceFolders: false).ItemsLinkLabel);
         Assert.StartsWith("One item,", new FindingRowText("npm", 1, awaitingSourceFolders: false).ItemsSentence);
         Assert.StartsWith("40 items,", new FindingRowText("npm", 40, awaitingSourceFolders: false).ItemsSentence);
     }

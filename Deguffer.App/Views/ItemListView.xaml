@@ -135,20 +135,20 @@
             <!-- Tier is text on a tinted chip, never colour alone (§6.5), with its explanation on the
                  chip by pointer and by help text, as it is on the row. -->
             <ContentControl Grid.Column="2"
-                            Content="{x:Bind ViewModel.Row.TierLabel}"
-                            Style="{x:Bind ViewModel.Row.Tier, Converter={StaticResource TierChipStyle}}"
-                            ToolTipService.ToolTip="{x:Bind ViewModel.Row.TierExplanation}"
-                            AutomationProperties.Name="{x:Bind ViewModel.Row.TierLabel}"
-                            AutomationProperties.HelpText="{x:Bind ViewModel.Row.TierExplanation}" />
+                            Content="{x:Bind ViewModel.Row.Facts.TierLabel}"
+                            Style="{x:Bind ViewModel.Row.Facts.Tier, Converter={StaticResource TierChipStyle}}"
+                            ToolTipService.ToolTip="{x:Bind ViewModel.Row.Facts.TierExplanation}"
+                            AutomationProperties.Name="{x:Bind ViewModel.Row.Facts.TierLabel}"
+                            AutomationProperties.HelpText="{x:Bind ViewModel.Row.Facts.TierExplanation}" />
 
             <ContentControl Grid.Column="3"
                             HorizontalAlignment="Left"
-                            Content="{x:Bind ViewModel.Row.BasisLabel}"
-                            Visibility="{x:Bind ViewModel.Row.IsResearched}"
+                            Content="{x:Bind ViewModel.Row.Facts.BasisLabel}"
+                            Visibility="{x:Bind ViewModel.Row.Facts.IsResearched}"
                             Style="{StaticResource BasisChip}"
-                            ToolTipService.ToolTip="{x:Bind ViewModel.Row.BasisExplanation}"
-                            AutomationProperties.Name="{x:Bind ViewModel.Row.BasisLabel}"
-                            AutomationProperties.HelpText="{x:Bind ViewModel.Row.BasisExplanation}" />
+                            ToolTipService.ToolTip="{x:Bind ViewModel.Row.Facts.BasisExplanation}"
+                            AutomationProperties.Name="{x:Bind ViewModel.Row.Facts.BasisLabel}"
+                            AutomationProperties.HelpText="{x:Bind ViewModel.Row.Facts.BasisExplanation}" />
 
             <TextBlock Grid.Column="4"
                        Text="{x:Bind ViewModel.SelectionLabel, Mode=OneWay}"
@@ -161,7 +161,7 @@
              may be offered without what it costs being reachable from it. -->
         <TextBlock Grid.Row="1"
                    Padding="16,0"
-                   Text="{x:Bind ViewModel.Row.WhatHappensOnNextUse}"
+                   Text="{x:Bind ViewModel.Row.Facts.WhatHappensOnNextUse}"
                    Style="{StaticResource SecondaryText}" />
 
         <StackPanel Grid.Row="2" Padding="16,0" Spacing="4">

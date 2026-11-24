@@ -60,7 +60,7 @@
 
                     <StackPanel Spacing="{StaticResource LabelGap}">
                         <TextBlock Text="Application" Style="{StaticResource FieldLabel}" />
-                        <TextBlock Text="{x:Bind Finding.Description.Application}"
+                        <TextBlock Text="{x:Bind Finding.Facts.Description.Application}"
                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                    IsTextSelectionEnabled="True"
                                    TextWrapping="Wrap" />
@@ -70,7 +70,7 @@
                          cleaner near a directory is entitled to know whose directory it is. -->
                     <StackPanel Spacing="{StaticResource LabelGap}">
                         <TextBlock Text="Published by" Style="{StaticResource FieldLabel}" />
-                        <TextBlock Text="{x:Bind Finding.Description.Publisher}"
+                        <TextBlock Text="{x:Bind Finding.Facts.Description.Publisher}"
                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                    IsTextSelectionEnabled="True"
                                    TextWrapping="Wrap" />
@@ -78,7 +78,7 @@
 
                     <StackPanel Spacing="{StaticResource LabelGap}">
                         <TextBlock Text="What it is for" Style="{StaticResource FieldLabel}" />
-                        <TextBlock Text="{x:Bind Finding.Description.Purpose}"
+                        <TextBlock Text="{x:Bind Finding.Facts.Description.Purpose}"
                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                    IsTextSelectionEnabled="True"
                                    TextWrapping="Wrap" />
@@ -89,7 +89,7 @@
                          a real installation" is information too. -->
                     <StackPanel Spacing="{StaticResource LabelGap}">
                         <TextBlock Text="How Deguffer knows this" Style="{StaticResource FieldLabel}" />
-                        <TextBlock Text="{x:Bind Finding.BasisExplanation}"
+                        <TextBlock Text="{x:Bind Finding.Facts.BasisExplanation}"
                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                    IsTextSelectionEnabled="True"
                                    TextWrapping="Wrap" />
@@ -104,19 +104,19 @@
                              Tier is text on a tinted chip, never colour alone: the classification
                              must survive a flat background and a high-contrast theme (§6.5). -->
                         <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
-                            <ContentControl Content="{x:Bind Finding.TierLabel}"
-                                            Style="{x:Bind Finding.Tier, Converter={StaticResource TierChipStyle}}"
-                                            ToolTipService.ToolTip="{x:Bind Finding.TierExplanation}"
-                                            AutomationProperties.Name="{x:Bind Finding.TierLabel}"
-                                            AutomationProperties.HelpText="{x:Bind Finding.TierExplanation}" />
-                            <TextBlock Text="{x:Bind Finding.CleaningAdvice}"
+                            <ContentControl Content="{x:Bind Finding.Facts.TierLabel}"
+                                            Style="{x:Bind Finding.Facts.Tier, Converter={StaticResource TierChipStyle}}"
+                                            ToolTipService.ToolTip="{x:Bind Finding.Facts.TierExplanation}"
+                                            AutomationProperties.Name="{x:Bind Finding.Facts.TierLabel}"
+                                            AutomationProperties.HelpText="{x:Bind Finding.Facts.TierExplanation}" />
+                            <TextBlock Text="{x:Bind Finding.Facts.CleaningAdvice}"
                                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                        FontWeight="SemiBold"
                                        VerticalAlignment="Center"
                                        TextWrapping="Wrap" />
                         </StackPanel>
 
-                        <TextBlock Text="{x:Bind Finding.Description.Recommendation}"
+                        <TextBlock Text="{x:Bind Finding.Facts.Description.Recommendation}"
                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                    IsTextSelectionEnabled="True"
                                    TextWrapping="Wrap" />
@@ -129,7 +129,7 @@
                          reader is using, and a dialog is not that. -->
                     <StackPanel Spacing="{StaticResource LabelGap}">
                         <TextBlock Text="What it costs you" Style="{StaticResource FieldLabel}" />
-                        <TextBlock Text="{x:Bind Finding.WhatHappensOnNextUse}"
+                        <TextBlock Text="{x:Bind Finding.Facts.WhatHappensOnNextUse}"
                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                    IsTextSelectionEnabled="True"
                                    TextWrapping="Wrap" />
@@ -146,7 +146,7 @@
 
                     <!-- A row whose toolchain is absent has no plan at all, so this tab would
                          otherwise be a blank panel behind a tab that promised a list. -->
-                    <TextBlock Visibility="{x:Bind Finding.HasNoDetail, Mode=OneWay}"
+                    <TextBlock Visibility="{x:Bind Finding.Contents.HasNoDetail, Mode=OneWay}"
                                Style="{StaticResource SecondaryText}"
                                Text="There is nothing here for Deguffer to remove." />
 
@@ -162,16 +162,16 @@
                                 AutomationProperties.Name="{x:Bind Finding.Text.ItemsLinkName}" />
                     </StackPanel>
 
-                    <ContentControl Content="{x:Bind Finding.SoleStep, Mode=OneWay}"
+                    <ContentControl Content="{x:Bind Finding.Contents.SoleStep, Mode=OneWay}"
                                     ContentTemplate="{StaticResource PlanStep}"
-                                    Visibility="{x:Bind Finding.HasSoleStep, Mode=OneWay}"
+                                    Visibility="{x:Bind Finding.Contents.HasSoleStep, Mode=OneWay}"
                                     HorizontalContentAlignment="Stretch"
                                     IsTabStop="False" />
 
                     <!-- Bound rather than copied, because keeping or releasing an item changes the
                          notes, and a copy refreshed from an event goes stale whenever the dialog's
                          content is unloaded and reloaded around that event. -->
-                    <ItemsControl ItemsSource="{x:Bind Finding.Notes, Mode=OneWay}">
+                    <ItemsControl ItemsSource="{x:Bind Finding.Contents.Notes, Mode=OneWay}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="x:String">
                                 <TextBlock Text="{x:Bind}"

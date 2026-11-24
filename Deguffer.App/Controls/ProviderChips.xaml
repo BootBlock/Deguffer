@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+    A Storage row's chips: the basis of its provider's rules, where they come from research, and its
+    §3 tier. Tier is text on a tinted chip, never colour alone, so the classification survives a flat
+    background and a high-contrast theme (§6.5).
+
+    Two words name each and do not explain it, so the explanation the About page gives is on the chip
+    itself. A chip is not a tab stop, so a tooltip alone would leave a screen reader with the two
+    words: the same sentence is its help text.
+
+    The researched chip goes to the tier's left, so the tier chips stay in one straight column down
+    the list against the figures.
+-->
+<UserControl
+    x:Class="Deguffer.App.Controls.ProviderChips"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="False"
+    VerticalAlignment="Center">
+
+    <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
+        <ContentControl Content="{x:Bind Facts.BasisLabel, Mode=OneWay}"
+                        Visibility="{x:Bind Facts.IsResearched, Mode=OneWay}"
+                        Style="{StaticResource BasisChip}"
+                        VerticalAlignment="Center"
+                        ToolTipService.ToolTip="{x:Bind Facts.BasisExplanation, Mode=OneWay}"
+                        AutomationProperties.Name="{x:Bind Facts.BasisLabel, Mode=OneWay}"
+                        AutomationProperties.HelpText="{x:Bind Facts.BasisExplanation, Mode=OneWay}" />
+        <ContentControl Content="{x:Bind Facts.TierLabel, Mode=OneWay}"
+                        Style="{x:Bind Facts.Tier, Mode=OneWay, Converter={StaticResource TierChipStyle}}"
+                        VerticalAlignment="Center"
+                        ToolTipService.ToolTip="{x:Bind Facts.TierExplanation, Mode=OneWay}"
+                        AutomationProperties.Name="{x:Bind Facts.TierLabel, Mode=OneWay}"
+                        AutomationProperties.HelpText="{x:Bind Facts.TierExplanation, Mode=OneWay}" />
+    </StackPanel>
+</UserControl>
