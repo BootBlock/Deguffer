@@ -118,8 +118,9 @@
         <StackPanel Grid.Row="1" Spacing="{StaticResource LabelGap}">
             <TextBlock Text="{x:Bind ViewModel.Headline, Mode=OneWay}" TextWrapping="Wrap"
                        Style="{StaticResource SecondaryText}" />
-            <TextBlock TextWrapping="Wrap" Style="{StaticResource SecondaryText}"
-                       Text="What Windows starts when you sign in, from the places Task Manager lists. Disabling an entry records that it should not start, as Task Manager does, and leaves the entry itself alone. The memory beside each one is what its program holds now. A publisher comes from the program's own version information, or for a packaged app from its package." />
+            <controls:PageIntroduction Destination="Startup"
+                                       Text="What Windows starts when you sign in. Disabling an entry stops it starting, as Task Manager does, and leaves the entry alone."
+                                       Details="Entries come from the places Task Manager lists. Disabling one records that it should not start, and changes nothing else about it. The memory beside each one is what its program holds now. A publisher comes from the program's own version information, or for a packaged app from its package." />
         </StackPanel>
 
         <!-- A change's report, and its §5.6 checks on the surface the other pages use: what was

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+    What a page is for, under its header: one sentence in view, and the rest of the explanation one
+    activation away, as a settings row has it. A paragraph here is read once and then scrolled past
+    on every visit, taking the page's first lines with it.
+-->
+<UserControl
+    x:Class="Deguffer.App.Controls.PageIntroduction"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Deguffer.App.Controls"
+    IsTabStop="False">
+
+    <StackPanel>
+        <TextBlock Text="{x:Bind Text}" Style="{StaticResource SecondaryText}" />
+        <controls:ExplanationDisclosure Subject="{x:Bind Subject}" Text="{x:Bind Details}" />
+    </StackPanel>
+</UserControl>

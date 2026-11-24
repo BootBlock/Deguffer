@@ -53,7 +53,8 @@
 
             <views:SettingsRow Glyph="&#xE721;"
                                Title="How to scan"
-                               Description="Reading a volume's file table needs Deguffer to run as administrator on an NTFS volume. Auto walks folders while it reads the table and uses whichever answers first, and walks everywhere the table cannot be read. Walk folders only is slower on a large folder, and is the choice if you doubt what the file table says. File table first waits for the table instead, which may suit a spinning disk. None of them changes what is found.">
+                               Description="Whether a scan walks folders, reads the file table, or both. None of the choices changes what is found."
+                               Details="Reading a volume's file table needs Deguffer to run as administrator on an NTFS volume. Auto walks folders while it reads the table and uses whichever answers first, and walks everywhere the table cannot be read. Walk folders only is slower on a large folder, and is the choice if you doubt what the file table says. File table first waits for the table instead, which may suit a spinning disk.">
                 <views:SettingsRow.Control>
                     <ComboBox x:Name="RouteBox"
                               ItemsSource="{x:Bind Scanning.RouteNames}"
@@ -66,7 +67,7 @@
 
             <views:SettingsRow Glyph="&#xE950;"
                                Title="File table parse threads"
-                               Description="How many threads turn a volume's file table into folders and sizes, on every kind of drive. Used only when Deguffer runs as administrator. Empty the box to go back to Auto.">
+                               Description="Threads that turn a file table into folders and sizes, on every kind of drive. Administrator only. Empty the box for Auto.">
                 <views:SettingsRow.Control>
                     <NumberBox x:Name="TableParseThreadsBox"
                                Value="{x:Bind Scanning.TableParseThreads, Mode=TwoWay}"
@@ -88,7 +89,7 @@
                 <StackPanel Spacing="{StaticResource ControlGap}">
                     <views:SettingsRow Glyph="&#xEDA2;"
                                        Title="Kind of drive"
-                                       Description="Each kind of drive has its own values, because a value that suits one kind can slow another. The values below are for the kind chosen here.">
+                                       Description="Each kind of drive has its own values, as one that suits one kind can slow another. The values below are for the kind chosen.">
                         <views:SettingsRow.Control>
                             <ComboBox x:Name="KindBox"
                                       ItemsSource="{x:Bind Scanning.KindNames}"
@@ -122,7 +123,8 @@
 
                         <views:SettingsRow Glyph="&#xE8FD;"
                                            Title="Listing buffer"
-                                           Description="How much of a folder's list of contents Windows hands over in each call, on this kind of drive. A larger buffer means fewer calls, and each call costs the whole buffer however few entries the folder holds. Empty the box to go back to Auto.">
+                                           Description="How much of a folder's listing Windows hands over in each call on this kind of drive. Empty the box for Auto."
+                                           Details="A larger buffer means fewer calls, and each call costs the whole buffer however few entries the folder holds.">
                             <views:SettingsRow.Control>
                                 <NumberBox x:Name="ListingBufferBox"
                                            Value="{x:Bind Scanning.ListingBufferKiB, Mode=TwoWay}"
@@ -142,7 +144,7 @@
 
                         <views:SettingsRow Glyph="&#xE9F5;"
                                            Title="File table read size"
-                                           Description="How much of a volume's file table each read asks for, on this kind of drive. Used only when Deguffer runs as administrator. Empty the box to go back to Auto.">
+                                           Description="How much of a volume's file table each read asks for on this kind of drive. Administrator only. Empty the box for Auto.">
                             <views:SettingsRow.Control>
                                 <NumberBox x:Name="TableReadBox"
                                            Value="{x:Bind Scanning.TableReadKiB, Mode=TwoWay}"
@@ -162,7 +164,8 @@
 
                         <views:SettingsRow Glyph="&#xE9D5;"
                                            Title="File table reads at once"
-                                           Description="How many reads of a volume's file table wait on this kind of drive at the same time. Each read and each parse thread holds a buffer of the read size until the scan ends. Used only when Deguffer runs as administrator. Empty the box to go back to Auto.">
+                                           Description="How many file table reads wait at once on this kind of drive. Administrator only. Empty the box for Auto."
+                                           Details="Each read and each parse thread holds a buffer of the read size until the scan ends.">
                             <views:SettingsRow.Control>
                                 <NumberBox x:Name="TableReadsInFlightBox"
                                            Value="{x:Bind Scanning.TableReadsInFlight, Mode=TwoWay}"

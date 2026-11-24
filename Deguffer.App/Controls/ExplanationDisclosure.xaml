@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+    The rest of an explanation whose first sentence is already on screen: a quiet "More about this"
+    line that opens on a click, Enter or Space, and a screen reader announces as expanded or
+    collapsed. What it holds is a paragraph, and a list where the explanation is a run of names.
+
+    The Storage rows' quiet Expander resources, so a disclosure reads as a line of text and a
+    chevron there and here alike, rather than a filled box louder than the sentence above it.
+-->
+<UserControl
+    x:Class="Deguffer.App.Controls.ExplanationDisclosure"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Deguffer.App.Controls"
+    xmlns:views="using:Deguffer.App.Views"
+    IsTabStop="False">
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <views:RowDisclosures />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Expander HorizontalAlignment="Stretch"
+              HorizontalContentAlignment="Stretch"
+              Background="Transparent"
+              BorderThickness="0"
+              Padding="0"
+              AutomationProperties.Name="{x:Bind controls:ExplanationDisclosure.NameFor(Subject), Mode=OneWay}">
+        <Expander.Header>
+            <TextBlock Text="More about this" Style="{StaticResource Caption}" Margin="{StaticResource DisclosureBleed}" />
+        </Expander.Header>
+
+        <StackPanel Spacing="{StaticResource LabelGap}">
+            <TextBlock Text="{x:Bind Text, Mode=OneWay}"
+                       Style="{StaticResource SecondaryText}"
+                       IsTextSelectionEnabled="True" />
+
+            <!-- Columns rather than one long column, because a list of twenty names in a single
+                 column is the scroll the disclosure exists to save. -->
+            <ItemsRepeater ItemsSource="{x:Bind Items, Mode=OneWay}"
+                           Visibility="{x:Bind controls:ExplanationDisclosure.IsListed(Items), Mode=OneWay}">
+                <ItemsRepeater.Layout>
+                    <UniformGridLayout MinItemWidth="216"
+                                       MinColumnSpacing="{StaticResource RegionGap}"
+                                       MinRowSpacing="{StaticResource LabelGap}"
+                                       ItemsStretch="Fill" />
+                </ItemsRepeater.Layout>
+                <ItemsRepeater.ItemTemplate>
+                    <DataTemplate x:DataType="x:String">
+                        <Grid ColumnSpacing="{StaticResource ControlGap}" ColumnDefinitions="Auto,*">
+                            <!-- The bullet is drawn, not read: a screen reader hears each name once. -->
+                            <TextBlock Text="&#x2022;"
+                                       Style="{StaticResource SecondaryText}"
+                                       AutomationProperties.AccessibilityView="Raw" />
+                            <TextBlock Grid.Column="1"
+                                       Text="{x:Bind}"
+                                       Style="{StaticResource SecondaryText}" />
+                        </Grid>
+                    </DataTemplate>
+                </ItemsRepeater.ItemTemplate>
+            </ItemsRepeater>
+        </StackPanel>
+    </Expander>
+</UserControl>

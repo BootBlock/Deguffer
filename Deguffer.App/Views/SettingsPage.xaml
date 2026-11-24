@@ -55,7 +55,7 @@
                      back on screen, so it takes effect on the picture already drawn, with no rescan. -->
                 <views:SettingsRow Glyph="&#xE80A;"
                                    Title="Treemap spacing"
-                                   Description="How much room a treemap leaves round each folder, with the folder's name across its top. More room makes folders easier to tell apart and leaves less for what is in them.">
+                                   Description="Room a treemap leaves round each folder and its name. More makes folders easier to tell apart and leaves less for their contents.">
                     <views:SettingsRow.Control>
                         <ComboBox SelectedIndex="{x:Bind ViewModel.TreemapSpacingIndex, Mode=TwoWay}"
                                   MinWidth="150"
@@ -72,11 +72,12 @@
                 <controls:MapPreview x:Name="SpacingPreview" Height="180" />
 
                 <!-- A clear location offers no decision, so it is hidden by default. Presentation only:
-                     every location is still scanned. The description names the rows it never hides,
+                     every location is still scanned. Its explanation names the rows it never hides,
                      because six others measure zero without being clear at all. -->
                 <views:SettingsRow Glyph="&#xE71C;"
                                    Title="Show items that are already clear"
-                                   Description="A location Deguffer has nothing left to reclaim from is hidden by default, as it offers nothing to decide. Switch this on to list them as well. Rows that could not be read, ones Deguffer did not look at, ones whose files are all too recent to touch, ones whose contents Windows would not let Deguffer remove, ones holding only items on your keep list, and ones holding only Outlook data files are always listed.">
+                                   Description="List locations Deguffer has nothing left to reclaim from. They are hidden by default, as they offer nothing to decide."
+                                   Details="Some rows are listed whatever this is set to: one that could not be read, one Deguffer did not look at, and one whose files are all too recent to touch, that Windows would not let Deguffer remove, on your keep list, or Outlook data files.">
                     <views:SettingsRow.Control>
                         <ToggleSwitch IsOn="{x:Bind ViewModel.ShowAlreadyClear, Mode=TwoWay}"
                                       AutomationProperties.Name="Show items that are already clear" />
@@ -113,7 +114,8 @@
                      setting. -->
                 <views:SettingsRow Glyph="&#xE765;"
                                    Title="Type a name to delete user data"
-                                   Description="Logs, histories and Recycle Bins are user data, and removing them is permanent. Ask for the item's name to be typed out before deleting it. When this is off, they are covered by Confirm before cleaning instead.">
+                                   Description="Ask for an item's name to be typed before deleting a log, history or Recycle Bin. When off, Confirm before cleaning covers them."
+                                   Details="Logs, histories and Recycle Bins are user data, and removing them is permanent.">
                     <views:SettingsRow.Control>
                         <ToggleSwitch IsOn="{x:Bind ViewModel.RequireTypedConfirmation, Mode=TwoWay}"
                                       AutomationProperties.Name="Type a name to delete user data" />
@@ -128,7 +130,8 @@
                      what it removes — a guard whose gap is unstated is worse than no guard. -->
                 <views:SettingsRow Glyph="&#xE81C;"
                                    Title="Leave recently changed files alone"
-                                   Description="A file written in the last few hours may still be in use, and nothing else about it says so. Set how many hours to leave such files alone, or 0 for none. A tool that clears its own cache is not covered: it decides for itself what it removes.">
+                                   Description="Leave files changed in the last few hours alone, as they may be in use. Set 0 for none. A tool's own clean is not covered."
+                                   Details="A file written in the last few hours may still be in use, and nothing else about it says so. A tool that clears its own cache decides for itself what it removes, so this cannot hold its files back.">
                     <views:SettingsRow.Control>
                         <NumberBox Value="{x:Bind ViewModel.KeepFilesChangedWithinHours, Mode=TwoWay}"
                                    Minimum="0"
@@ -149,7 +152,8 @@
                      Storage Sense apply. See AppPreferences.MinimumTemporaryFileAgeDays. -->
                 <views:SettingsRow Glyph="&#xE7B8;"
                                    Title="Only offer temporary files older than"
-                                   Description="Windows and every program on it leave scratch files in the temporary folders and are meant to clear up afterwards. Set how long something must sit untouched before Deguffer offers it. Set 0 for no age limit, which offers everything however recently it was written — a file a program wrote seconds ago and still expects to find is then included, and age is the only thing that would have told them apart. Anything a running program is working in, or holds open, is left alone whatever this is set to.">
+                                   Description="How long a temporary file must sit untouched before it is offered. 0 also offers files a program wrote seconds ago and still needs."
+                                   Details="Windows and every program on it leave scratch files in the temporary folders and are meant to clear up afterwards. With no age limit, nothing tells a file a program still expects to find from one it abandoned, as age is the only sign. Anything a running program is working in, or holds open, is left alone whatever this is set to.">
                     <views:SettingsRow.Control>
                         <NumberBox Value="{x:Bind ViewModel.MinimumTemporaryFileAge, Mode=TwoWay}"
                                    Minimum="{x:Bind ViewModel.MinimumTemporaryFileAgeDays}"
@@ -174,7 +178,8 @@
                      anything the user has since moved or deleted. -->
                 <views:SettingsRow Glyph="&#xE777;"
                                    Title="Keep File History versions for"
-                                   Description="File History saves a copy of every protected file each time it changes, and is set never to delete an old one. Set how old a saved version has to be before Windows may drop it. Windows always keeps the newest copy of a file it is still protecting; everything older than this that it has superseded is gone for good.">
+                                   Description="How old a saved File History version must be before Windows may drop it. A version it drops is gone for good."
+                                   Details="File History saves a copy of every protected file each time it changes, and is set never to delete an old one. Windows always keeps the newest copy of a file it is still protecting. A superseded version older than this is removed.">
                     <views:SettingsRow.Control>
                         <NumberBox Value="{x:Bind ViewModel.FileHistoryRetentionDays, Mode=TwoWay}"
                                    Minimum="{x:Bind ViewModel.MinimumFileHistoryRetentionDays}"
@@ -198,7 +203,9 @@
                      feature: it is Deguffer having nowhere it is allowed to look. -->
                 <views:SettingsRow Glyph="&#xE8B7;"
                                    Title="Where to look for build output"
-                                   Description="Deguffer looks inside these folders and nowhere else for build output it can recognise: .NET obj, the caches in a Visual Studio solution's .vs folder, Unity Library, an Unreal project's Intermediate and DerivedDataCache, Rust target, node_modules and Python virtual environments. It also offers the old file versions Git LFS keeps in the Git repositories there, through Git LFS's own prune. Nothing outside them is ever offered, even when it is plainly build output, and a project something is using is left alone. A folder does not have to hold your own code: a machine-learning or image-generation application installs outside your code folders, and the Python virtual environment it builds there is usually the largest one on the machine, so add that application's folder too if you want it considered.">
+                                   Description="Deguffer looks for build output only inside these folders. Nothing outside them is offered, even when it is plainly build output."
+                                   Details="A project something is using is left alone. A folder does not have to hold your own code: a machine-learning or image-generation application installs outside your code folders, and the Python virtual environment it builds there is usually the largest one on the machine, so add that application's folder too if you want it considered. Git LFS's old file versions are removed through Git LFS's own prune. Inside these folders, Deguffer looks for:"
+                                   DetailItems="{x:Bind configuration:DeclaredFolderSearch.InSourceFolders}">
                     <views:SettingsRow.Control>
                         <Button Content="Add folder…"
                                 Click="OnAddSourceRoot"
@@ -265,7 +272,9 @@
                 <views:SettingsRow Margin="{StaticResource RegionGapAbove}"
                                    Glyph="&#xE7FC;"
                                    Title="Where your emulators are installed"
-                                   Description="Deguffer finds Cemu, Dolphin, PCSX2, DuckStation, PPSSPP, Ryujinx, Eden, Citron, yuzu, Azahar, Lime3DS and Citra where each keeps its data by default, and RetroArch where Steam installed it. Add the folder of a portable install here, and the folder of every RPCS3 and Vita3K install and any other RetroArch, which keep everything beside the program. Deguffer looks in each folder only for the emulator's own settings file or program, or the file that names PPSSPP's memory stick, and removes only the caches the emulator compiled and RetroArch's downloads, never saves, memory cards, firmware or games.">
+                                   Description="Add the folder of a portable emulator, or of an RPCS3, Vita3K or RetroArch install Deguffer cannot find by itself."
+                                   Details="Deguffer finds most emulators where each keeps its data by default, and RetroArch where Steam installed it. RPCS3, Vita3K, any other RetroArch and every portable install keep everything beside the program, so only a folder added here finds them. Deguffer looks in each folder only for the emulator's own settings file or program, or the file that names PPSSPP's memory stick. It removes only the caches the emulator compiled and RetroArch's downloads, never saves, memory cards, firmware or games. The emulators Deguffer knows:"
+                                   DetailItems="{x:Bind configuration:DeclaredFolderSearch.Emulators}">
                     <views:SettingsRow.Control>
                         <Button Content="Add folder…"
                                 Click="OnAddEmulatorFolder"
@@ -317,7 +326,8 @@
                 <views:SettingsRow Margin="{StaticResource RegionGapAbove}"
                                    Glyph="&#xE718;"
                                    Title="Items Deguffer never offers"
-                                   Description="Keep an item from its row's list of items on the Storage page. Deguffer leaves a kept item out of every clean, and every clean checks that it is still there. Only items Deguffer can recognise wherever they are stored can be kept: a browser build, a downloaded tooling release, or an application version the updater replaced." />
+                                   Description="Items you keep from a row's list on the Storage page. Deguffer leaves them out of every clean, and checks each is still there."
+                                   Details="Only items Deguffer can recognise wherever they are stored can be kept: a browser build, a downloaded tooling release, or an application version the updater replaced." />
 
                 <InfoBar IsOpen="{x:Bind ViewModel.KeepListUnreadable}"
                          IsClosable="False"
@@ -380,7 +390,8 @@
 
                 <views:SettingsRow Glyph="&#xE823;"
                                    Title="Summaries of earlier scans"
-                                   Description="After each scan of a whole drive, Explore keeps the sizes of its largest folders and how full the drive was, on this computer only, so the next scan can show what grew. The latest 20 of each drive are kept.">
+                                   Description="After each scan of a whole drive, Explore keeps the sizes of its largest folders, so the next scan can show what grew."
+                                   Details="It also keeps how full the drive was. Summaries are kept on this computer only, and the latest 20 of each drive are kept.">
                     <views:SettingsRow.Control>
                         <Button Content="Remove all"
                                 Click="OnRemoveAllScanSummaries"
@@ -435,7 +446,8 @@
 
                 <views:SettingsRow Glyph="&#xE9D2;"
                                    Title="Size of each Storage location"
-                                   Description="{x:Bind viewModels:SizeHistorySettingsViewModel.Description}">
+                                   Description="{x:Bind viewModels:SizeHistorySettingsViewModel.Description}"
+                                   Details="{x:Bind viewModels:SizeHistorySettingsViewModel.Details}">
                     <views:SettingsRow.Control>
                         <Button Content="Remove"
                                 Click="OnRemoveSizeHistory"
@@ -455,7 +467,8 @@
                      AppPreferences.EmptyRecycleBinsDirectly. -->
                 <views:SettingsRow Glyph="&#xE74D;"
                                    Title="Empty Recycle Bins without Windows"
-                                   Description="Deguffer normally asks Windows to empty a Recycle Bin, so an open Recycle Bin window and the desktop icon update straight away. That call is slow on a full bin, and slower the more it holds. Switch this on to remove the files directly instead, which is much faster but leaves Windows to notice in its own time. The same folder is emptied either way, and other accounts' bins are untouched by both. Leaving recently changed files alone always uses the direct route, as Windows cannot empty a bin partially.">
+                                   Description="Remove a Recycle Bin's files directly rather than through Windows. Much faster on a full bin, but Windows notices in its own time."
+                                   Details="Deguffer normally asks Windows to empty a Recycle Bin, so an open Recycle Bin window and the desktop icon update straight away. That call is slow on a full bin, and slower the more it holds. The same folder is emptied either way, and other accounts' bins are untouched by both. Leaving recently changed files alone always uses the direct route, as Windows cannot empty a bin partially.">
                     <views:SettingsRow.Control>
                         <ToggleSwitch IsOn="{x:Bind ViewModel.EmptyRecycleBinsDirectly, Mode=TwoWay}"
                                       AutomationProperties.Name="Empty Recycle Bins without Windows" />

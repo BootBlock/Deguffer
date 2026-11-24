@@ -86,8 +86,9 @@
         <StackPanel Grid.Row="1" Spacing="{StaticResource LabelGap}">
             <TextBlock Text="{x:Bind ViewModel.Headline, Mode=OneWay}" TextWrapping="Wrap"
                        Style="{StaticResource SecondaryText}" AutomationProperties.LiveSetting="Polite" />
-            <TextBlock TextWrapping="Wrap" Style="{StaticResource SecondaryText}"
-                       Text="What each drive reports about its own condition, in plain words. Deguffer only reads this and changes nothing on the drive. Drives can fail without any warning, so keep backups whatever this page says." />
+            <controls:PageIntroduction Destination="Health"
+                                       Text="What each drive reports about its own condition. Drives can fail without any warning, so keep backups whatever this page says."
+                                       Details="Each report is put in plain words. Deguffer only reads what a drive reports, and changes nothing on the drive." />
         </StackPanel>
 
         <!-- Not closable: closing it would hide the only reason the button is there, and a read of

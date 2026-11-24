@@ -96,6 +96,9 @@
                 sets rows that answer to the row above them, such as the values a picker governs,
                 in from it, so they read as its and not as settings of their own. Expander row padding
                 is a settings row's height inside an expander's header, which brings its own side inset.
+                Disclosure bleed undoes the inset an Expander's header template gives its content, which
+                the template reads as a static resource no local override reaches, so a quiet disclosure's
+                words start on the line the text above them starts on.
             -->
             <x:Double x:Key="LabelGap">4</x:Double>
             <x:Double x:Key="ControlGap">8</x:Double>
@@ -110,6 +113,7 @@
             <Thickness x:Key="PagePadding">28,8,28,20</Thickness>
             <Thickness x:Key="PageNoticeMargin">28,8,28,0</Thickness>
             <Thickness x:Key="PageBleed">-28,0,-28,-20</Thickness>
+            <Thickness x:Key="DisclosureBleed">-16,0,0,0</Thickness>
 
             <!--
                 The optical corrections, the only values off the grid, each named for the reason it
