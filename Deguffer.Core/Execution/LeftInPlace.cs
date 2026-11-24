@@ -50,6 +50,7 @@ internal static class LeftInPlace
     /// <para>Apart from the joined form because a finished clean lists them a line each under the row
     /// they belong to (<see cref="RunRow"/>), and two wordings of the same cause would drift.</para>
     /// </summary>
+    /// <param name="unreleased">What Windows kept that was measured but not counted. See <see cref="StepOutcome.Unreleased"/>.</param>
     public static IReadOnlyList<string> Each(
         Refusals refused,
         FolderRefusals folders,
@@ -57,9 +58,10 @@ internal static class LeftInPlace
         int spared = 0,
         int mailStores = 0,
         int userWork = 0,
-        int unlisted = 0)
+        int unlisted = 0,
+        long unreleased = 0)
     {
-        var clauses = new List<string>(9);
+        var clauses = new List<string>(10);
 
         if (refused.InUse.Files > 0)
         {
@@ -69,6 +71,11 @@ internal static class LeftInPlace
         if (refused.Denied.Files > 0)
         {
             clauses.Add($"{Files(refused.Denied)} left in place because Windows would not let Deguffer remove {Them(refused.Denied.Files)}");
+        }
+
+        if (unreleased > 0)
+        {
+            clauses.Add($"{FreeSpace.Format(unreleased)} left in place because Windows would not release it");
         }
 
         if (folders.InUse > 0)

@@ -16,8 +16,6 @@ namespace Deguffer.Core.Execution;
 /// </param>
 public sealed record RunRows(IReadOnlyList<RunRow> Rows, string Heading, string Note)
 {
-    public static readonly RunRows None = new([], string.Empty, string.Empty);
-
     public static RunRows For(IReadOnlyList<CleanupResult> results)
     {
         ArgumentNullException.ThrowIfNull(results);

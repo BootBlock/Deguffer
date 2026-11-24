@@ -78,8 +78,8 @@ public sealed class TemporaryUserWorkTests : IDisposable
         Assert.True(File.Exists(code), "an unsaved sketch was removed");
         Assert.False(File.Exists(build), "ordinary scratch beside the sketch was kept");
         Assert.Equal(1024, result.BytesReclaimed);
-        Assert.Equal(1, result.UserWorkCount);
-        Assert.Equal(0, result.SparedCount);
+        Assert.Equal(1, result.Steps.Sum(step => step.UserWork));
+        Assert.Equal(0, result.Steps.Sum(step => step.Spared));
         Assert.Contains("never saved", Assert.Single(result.Steps).Message, StringComparison.Ordinal);
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
@@ -156,8 +156,8 @@ public sealed class TemporaryUserWorkTests : IDisposable
 
         Assert.True(File.Exists(code), "a sketch begun after the preview was removed");
         Assert.Equal(1024, result.BytesReclaimed);
-        Assert.Equal(1, result.UserWorkCount);
-        Assert.Equal(0, result.SparedCount);
+        Assert.Equal(1, result.Steps.Sum(step => step.UserWork));
+        Assert.Equal(0, result.Steps.Sum(step => step.Spared));
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
@@ -251,8 +251,8 @@ public sealed class TemporaryUserWorkTests : IDisposable
 
         var result = await provider.ExecuteAsync(plan);
 
-        Assert.Equal(1, result.UserWorkCount);
-        Assert.Equal(0, result.SparedCount);
+        Assert.Equal(1, result.Steps.Sum(step => step.UserWork));
+        Assert.Equal(0, result.Steps.Sum(step => step.Spared));
         Assert.Contains(RunRow.Of(result).LeftBehind, said => said.Contains("never saved", StringComparison.Ordinal));
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
@@ -288,7 +288,7 @@ public sealed class TemporaryUserWorkTests : IDisposable
         Assert.True(File.Exists(hidden), "Krita's hidden autosave was removed");
         Assert.False(File.Exists(other), "a .kra file that is not Krita's unsaved autosave was kept");
         Assert.Equal(1024, result.BytesReclaimed);
-        Assert.Equal(2, result.UserWorkCount);
+        Assert.Equal(2, result.Steps.Sum(step => step.UserWork));
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
@@ -327,7 +327,7 @@ public sealed class TemporaryUserWorkTests : IDisposable
 
         Assert.True(File.Exists(autosave), "an autosave written after the preview was removed");
         Assert.Equal(1024, result.BytesReclaimed);
-        Assert.Equal(1, result.UserWorkCount);
+        Assert.Equal(1, result.Steps.Sum(step => step.UserWork));
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
@@ -371,7 +371,7 @@ public sealed class TemporaryUserWorkTests : IDisposable
         var result = await provider.ExecuteAsync(plan);
 
         Assert.All([quit, autosave, unnamed], kept => Assert.True(File.Exists(kept), $"{kept} was removed"));
-        Assert.Equal(3, result.UserWorkCount);
+        Assert.Equal(3, result.Steps.Sum(step => step.UserWork));
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 

@@ -134,8 +134,7 @@ public sealed partial class RunResultViewModel : ObservableObject
         IsDetailsOpen = outcome.NeedsReporting;
         Diagnostics = diagnostics;
 
-        // Written over rather than emptied and filled, so a second run that meets the same checks or
-        // the same rows leaves them alone instead of taking them down and putting them back up.
+        // Filled where they stand, so the page's bindings keep the collections they were given.
         LiveList.Rewrite(Checks, figures.Checks);
         OnPropertyChanged(nameof(HasChecks));
 

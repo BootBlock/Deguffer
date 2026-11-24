@@ -42,8 +42,8 @@ public enum RunVerdict
 /// able to contradict it.</para>
 ///
 /// <para>Nor does it say what the run left behind. That belongs to the location that left it, and
-/// <see cref="RunRows"/> lists it a line per location under this sentence. Folded into one paragraph
-/// here, nine causes across eight rows named neither the row nor what to do about it.</para>
+/// <see cref="RunRows"/> lists it a line per location under this sentence: one paragraph for the run
+/// can name neither the row nor what to do about it.</para>
 /// </summary>
 /// <param name="Statement">The sentence, always non-empty: a run that verified cleanly still says so.</param>
 /// <param name="Verdict">Which of the things above happened.</param>
@@ -103,8 +103,7 @@ public sealed record RunOutcome(string Statement, RunVerdict Verdict, bool Cance
 
             // Both grammatical forms written out, for the reason LiveTreeVeto's note records: a
             // sentence that reads correctly only on a machine with more than one of something is
-            // what driving the real window is for. The "(s)" shorthand the counts below use does
-            // not stretch to a clause that also has to agree in "it" and "them".
+            // what driving the real window is for.
             //
             // Nothing about the folder holding the path, and nothing about when it went. A path whose
             // folder went too, and one a running program removed from a folder the run emptied around

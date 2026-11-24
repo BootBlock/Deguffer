@@ -2,6 +2,7 @@ using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
@@ -1007,10 +1008,17 @@ public sealed class RecycleBinProviderTests : IDisposable
 
         Assert.Equal(2, Assert.Single(plan.Steps).Estimated.Entries);
 
-        var step = Assert.Single((await provider.ExecuteAsync(plan)).Steps);
+        var result = await provider.ExecuteAsync(plan);
+        var step = Assert.Single(result.Steps);
 
         Assert.True(File.Exists(Path.Combine(mine, "$IA1B2C3.txt")));
         Assert.Equal(1, step.EntriesRemoved);
+
+        // What stayed is measured, not counted, and it reaches the bin's line under the clean's verdict.
+        Assert.True(step.Unreleased > 0);
+        Assert.Contains(
+            $"{FreeSpace.Format(step.Unreleased)} left in place because Windows would not release it.",
+            RunRow.Of(result).LeftBehind);
     }
 
     /// <summary>
@@ -1035,6 +1043,7 @@ public sealed class RecycleBinProviderTests : IDisposable
 
         Assert.False(step.Succeeded);
         Assert.Equal(0, step.BytesReclaimed);
+        Assert.Equal(0, step.Unreleased);
         Assert.DoesNotContain("held nothing", step.Message, StringComparison.Ordinal);
         Assert.Contains("still holds", step.Message, StringComparison.Ordinal);
         Assert.NotEmpty(Directory.EnumerateFileSystemEntries(mine));

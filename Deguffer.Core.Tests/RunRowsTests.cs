@@ -4,10 +4,8 @@ using Deguffer.Core.Scanning;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// The line each location gets under a finished clean's verdict (issue #858). Before it, the result
-/// card stated one total and joined everything the run left behind into one paragraph that named
-/// neither the row nor what to do, so a user who cleaned eight rows could not tell whether the large
-/// one worked.
+/// The line each location gets under a finished clean's verdict (issue #858). A total, or one paragraph
+/// for the whole run, cannot tell a user who cleaned eight rows whether the large one worked.
 /// </summary>
 public sealed class RunRowsTests
 {
@@ -117,6 +115,21 @@ public sealed class RunRowsTests
                 "1 Outlook data file left alone, because Deguffer never removes one.",
             ],
             RunRow.Of(Result("Temporary files", step)).LeftBehind);
+    }
+
+    /// <summary>
+    /// What a step measured staying but could not count, as the Recycle Bin does after Windows empties
+    /// it, is stated with its size on the row and counts as something the row left behind.
+    /// </summary>
+    [Fact]
+    public void StatesWhatWasMeasuredStayingButNotCounted()
+    {
+        var rows = RunRows.For([Result("Recycle Bin", Removed(Gigabyte) with { Unreleased = 3 * Megabyte })]);
+
+        Assert.Equal(
+            [$"{FreeSpace.Format(3 * Megabyte)} left in place because Windows would not release it."],
+            rows.Rows[0].LeftBehind);
+        Assert.Equal("What the location removed, and what it left behind", rows.Heading);
     }
 
     /// <summary>

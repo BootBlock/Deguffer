@@ -134,9 +134,8 @@ public sealed class RunOutcomeTests
     }
 
     /// <summary>
-    /// Issue #858: what the run left behind belongs to the location that left it. Joined into this
-    /// sentence it named neither the row nor the program, so the sentence states the verdict and
-    /// nothing else, and <see cref="RunRows"/> lists the rest a line per location.
+    /// Issue #858: what the run left behind belongs to the location that left it. The sentence states
+    /// the verdict and nothing else, and <see cref="RunRows"/> lists the rest a line per location.
     /// </summary>
     [Fact]
     public void LeavesWhatWasLeftBehindToTheRowsThatLeftIt()

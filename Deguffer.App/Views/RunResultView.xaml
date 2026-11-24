@@ -29,7 +29,10 @@
     </UserControl.Resources>
 
     <StackPanel Spacing="{StaticResource ControlGap}">
+        <!-- A heading whichever style the verdict takes, so a failure is in the heading list as
+             surely as a clean run is. -->
         <TextBlock Text="{x:Bind Result.Statement, Mode=OneWay}"
+                   AutomationProperties.HeadingLevel="Level3"
                    Style="{x:Bind Result.VerificationFailed, Mode=OneWay, Converter={StaticResource RunStatementStyle}, ConverterParameter=GroupHeading}" />
 
         <Expander x:Name="RunDetails"

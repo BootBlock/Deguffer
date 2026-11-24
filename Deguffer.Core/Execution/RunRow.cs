@@ -78,7 +78,7 @@ public sealed record RunRow(string Name, string Removed, IReadOnlyList<string> L
             told.Add("The clean was cancelled before this location finished.");
         }
 
-        var counted = result.Steps.Where(step => !SaysWhy(step)).ToList();
+        var counted = result.Steps.Where(step => WhyItFailed(step) is null).ToList();
 
         told.AddRange(
             LeftInPlace.Each(
@@ -88,16 +88,20 @@ public sealed record RunRow(string Name, string Removed, IReadOnlyList<string> L
                     counted.Sum(step => step.Spared),
                     counted.Sum(step => step.MailStores),
                     counted.Sum(step => step.UserWork),
-                    counted.Sum(step => step.Unlisted))
+                    counted.Sum(step => step.Unlisted),
+                    counted.Sum(step => step.Unreleased))
                 .Select(clause => clause + "."));
 
-        told.AddRange(result.Steps.Where(SaysWhy).Select(step => step.Message!).Distinct(StringComparer.Ordinal));
+        told.AddRange(result.Steps.Select(WhyItFailed).OfType<string>().Distinct(StringComparer.Ordinal));
 
         return told;
     }
 
-    private static bool SaysWhy(StepOutcome step) =>
-        step is { Succeeded: false, Message.Length: > 0, Unlisted: 0 }
+    /// <summary>The sentence a failed step gives for itself, or null where its counts describe it instead.</summary>
+    private static string? WhyItFailed(StepOutcome step) =>
+        step is { Succeeded: false, Message: { Length: > 0 } why, Unlisted: 0 }
         && step.Refused.IsEmpty
-        && step.RefusedFolders.IsEmpty;
+        && step.RefusedFolders.IsEmpty
+            ? why
+            : null;
 }

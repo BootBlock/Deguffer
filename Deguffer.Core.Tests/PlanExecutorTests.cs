@@ -104,7 +104,7 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.True(File.Exists(target), "a file was deleted through a link");
         Assert.Equal("Left alone: it changed too recently.", step.Message);
         Assert.Equal(1, step.Kept);
-        Assert.Equal(1, result.KeptCount);
+        Assert.Equal(1, result.Steps.Sum(step => step.Kept));
     }
 
     /// <summary>
@@ -156,7 +156,7 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.True(File.Exists(archive), "an Outlook data file was deleted");
         Assert.True(step.Succeeded);
         Assert.Equal(1, step.MailStores);
-        Assert.Equal(1, result.MailStoreCount);
+        Assert.Equal(1, result.Steps.Sum(step => step.MailStores));
         Assert.Equal(1024, step.BytesReclaimed);
         Assert.Contains("1 Outlook data file left alone", step.Message!, StringComparison.Ordinal);
         Assert.DoesNotContain("changed recently", step.Message!, StringComparison.Ordinal);
@@ -1230,7 +1230,7 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.True(step.Succeeded);
         Assert.Equal(1, step.Kept);
         Assert.Equal(0, step.BytesReclaimed);
-        Assert.Equal(1, result.KeptCount);
+        Assert.Equal(1, result.Steps.Sum(step => step.Kept));
         Assert.Contains("changed too recently", step.Message!, StringComparison.Ordinal);
         Assert.True(Directory.Exists(cache), "the guard kept a file and the folder around it went");
     }
@@ -1283,7 +1283,7 @@ public sealed class PlanExecutorTests : IDisposable
         var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog)
             .ExecuteAsync(plan, runReach: null, residue: null, activity: null, progress: null, underway: null, ct: CancellationToken.None);
 
-        Assert.Equal(0, result.KeptCount);
+        Assert.Equal(0, result.Steps.Sum(step => step.Kept));
         Assert.Equal(4096, result.BytesReclaimed);
         Assert.False(Directory.Exists(cache));
     }

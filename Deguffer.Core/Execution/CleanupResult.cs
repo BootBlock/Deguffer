@@ -57,6 +57,12 @@ namespace Deguffer.Core.Execution;
 /// Folders Windows would not let the step's removal list, which are still there with whatever they
 /// hold. See <see cref="RemovalOutcome.Unlisted"/>.
 /// </param>
+/// <param name="Unreleased">
+/// What Windows kept in place that the step measured but could not count: the Recycle Bin is read
+/// again after Windows empties it, and the reading gives the bytes still there and nothing about
+/// which files or why. Apart from <paramref name="Refused"/>, which counts files by the reason each
+/// one gave.
+/// </param>
 public sealed record StepOutcome(
     string Description,
     bool Succeeded,
@@ -72,7 +78,8 @@ public sealed record StepOutcome(
     long BytesScheduled = 0,
     bool Interrupted = false,
     int UserWork = 0,
-    int Unlisted = 0)
+    int Unlisted = 0,
+    long Unreleased = 0)
 {
     /// <summary>
     /// How long the step took, and on what. Set by <see cref="PlanExecutor"/> once the step has its
@@ -125,21 +132,6 @@ public sealed record CleanupResult
     /// <summary>Folders Windows would not remove for a reason of their own, by reason.</summary>
     public FolderRefusals RefusedFolders =>
         Steps.Aggregate(FolderRefusals.None, (total, step) => total + step.RefusedFolders);
-
-    /// <summary>Files left alone because they had been touched inside the user's guard window.</summary>
-    public int KeptCount => Steps.Sum(s => s.Kept);
-
-    /// <summary>Entries left alone because something was found to be using them (§5.3).</summary>
-    public int SparedCount => Steps.Sum(s => s.Spared);
-
-    /// <summary>Entries left alone because they hold somebody's work. See <see cref="StepOutcome.UserWork"/>.</summary>
-    public int UserWorkCount => Steps.Sum(s => s.UserWork);
-
-    /// <summary>Folders Windows would not let a removal list. See <see cref="StepOutcome.Unlisted"/>.</summary>
-    public int UnlistedCount => Steps.Sum(s => s.Unlisted);
-
-    /// <summary>Outlook mail stores left where they were. See <see cref="StepOutcome.MailStores"/>.</summary>
-    public int MailStoreCount => Steps.Sum(s => s.MailStores);
 
     public bool Succeeded => Steps.All(s => s.Succeeded);
 }

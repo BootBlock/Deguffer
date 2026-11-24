@@ -4,8 +4,8 @@ using Deguffer.Core.Scanning;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// §7's free space before and after a clean, stated from two readings of the volume (issue #858). The
-/// hero figure used to be replaced by the new free space, which left the user to remember the old one.
+/// §7's free space before and after a clean, stated from two readings of the volume (issue #858), so the
+/// user never has to remember the figure they started from.
 /// </summary>
 public sealed class FreeSpaceMoveTests
 {

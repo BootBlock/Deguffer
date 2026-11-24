@@ -118,7 +118,7 @@ public sealed class UnlistedRemovalTests : IDisposable
 
         Assert.True(step.Succeeded);
         Assert.Equal(1, step.Unlisted);
-        Assert.Equal(1, result.UnlistedCount);
+        Assert.Equal(1, result.Steps.Sum(step => step.Unlisted));
         Assert.Equal(
             "Cleared, 1 folder left in place because Windows would not let Deguffer look inside it.",
             step.Message);
