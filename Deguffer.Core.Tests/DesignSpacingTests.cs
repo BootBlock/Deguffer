@@ -23,7 +23,8 @@ public sealed class DesignSpacingTests
 
     /// <summary>
     /// The resources allowed off the grid, each an optical correction that sets what is inside an
-    /// on-grid box against a glyph, a line of text or a baseline.
+    /// on-grid box against a glyph, a line of text or a baseline, or a value a re-templated control
+    /// keeps from the SDK's own template so it draws as the stock control does.
     /// </summary>
     private static readonly IReadOnlyDictionary<string, string> OpticalCorrections = new Dictionary<string, string>(StringComparer.Ordinal)
     {
@@ -33,6 +34,7 @@ public sealed class DesignSpacingTests
         ["FirstLineOffset"] = "sets a glyph or check box level with the first line of wrapping text",
         ["HeroFigureBaselineOffset"] = "lifts Body text onto a HeroFigure's baseline",
         ["FigureBaselineOffset"] = "lifts Body text onto a Figure's baseline",
+        ["ToggleSwitchAreaInset"] = "the SDK's own inset of a toggle switch's plate, so the settings switch draws as the stock one",
     };
 
     [Fact]

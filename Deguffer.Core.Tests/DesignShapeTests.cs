@@ -29,7 +29,7 @@ public sealed partial class DesignShapeTests
             .Where(pair => pair.problem is not null)
             .Select(pair => file.At(pair.element, $"<{pair.element.Name.LocalName}> {pair.problem}")));
 
-        RuleBaseline.Hold("a corner radius is ControlCornerRadius, OverlayCornerRadius, PillCornerRadius or ColumnCornerRadius", found, new Dictionary<string, int>());
+        RuleBaseline.Hold("a corner radius is ControlCornerRadius, OverlayCornerRadius, PillCornerRadius, ColumnCornerRadius or ToggleSwitchKnobCornerRadius", found, new Dictionary<string, int>());
     }
 
     /// <summary>
@@ -53,7 +53,7 @@ public sealed partial class DesignShapeTests
     private static readonly HashSet<string> FluentShapes = new(StringComparer.Ordinal) { "ControlCornerRadius", "OverlayCornerRadius" };
 
     /// <summary>The shapes <c>App.xaml</c> defines for itself, beside Fluent's two.</summary>
-    private static readonly HashSet<string> ShellShapes = new(StringComparer.Ordinal) { "PillCornerRadius", "ColumnCornerRadius" };
+    private static readonly HashSet<string> ShellShapes = new(StringComparer.Ordinal) { "PillCornerRadius", "ColumnCornerRadius", "ToggleSwitchKnobCornerRadius" };
 
     private static readonly XName Key = XName.Get("Key", "http://schemas.microsoft.com/winfx/2006/xaml");
 
