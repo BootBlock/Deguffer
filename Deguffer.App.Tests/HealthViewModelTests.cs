@@ -223,7 +223,7 @@ public sealed class HealthViewModelTests
         var page = Page();
         await page.RefreshAsync();
 
-        _placing!.Report(new DriveVolumes(Second.Key, "D: (Data)", [@"D:\"]));
+        _placing!.Report(new DriveVolumes(Second.Key, "D: (Data)", "D:", [@"D:\"]));
         await Eventually.HoldsAsync(() => _byVolume.Of(@"D:\") is not null, "the note for D:");
 
         Assert.Equal(DriveVerdict.Failing, _byVolume.Of(@"D:\")?.Verdict);
@@ -242,11 +242,17 @@ public sealed class HealthViewModelTests
         var page = Page();
         await page.RefreshAsync();
 
-        _placing!.Report(new DriveVolumes(Second.Key, "D: (Data)", [@"D:\"]));
+        _placing!.Report(new DriveVolumes(Second.Key, "D: (Data)", "D:", [@"D:\"]));
         await Eventually.HoldsAsync(() => page.Rows[1].Volumes.Length > 0, "the volume line");
 
         Assert.Equal("D: (Data)", page.Rows[1].Volumes);
+        Assert.Equal("D:", page.Rows[1].VolumeNames);
         Assert.Equal(string.Empty, page.Rows[0].Volumes);
+        Assert.Equal(string.Empty, page.Rows[0].VolumeNames);
+
+        // The row is found by its letters with a screen reader too, and one with none reads its name alone.
+        Assert.Equal("Second, D:", page.Rows[1].AccessibleName);
+        Assert.Equal("First", page.Rows[0].AccessibleName);
     });
 
     [Fact]

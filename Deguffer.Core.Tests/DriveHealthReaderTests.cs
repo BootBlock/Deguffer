@@ -380,6 +380,34 @@ public sealed class DriveHealthReaderTests : IDisposable
     }
 
     [Fact]
+    public async Task EachVolumeIsNamedByWhereItIsMounted()
+    {
+        Nvme(4);
+        _volumes.With(@"C:\", totalBytes: 2L << 30, freeBytes: 1L << 30);
+        _volumes.With(@"E:\Games\");
+        _storage.Volume(@"C:\", 4).Volume(@"E:\Games\", 4).Disk(4, DriveBytes.Nvme, seekPenalty: false);
+
+        await ReadAll();
+
+        // A volume mounted only in a folder keeps the folder, so it is named even without a letter of its own.
+        Assert.Equal(@"C:, E:\Games", Assert.Single(_placed.Reports).Names);
+    }
+
+    [Fact]
+    public async Task ADrivesVolumesAreInTheOrderOfTheirLetters()
+    {
+        Nvme(4);
+        _volumes.With(@"S:\").With(@"C:\").With(@"P:\");
+        _storage.Volume(@"S:\", 4).Volume(@"C:\", 4).Volume(@"P:\", 4).Disk(4, DriveBytes.Nvme, seekPenalty: false);
+
+        await ReadAll();
+
+        var placed = Assert.Single(_placed.Reports);
+        Assert.Equal("C:, P:, S:", placed.Names);
+        Assert.Equal(@"C:\; P:\; S:\", placed.Line);
+    }
+
+    [Fact]
     public async Task ADriveThatDoesNotAnswerIsReportedAndNotAskedAgain()
     {
         using var release = new ManualResetEventSlim();

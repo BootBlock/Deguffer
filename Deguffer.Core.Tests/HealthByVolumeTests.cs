@@ -17,7 +17,7 @@ public sealed class HealthByVolumeTests
     private static DriveHealth Report(DriveDescription drive, DriveVerdict verdict) =>
         new(drive.Key, drive.Name, verdict, "summary", null, [], [], null, [], false);
 
-    private static DriveVolumes On(DriveDescription drive, params string[] roots) => new(drive.Key, string.Join("; ", roots), roots);
+    private static DriveVolumes On(DriveDescription drive, params string[] roots) => new(drive.Key, string.Join("; ", roots), string.Join(", ", roots), roots);
 
     [Fact]
     public void NothingIsSaidBeforeHealthHasRead() => Assert.Null(_health.Of(@"C:\"));
