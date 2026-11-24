@@ -73,7 +73,7 @@ public sealed class RefusedAfterReadingTests : IDisposable
         var step = new EmptyRecycleBinStep(bin, "A bin") { Estimated = new ScanSize(4096, 4096, Entries: 1) };
 
         var outcome = await RunAsync(
-            new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, _refusals, emptier), step);
+            new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, _refusals, [new RecycleBinRun(emptier)]), step);
 
         Assert.True(outcome.Succeeded);
         Assert.Equal(0, outcome.BytesReclaimed);
@@ -101,7 +101,7 @@ public sealed class RefusedAfterReadingTests : IDisposable
         };
 
         var outcome = await RunAsync(
-            new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, _refusals, handlers: handlers), step);
+            new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, _refusals, [new DiskCleanupRun(handlers)]), step);
 
         Assert.True(outcome.Succeeded);
         Assert.Equal(0, outcome.BytesReclaimed);

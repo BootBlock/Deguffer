@@ -51,7 +51,7 @@ internal static class WholeDirectoryRemoval
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            return PlanExecutor.Stopped(
+            return DirectoryStepRun.Stopped(
                 step, new RemovalOutcome(0, Refusals.None, RootRemoved: false) { Interrupted = true }, stores: 0);
         }
 
@@ -93,7 +93,7 @@ internal static class WholeDirectoryRemoval
         var stores = removal.MailStores.Count + index.MailStores;
 
         return removal.Interrupted
-            ? PlanExecutor.Stopped(step, removal, stores)
-            : PlanExecutor.Deleted(step, removal, stores);
+            ? DirectoryStepRun.Stopped(step, removal, stores)
+            : DirectoryStepRun.Deleted(step, removal, stores);
     }
 }

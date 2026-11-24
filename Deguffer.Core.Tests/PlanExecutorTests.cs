@@ -1,6 +1,7 @@
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.SystemProtection;
 using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
@@ -342,7 +343,7 @@ public sealed class PlanExecutorTests : IDisposable
         var store = _temp.CreateFile(8192, "volumes", "D", "$Recycle.Bin", FakeUserEnvironment.SecurityIdentifier, "$RA1B2C3.pst");
 
         var emptier = new FakeRecycleBinEmptier();
-        var executor = new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog, emptier);
+        var executor = new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog, [new RecycleBinRun(emptier)]);
         var result = await executor.ExecuteAsync(
             PlanDeleting(new EmptyRecycleBinStep(bin, "A bin")), runReach: null, residue: null, activity: null, progress: null, underway: null, default);
 
@@ -356,14 +357,16 @@ public sealed class PlanExecutorTests : IDisposable
     }
 
     /// <summary>
-    /// The routes that hand Windows a whole volume or a cloud account are never defaulted to the
-    /// machine's own, so an executor given none cannot carry out a step that needs one. It refuses the
-    /// plan before the first step runs, so nothing is half done.
+    /// The routes that hand Windows a whole volume, a cloud account, the restore points or a profile are
+    /// never defaulted to the machine's own, so an executor given none cannot carry out a step that needs
+    /// one. It refuses the plan before the first step runs, so nothing is half done.
     /// </summary>
     [Theory]
     [InlineData("recycle-bin")]
     [InlineData("disk-cleanup")]
     [InlineData("cloud")]
+    [InlineData("restore-points")]
+    [InlineData("profile")]
     public async Task RefusesAPlanWhoseRouteItWasNotGivenBeforeRemovingAnything(string route)
     {
         var cache = _temp.CreateDirectory("cache");
@@ -374,7 +377,11 @@ public sealed class PlanExecutorTests : IDisposable
         {
             "recycle-bin" => new EmptyRecycleBinStep(bin, "A bin"),
             "disk-cleanup" => new DiskCleanupStep(cache, "A leftover") { Handler = "Previous Installations", Volume = @"C:\" },
-            _ => new ReleaseLocalCopiesStep(cache, "OneDrive", "Local copies"),
+            "cloud" => new ReleaseLocalCopiesStep(cache, "OneDrive", "Local copies"),
+            "restore-points" => new RemoveRestorePointsStep([], new RestorePoint(2, DateTime.UnixEpoch, "Kept"), "Restore points"),
+            _ => new RemoveProfileStep(
+                new Profiles.UserProfile("S-1-5-21-1-2-3-1002", @"C:\Users\testuser", Profiles.ProfileLoad.NotLoaded, null),
+                "A profile"),
         };
 
         var plan = PlanDeleting(new DeleteDirectoryStep(cache, "A cache")) with
@@ -390,6 +397,49 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.Contains(needsARoute.GetType().Name, refused.Message, StringComparison.Ordinal);
         Assert.True(File.Exists(file), "a step ran before the plan was refused");
         Assert.True(Directory.Exists(bin));
+    }
+
+    /// <summary>
+    /// A route is found by the kind of step it carries, so a route given for one kind never stands in for
+    /// another: a plan holding a Disk Cleanup step is refused by an executor given only a Recycle Bin's
+    /// route, before its first step runs and without the bin's route being asked anything.
+    /// </summary>
+    [Fact]
+    public async Task ARouteForAnotherKindOfStepDoesNotCarryAStep()
+    {
+        var cache = _temp.CreateDirectory("cache");
+        var file = _temp.CreateFile(4096, "cache", "blob");
+        var leftover = _temp.CreateDirectory("leftover");
+        var handled = new DiskCleanupStep(leftover, "A leftover") { Handler = "Previous Installations", Volume = @"C:\" };
+
+        var plan = PlanDeleting(new DeleteDirectoryStep(cache, "A cache")) with
+        {
+            Steps = [new DeleteDirectoryStep(cache, "A cache"), handled],
+        };
+
+        var emptier = new FakeRecycleBinEmptier();
+        var executor = new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog, [new RecycleBinRun(emptier)]);
+
+        var refused = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => executor.ExecuteAsync(plan, runReach: null, residue: null, activity: null, progress: null, underway: null, default));
+
+        Assert.Contains(nameof(DiskCleanupStep), refused.Message, StringComparison.Ordinal);
+        Assert.True(File.Exists(file), "a step ran before the plan was refused");
+        Assert.Empty(emptier.VolumeRoots);
+    }
+
+    /// <summary>
+    /// Two routes for one kind of step would leave which of them acts to the order they were given in,
+    /// so the executor refuses to be built with them rather than choosing one.
+    /// </summary>
+    [Fact]
+    public void RefusesTwoRoutesForOneKindOfStep()
+    {
+        Assert.Throws<ArgumentException>(() => new PlanExecutor(
+            new FakeProcessRunner(),
+            ParallelEnumerationScanner.Default,
+            RefusalLog,
+            [new RecycleBinRun(new FakeRecycleBinEmptier()), new RecycleBinRun(new FakeRecycleBinEmptier())]));
     }
 
     /// <summary>
@@ -468,7 +518,7 @@ public sealed class PlanExecutorTests : IDisposable
             8192, "volumes", "D", "$Recycle.Bin", FakeUserEnvironment.SecurityIdentifier, "$RDEF456", "archive.pst");
 
         var emptier = new FakeRecycleBinEmptier();
-        var executor = new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog, emptier);
+        var executor = new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog, [new RecycleBinRun(emptier)]);
 
         StepOutcome step;
         using (new DeniedDirectory(locked))
@@ -731,7 +781,7 @@ public sealed class PlanExecutorTests : IDisposable
         };
         var removal = new RemovalOutcome(64, Refusals.None, RootRemoved: false, EntriesRemoved: 2) { NotADirectory = true };
 
-        var outcome = PlanExecutor.Deleted(step, removal, stores: 0);
+        var outcome = DirectoryStepRun.Deleted(step, removal, stores: 0);
 
         Assert.True(outcome.Succeeded);
         Assert.Equal(64, outcome.BytesReclaimed);
@@ -1183,6 +1233,31 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.Equal(1, result.KeptCount);
         Assert.Contains("changed too recently", step.Message!, StringComparison.Ordinal);
         Assert.True(Directory.Exists(cache), "the guard kept a file and the folder around it went");
+    }
+
+    /// <summary>
+    /// The count of what the guard kept agrees with its noun, as every count Deguffer writes does,
+    /// rather than hedging with "file(s)".
+    /// </summary>
+    [Theory]
+    [InlineData(1, "Left alone: 1 file changed too recently.")]
+    [InlineData(2, "Left alone: 2 files changed too recently.")]
+    public async Task SaysHowManyFilesTheGuardKeptInWordsThatAgree(int files, string expected)
+    {
+        var cache = _temp.CreateDirectory("cache");
+
+        for (var i = 0; i < files; i++)
+        {
+            _temp.CreateFile(4096, "cache", $"written-just-now-{i}.bin");
+        }
+
+        var plan = PlanDeleting(new DeleteDirectoryStep(cache, "A cache")) with { Keep = MinimumAge.WithinHours(8, DateTime.UtcNow) };
+
+        var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog)
+            .ExecuteAsync(plan, runReach: null, residue: null, activity: null, progress: null, underway: null, ct: CancellationToken.None);
+
+        Assert.Equal(expected, Assert.Single(result.Steps).Message);
+        Assert.True(Directory.Exists(cache), "the guard kept every file and the folder around them went");
     }
 
     /// <summary>

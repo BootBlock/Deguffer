@@ -6,12 +6,11 @@
 917 Deguffer.App/ViewModels/ExploreViewModel.cs
 745 Deguffer.App/Views/ExplorePage.xaml.cs
 694 Deguffer.Core/Execution/CleanupPlanner.cs
-544 Deguffer.Core/Execution/CleanupStep.cs
-1008 Deguffer.Core/Execution/PlanExecutor.cs
+522 Deguffer.Core/Execution/CleanupStep.cs
 559 Deguffer.Core/Exploring/Acting/ExploreActionPolicy.cs
 598 Deguffer.Core/Exploring/ExploreTree.cs
 738 Deguffer.Core/Exploring/Layout/TreemapLayout.cs
-911 Deguffer.Core/Providers/CleanupProviderBase.cs
+888 Deguffer.Core/Providers/CleanupProviderBase.cs
 567 Deguffer.Core/Providers/PoetryCacheProvider.cs
 540 Deguffer.Core/Providers/RecycleBinProvider.cs
 517 Deguffer.Core/Providers/TempDirectoryProvider.cs

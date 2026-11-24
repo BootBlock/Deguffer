@@ -46,6 +46,11 @@ public sealed record RunCommandStep(string FileName, string Arguments, string Wh
 
     public override IReadOnlyList<string> Reaches => [.. MeasuredPaths, .. Subjects];
 
+    public override IReadOnlyList<string> ProbedPaths => MeasuredPaths;
+
+    /// <summary>§5.1 leaves the tool deciding what it removes, in places Deguffer may not know of.</summary>
+    public override bool ReachUnstated => true;
+
     /// <summary>
     /// Whether the tool decides what to remove from the settings of the account that runs it, kept
     /// somewhere other than where it removes: File History's own command reads the account's backup

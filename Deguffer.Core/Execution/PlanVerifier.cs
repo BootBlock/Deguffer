@@ -1,8 +1,5 @@
-using Deguffer.Core.Cloud;
-using Deguffer.Core.Profiles;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
-using Deguffer.Core.SystemProtection;
 
 namespace Deguffer.Core.Execution;
 
@@ -71,22 +68,11 @@ public static class PlanVerifier
                 ct),
         ];
 
-        foreach (var release in plan.Steps.OfType<ReleaseLocalCopiesStep>())
+        // What a special step did is proved by its own kind's proof, never by a branch here, so a new kind
+        // of step brings its proof with its route. See StepProof.
+        foreach (var (proof, steps) in sources.ProofsOf(plan.Steps))
         {
-            checks.AddRange(ReleasedFileProof.Checks(
-                release, sources.Cloud ?? CloudFiles.Default, missing => SurvivalCheck.Of(missing, places, residue, enteredRoots, probe), ct));
-        }
-
-        foreach (var removal in plan.Steps.OfType<RemoveRestorePointsStep>())
-        {
-            ct.ThrowIfCancellationRequested();
-            checks.AddRange(RestorePointProof.Checks(removal, sources.Protection ?? WindowsSystemProtection.Default));
-        }
-
-        if (plan.Steps.OfType<RemoveProfileStep>().ToList() is { Count: > 0 } removals)
-        {
-            ct.ThrowIfCancellationRequested();
-            checks.AddRange(ProfileRemovalProof.Checks(removals, sources.Profiles ?? WindowsUserProfiles.Default));
+            checks.AddRange(proof.Checks(steps, missing => SurvivalCheck.Of(missing, places, residue, enteredRoots, probe), ct));
         }
 
         return new VerificationResult { Checks = checks };
