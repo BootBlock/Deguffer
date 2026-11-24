@@ -41,7 +41,7 @@ public sealed class SettingReset : ObservableObject
     /// <summary>The setting the row sets now.</summary>
     internal SettingDefault Setting => _setting();
 
-    public void Reset() => _reset(_setting());
+    public void Reset() => _reset(Setting);
 
     /// <summary>
     /// Read the stored value again, after a write or a change of the setting the row sets, and tell the
@@ -49,7 +49,7 @@ public sealed class SettingReset : ObservableObject
     /// </summary>
     internal void Refresh()
     {
-        var setting = _setting();
+        var setting = Setting;
 
         if (setting.Statement != Statement)
         {

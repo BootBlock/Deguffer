@@ -8,7 +8,8 @@ namespace Deguffer.App.ViewModels;
 /// worse than one that never offered it, and a notice at the top of the page is silent to someone
 /// changing a value several screens below it: they see the value revert and no reason.
 ///
-/// <para><see cref="LatestSave"/> decides which row's is shown.</para>
+/// <para>The page's restore of every setting has one too, stated at the page's foot where it was asked
+/// for, as it belongs to no row. <see cref="LatestSave"/> decides which one is shown.</para>
 /// </summary>
 public sealed partial class SettingSave : ObservableObject
 {
