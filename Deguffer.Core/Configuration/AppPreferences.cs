@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Deguffer.Core.Configuration;
 
 /// <summary>
@@ -43,145 +45,6 @@ public enum StorageOrder
 
     /// <summary>Tier 1 first, and largest first within each tier.</summary>
     Tier = 2,
-}
-
-/// <summary>
-/// How the Explore page draws what it found.
-///
-/// <para><see cref="Treemap"/> is the shipped view: it is what every tool in this category shows by
-/// default, so it is the one a user arrives already able to read. The other three are not
-/// decoration beside it. <see cref="List"/> is the densest answer to "what is biggest", which is
-/// the question most people actually open the page with. <see cref="Icicle"/> keeps area exactly
-/// proportional at every level, has room to label several levels at once, and is the one picture
-/// that stays still while a scan is filling it in: the treemap and the sunburst rearrange themselves
-/// as a scan finds more. <see cref="Sunburst"/> is what the rest of this category
-/// ships and the easiest of the four to point at, at the cost of exaggerating whatever is deepest —
-/// an outer ring gives more area for the same proportion, because area grows with the square of the
-/// radius.</para>
-///
-/// <para><see cref="Tree"/> is the two together: a list that opens where the pictures nest. It is
-/// what a list cannot do — show what is inside something without leaving what holds it — and what a
-/// picture cannot do — be read a row at a time. The Memory page offers it, because a process tree
-/// goes several levels deep and a reader following one down a flat list loses the rest of the
-/// machine at the first step.</para>
-///
-/// <para><see cref="Files"/> is the one that ignores the folders: the largest files at any depth
-/// under the node on screen, filtered by name, type, size and age. An ISO in a forgotten folder is
-/// hard to find by drilling into a map and is the first row here. Explore offers it, and Memory has
-/// no files to list.</para>
-///
-/// <para>The values are ordinal, and a view picker lists them in this order. A destination offers
-/// the views that suit what it draws rather than all of them. They are stored by name rather than
-/// by number, so the order is a presentation decision and not a compatibility one.</para>
-/// </summary>
-public enum ExploreView
-{
-    Treemap = 0,
-    Icicle = 1,
-    Sunburst = 2,
-    List = 3,
-    Tree = 4,
-    Files = 5,
-}
-
-/// <summary>
-/// What the colours on the Explore map say.
-///
-/// <para>Orthogonal to <see cref="ExploreView"/> rather than a fifth entry in it, because it is a
-/// different question: the view decides where the shapes go, and this decides what painting one of
-/// them a colour tells the reader. Every combination of the two is meaningful, and folding them
-/// into one list would offer six choices where there are two.</para>
-///
-/// <para><see cref="Branch"/> is the shipped one and answers "what is this part of", which is the
-/// question a map of a drive is opened with. <see cref="Age"/> answers §8's first open question
-/// instead — whether a toolchain is idle — which a size picture cannot show at all: an Android SDK
-/// and a working project look identical by size, and the whole difference is that nothing has
-/// written to one of them in two years. <see cref="Growth"/> answers "what filled the drive since I last
-/// looked", which a size picture shows only once the culprit is the largest thing on the disk.
-/// <see cref="Type"/> answers "what kind of thing is this space", which is often the quickest way to
-/// know what it is: a folder of video and a folder of disk images look alike by size.
-/// <see cref="Depth"/> answers "how deep is this", the question the earliest disk maps coloured
-/// by: a whole level of the tree in one colour, the next in another.</para>
-/// </summary>
-public enum ExploreColouring
-{
-    /// <summary>
-    /// A hue per folder, inside its parent's part of the hue circle, lighter by depth. See
-    /// <c>TilePalette</c> and <c>BranchHues</c>.
-    /// </summary>
-    Branch = 0,
-
-    /// <summary>
-    /// A band per age, by the newest write anywhere at or below the shape. See <c>AgePalette</c>,
-    /// and <c>ExploreTree.ModifiedOf</c> for why it is the newest write below rather than the
-    /// shape's own date.
-    /// </summary>
-    Age = 1,
-
-    /// <summary>
-    /// A band per change in bytes since the last scan of the same volume, through grey for no change.
-    /// See <c>GrowthPalette</c> and <c>ScanGrowth</c>.
-    /// </summary>
-    Growth = 2,
-
-    /// <summary>
-    /// A colour per kind of file, by the name: a file's own kind, and a folder's largest kind by bytes.
-    /// See <c>TypePalette</c> and <c>DominantTypes</c>.
-    /// </summary>
-    Type = 3,
-
-    /// <summary>
-    /// A colour per level below the folder on screen, the same for every shape at that level and
-    /// repeating every eight levels. See <c>DepthPalette</c>.
-    /// </summary>
-    Depth = 4,
-}
-
-/// <summary>
-/// How much room the treemap leaves round what each folder holds.
-///
-/// <para>A folder with room for it is drawn as a frame: a band along its top with its name in it,
-/// and a gap of this width down its sides and along its bottom. The frame is what shows where one
-/// folder ends and the next begins, and a wider one is easier to follow and costs the picture some
-/// area. See <c>TreemapLayout</c> for the distortion that cost is.</para>
-///
-/// <para>The values are ordinal, and the Settings page lists them in this order. They are stored by
-/// name, as <see cref="ExploreView"/> is.</para>
-/// </summary>
-public enum ExploreSpacing
-{
-    Dense = 0,
-    Comfortable = 1,
-    Spacious = 2,
-}
-
-/// <summary>
-/// A set of colours a map can be drawn in: how light and how saturated each branch is, and which
-/// ramp the age bands run along. Chosen per view, because the three pictures put their colour in
-/// different places — a treemap's in thousands of small tiles, a sunburst's in a few broad rings —
-/// and a set that suits one can be too loud or too faint on another.
-///
-/// <para>Every set keeps the guarantees the standard one makes: a lightness step per level of
-/// depth, a lifted step between neighbours, an age ramp that darkens at every step backwards, and a
-/// grey for an undated entry that is on none of those ramps. The sets differ in how the picture
-/// looks, never in what it says.</para>
-///
-/// <para>The values are ordinal, and a picker lists them in this order. They are stored by name, as
-/// <see cref="ExploreView"/> is.</para>
-/// </summary>
-public enum ExploreScheme
-{
-    /// <summary>Medium lightness and saturation, with the age bands along viridis.</summary>
-    Standard = 0,
-
-    /// <summary>More saturated branches, with the age bands along plasma.</summary>
-    Vivid = 1,
-
-    /// <summary>Light, pale branches, with the age bands along viridis washed towards white.</summary>
-    Soft = 2,
-
-    /// <summary>Darker branches, with the age bands along magma.</summary>
-    Deep = 3,
 }
 
 /// <summary>
@@ -391,10 +254,11 @@ public enum ExploreScheme
 /// nobody expected to end is the countdown it is carried out behind, which says what is about to
 /// happen and can be cancelled. See <see cref="Execution.CompletionCountdown"/>.</para>
 /// </param>
-/// <param name="NavigationCollapsed">
-/// Whether the window's navigation rail is collapsed to its icons. Off by default, so every
-/// destination is named. Stored for the reason <paramref name="ExploreOverviewHidden"/> is: a reader
-/// who wants the width for the map wants it at every launch. Presentation only.
+/// <param name="Rail">
+/// Whether the window's navigation rail shows its labels, folds to its icons, or follows the
+/// window's width. Automatic by default. Stored for the reason <paramref name="ExploreOverviewHidden"/>
+/// is: a reader who wants the width for the map wants it at every launch. Presentation only. See
+/// <see cref="Viewing.RailFold"/>.
 /// </param>
 /// <param name="SpotlightCleanedRow">
 /// Whether the Storage list follows a clean: it scrolls to the row being cleaned and lights that row
@@ -434,7 +298,7 @@ public sealed record AppPreferences(
     int MinimumTemporaryFileAgeDays = 7,
     bool BackUpInstalledAppEntries = true,
     Execution.CompletionAction WhenCleanComplete = Execution.CompletionAction.Nothing,
-    bool NavigationCollapsed = false,
+    RailChoice Rail = RailChoice.Automatic,
     bool SpotlightCleanedRow = true,
     bool MemoryLiveUpdate = true)
 {
@@ -491,4 +355,25 @@ public sealed record AppPreferences(
     /// See <see cref="ExploreLocations"/>.
     /// </summary>
     public ExploreLocations Locations { get; init; } = ExploreLocations.None;
+
+    /// <summary>
+    /// The rail's setting in a file written before <see cref="Rail"/> replaced it: a flag that was
+    /// true only where the reader had folded the rail, so true reads as
+    /// <see cref="RailChoice.Collapsed"/>. False was also the default, so it says nothing and reads as
+    /// <see cref="RailChoice.Automatic"/>. Read and never written.
+    /// </summary>
+    [JsonInclude]
+    [JsonPropertyName("NavigationCollapsed")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    private bool FoldedBeforeRailChoice
+    {
+        get => false;
+        init
+        {
+            if (value && Rail == RailChoice.Automatic)
+            {
+                Rail = RailChoice.Collapsed;
+            }
+        }
+    }
 }

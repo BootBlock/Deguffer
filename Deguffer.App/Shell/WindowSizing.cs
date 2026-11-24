@@ -20,18 +20,21 @@ namespace Deguffer.App.Shell;
 /// The minimum size needs a window procedure because <see cref="AppWindow"/> exposes no such
 /// property; below it the rail and the command bar start colliding.
 ///
-/// The minimum width is set by the compact finding row. That row puts
-/// the name, the tier chip and the size on one line, and the name is the only part with no fixed
-/// demand, so it is what gives way. At the old 720 the rail, the card and the right-hand columns
-/// left it about seventy pixels and every name trimmed to an ellipsis — a list of rows that no
-/// longer said which row they were.
+/// The minimum width is half the work area of a 1920 x 1080 display at 150%, so the window snaps
+/// beside File Explorer or a terminal on the most common laptop screen. At that width the rail folds
+/// to its icons (see <see cref="Deguffer.Core.Viewing.RailFold"/>), and a row whose name would trim
+/// moves its chips and figures to a line of their own (see <see cref="Controls.ReflowRow"/>), so the
+/// width a window gives up comes out of the rail's labels and the row's length rather than out of any
+/// name.
 /// </summary>
 public sealed class WindowSizing
 {
     private const int DefaultWidth = 1000;
     private const int DefaultHeight = 700;
-    private const int MinimumWidth = 880;
     private const int MinimumHeight = 520;
+
+    /// <summary>The narrowest the window may be dragged, in effective pixels.</summary>
+    internal const int MinimumWidth = 640;
 
     private const int GwlpWndProc = -4;
     private const uint WmGetMinMaxInfo = 0x0024;
@@ -115,6 +118,10 @@ public sealed class WindowSizing
     /// the close that follows would leave the two instances racing over it.
     /// </summary>
     public void Remember() => _store.Save(new WindowMetrics(_restored, _maximized));
+
+    /// <summary>The width of the window's content, in effective pixels, at the display's scale now.</summary>
+    public double ClientWidth =>
+        AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(_hwnd)).ClientSize.Width / DisplayScale.Of(_hwnd);
 
     /// <summary>
     /// Follow the window as the user moves, resizes and maximises it.
