@@ -20,18 +20,28 @@
         -->
         <ScrollViewer MaxHeight="320" VerticalScrollBarVisibility="Auto">
             <ItemsControl ItemsSource="{x:Bind Model.Groups}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Spacing="{StaticResource RegionGap}" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="viewModels:ConfirmationGroupViewModel">
-                        <StackPanel Spacing="{StaticResource ControlGap}" Margin="0,0,0,16">
+                        <StackPanel Spacing="{StaticResource ControlGap}">
                             <TextBlock Text="{x:Bind Heading}" Style="{StaticResource GroupHeading}" />
                             <TextBlock Text="{x:Bind Note}"
                                        Visibility="{x:Bind HasNote}"
                                        Style="{StaticResource SecondaryText}" />
 
                             <ItemsControl ItemsSource="{x:Bind Rows}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Spacing="{StaticResource ControlGap}" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="viewModels:ConfirmationRowViewModel">
-                                        <StackPanel Spacing="{StaticResource LabelGap}" Margin="0,0,0,8">
+                                        <StackPanel Spacing="{StaticResource LabelGap}">
                                             <Grid ColumnSpacing="12" ColumnDefinitions="*,Auto">
                                                 <CheckBox Grid.Column="0"
                                                           IsChecked="{x:Bind IsIncluded, Mode=TwoWay}"

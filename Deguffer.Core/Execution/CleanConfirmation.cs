@@ -7,13 +7,10 @@ namespace Deguffer.Core.Execution;
 /// The one confirmation a clean asks (§7): every selected row that has something to remove, grouped by
 /// tier with its size, what each row needs before it may go, the total, and what follows the clean.
 ///
-/// <para><b>One question per clean.</b> A clean once asked a blanket question about the rows §7 did not
-/// ask about, then one more dialog for each Tier 2 and Tier 3 row in turn. The blanket total left out
-/// every row asked about separately, no later dialog stated its row's size, and Cancel stopped the
-/// clean in the first dialog but skipped one row in the rest. A chain of near-identical modals whose
-/// Cancel changes meaning is the gate §7 warns users learn to get past without reading. Here every row
-/// is on one screen, the total is the true total, Cancel stops everything, and a row the user no longer
-/// wants is unticked rather than skipped.</para>
+/// <para><b>One question per clean.</b> A series of near-identical modals, each with a Cancel whose
+/// meaning changes, is the gate §7 warns users learn to get past without reading. So every row is on
+/// one screen, the total is the total of everything going, Cancel stops the whole clean, and a row the
+/// user no longer wants is unticked rather than skipped.</para>
 ///
 /// <para><b>A Core type</b> because what the user is told before a deletion, and what their answers
 /// authorise, are decisions rather than layout. The shell arranges these parts and collects the
@@ -52,9 +49,10 @@ public sealed record CleanConfirmation
 
     /// <summary>
     /// How many selected rows §3 excludes (Tier 4). No answer authorises one, so none is listed or asked
-    /// about. Counted so a run can tell a refusal from a selection with nothing to remove.
+    /// about. <see cref="Authorise"/> counts them as declined, so a run can tell a refusal from a
+    /// selection with nothing to remove.
     /// </summary>
-    public int Refused { get; }
+    internal int Refused { get; }
 
     /// <summary>
     /// What follows the clean, where the user chose anything but doing nothing. The choice is stored and
@@ -136,7 +134,7 @@ public sealed record CleanConfirmation
     /// a permanent loss, <see cref="ConfirmationVerb.Release"/> where every one only releases, and
     /// <see cref="ConfirmationVerb.Clean"/> otherwise.
     /// </summary>
-    public ConfirmationVerb VerbOf(IReadOnlyList<CleanConfirmationReply> replies)
+    internal ConfirmationVerb VerbOf(IReadOnlyList<CleanConfirmationReply> replies)
     {
         ArgumentNullException.ThrowIfNull(replies);
 

@@ -154,7 +154,7 @@ public enum StorageOrder
 ///
 /// Switching it off retires Tier 3's <em>own</em> box, not the question. The row then needs no answer
 /// of its own, so it is confirmed as <paramref name="ConfirmBeforeCleaning"/> says, in a dialog that
-/// names it and quotes the same <see cref="Execution.ConfirmationRequirement.ConsequenceOf"/>
+/// names it and quotes the same <see cref="Execution.ConfirmationRequirement.Consequence"/>
 /// sentence — §7 leaves how hard the confirmation is to give to the user, and never left saying
 /// what is unrecoverable to anybody. Turning both off is a deliberate pair of choices, and leaves
 /// the preview and Tier 3 never being pre-selected as what stands between the user and the

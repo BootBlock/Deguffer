@@ -185,7 +185,7 @@ public sealed record ConfirmationRequirement
     /// off for: §7 makes the typing optional, and never made saying what is unrecoverable optional
     /// with it.
     /// </summary>
-    public static string ConsequenceOf(CleanupPlan plan)
+    private static string ConsequenceOf(CleanupPlan plan)
     {
         ArgumentNullException.ThrowIfNull(plan);
 

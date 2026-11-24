@@ -300,8 +300,8 @@ public class CleanViewModelCleanTests
     }
 
     /// <summary>
-    /// A clean of every tier asks one question, which lists every row, and the dialog is built once.
-    /// The chain of one dialog per Tier 2 and Tier 3 row that this replaced asked three times here.
+    /// A clean of every tier asks one question, which lists every row, and the dialog is built once,
+    /// rather than once more for each row §7 asks something of.
     /// </summary>
     [Fact]
     public void AMixedCleanAsksOnceAboutEveryRow()
@@ -329,8 +329,8 @@ public class CleanViewModelCleanTests
 
     /// <summary>
     /// Cancel stops the whole clean: no row of any tier runs, and every selected folder and the tool's
-    /// root are still standing (§5.6). In the chain this replaced, Cancel on one row's dialog skipped
-    /// that row and deleted the rest.
+    /// root are still standing (§5.6). A Cancel that skipped only the rows needing an answer would let
+    /// the Tier 1 row go.
     /// </summary>
     [Fact]
     public void CancellingTheConfirmationRemovesNothing()
@@ -359,8 +359,30 @@ public class CleanViewModelCleanTests
     }
 
     /// <summary>
+    /// A clean cancelled while its confirmation is open says so, as a warning, and removes nothing.
+    /// </summary>
+    [Fact]
+    public void ACleanCancelledWhileItsConfirmationIsOpenSaysNothingWasRemoved()
+    {
+        var cache = new FakeCleanupProvider("cache");
+        using var page = new StoragePage([cache]);
+        var folder = page.Cache("npm", 1024);
+        cache.Steps = [folder];
+        page.Scan();
+        page.Prompt.Cancels = true;
+
+        page.Clean();
+
+        Assert.Empty(cache.Executed);
+        Assert.True(Directory.Exists(folder.Path));
+        Assert.Equal("Clean cancelled. Nothing was removed.", page.ViewModel.Status);
+        Assert.Equal(InfoBarSeverity.Warning, page.ViewModel.StatusSeverity);
+        Assert.False(page.ViewModel.IsBusy);
+    }
+
+    /// <summary>
     /// A row the user unticks in the dialog is left out and the rest run, and the unticked row needs
-    /// no answer. That is how a row is dropped now that Cancel stops everything.
+    /// no answer. That is how a row is dropped, since Cancel stops everything.
     /// </summary>
     [Fact]
     public void ARowUntickedInTheConfirmationIsLeftOutAndTheRestRun()

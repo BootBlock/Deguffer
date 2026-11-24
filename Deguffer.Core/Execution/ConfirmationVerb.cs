@@ -13,8 +13,8 @@ public enum ConfirmationVerb
     Clean,
 
     /// <summary>
-    /// Kept for a permanent loss alone (Tier 3), so the word means something when it appears. Said on
-    /// a Tier 2 row as well, it carried no extra weight on the rows where everything is lost.
+    /// Kept for a permanent loss alone (Tier 3), so the word carries weight where it appears. Said of a
+    /// Tier 2 row too, it would say nothing more on the rows where everything is lost.
     /// </summary>
     Delete,
 

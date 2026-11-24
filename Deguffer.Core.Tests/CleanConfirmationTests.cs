@@ -13,9 +13,9 @@ namespace Deguffer.Core.Tests;
 public sealed class CleanConfirmationTests
 {
     /// <summary>
-    /// Every tier is on the one screen, and the total is the total of everything going. The blanket
-    /// question this replaced left out every row §7 asked about separately, so a user who ticked 3 GB of
-    /// Tier 1 and 9 GB of Tier 2 read "Total 3 GB" and pressed Clean.
+    /// Every tier is on the one screen, and the total is the total of everything going: a total that
+    /// left out the rows §7 asks about would tell a user who ticked 3 GB of Tier 1 and 9 GB of Tier 2
+    /// that 3 GB is going.
     /// </summary>
     [Fact]
     public void ListsEveryTierAndTotalsThemAll()

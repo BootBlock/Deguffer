@@ -541,8 +541,9 @@ Deliberate points, and the traps that come with them:
 - **A clean is confirmed once, in one dialog.** It lists every row going, grouped by tier, each with
   its size, and totals all of them. Each Tier 2 row carries its own acknowledgement, and each Tier 3
   row its own typed box where the typed phrase is on. Every row that does not rebuild itself states
-  what it costs. The primary button names the verb and the figure ("Delete 32.1 GB") and stays
-  disabled until every ticked row is answered. A row the user no longer wants is unticked in the
+  what it costs. The primary button names the verb and the figure ("Clean 32.1 GB") and stays
+  disabled until every ticked row is answered. The verb is "Delete" only while a permanent loss
+  (Tier 3) is ticked, and "Release" where every row only releases local copies of cloud files. A row the user no longer wants is unticked in the
   dialog. Cancel stops the whole clean with nothing removed, and Close stays the default button, so
   Enter is safe. Where a "When complete" action is chosen, the dialog says what will follow the
   clean. A chain of near-identical dialogs, each with a Cancel whose meaning changes, is the gate

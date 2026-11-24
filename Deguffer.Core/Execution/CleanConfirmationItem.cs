@@ -25,7 +25,7 @@ public sealed record CleanConfirmationItem
 
     internal CleanupPlan Plan { get; }
 
-    public ConfirmationRequirement Requirement { get; }
+    internal ConfirmationRequirement Requirement { get; }
 
     public string ProviderId => Requirement.ProviderId;
 
@@ -50,11 +50,10 @@ public sealed record CleanConfirmationItem
     /// What removing it costs, for every row that does not rebuild itself, and null for Tier 1, whose
     /// group says it once for all of them.
     ///
-    /// <para>Keyed on "not Tier 1" rather than on a list of tiers, so a tier that reaches this dialog
-    /// without anyone deciding it should states its cost rather than inheriting the reassurance. That
-    /// is §5.2's direction: an unrecognised thing must not come out treated as safe. It holds where
-    /// the typed phrase is switched off, too: §7 leaves how hard the confirmation is to give to the
-    /// user, and never left saying what is unrecoverable to anybody.</para>
+    /// <para>Keyed on "not Tier 1" rather than on a list of tiers, so the reassurance is given only where
+    /// it is known to hold, which is §5.2's direction. It holds where the typed phrase is switched off,
+    /// too: §7 leaves how hard the confirmation is to give to the user, and never left saying what is
+    /// unrecoverable to anybody.</para>
     /// </summary>
     public string? Consequence => Tier == SafetyTier.RegenerableCache ? null : Requirement.Consequence;
 

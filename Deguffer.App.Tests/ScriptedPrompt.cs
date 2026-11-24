@@ -11,6 +11,9 @@ internal sealed class ScriptedPrompt : IConfirmationPrompt
 {
     public bool Agrees { get; set; } = true;
 
+    /// <summary>Whether the dialog is taken down by a cancellation rather than answered.</summary>
+    public bool Cancels { get; set; }
+
     /// <summary>The rows the user unticks before agreeing, by provider id.</summary>
     public HashSet<string> Unticks { get; } = [];
 
@@ -23,6 +26,11 @@ internal sealed class ScriptedPrompt : IConfirmationPrompt
     {
         Asked.Add(confirmation);
         WhileAsking?.Invoke();
+
+        if (Cancels)
+        {
+            throw new OperationCanceledException();
+        }
 
         IReadOnlyList<CleanConfirmationReply>? replies = Agrees
             ?
