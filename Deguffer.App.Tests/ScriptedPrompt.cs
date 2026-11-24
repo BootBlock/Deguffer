@@ -3,21 +3,38 @@ using Deguffer.Core.Execution;
 
 namespace Deguffer.App.Tests;
 
-/// <summary>A confirmation dialog that answers every question the same way, and records each one.</summary>
+/// <summary>
+/// A clean's confirmation that answers the same way every time, and records each one it is shown. Agreeing
+/// ticks every acknowledgement and types every phrase, as a user who read each row would.
+/// </summary>
 internal sealed class ScriptedPrompt : IConfirmationPrompt
 {
     public bool Agrees { get; set; } = true;
 
-    public List<ConfirmationRequirement> Asked { get; } = [];
+    /// <summary>The rows the user unticks before agreeing, by provider id.</summary>
+    public HashSet<string> Unticks { get; } = [];
+
+    public List<CleanConfirmation> Asked { get; } = [];
 
     /// <summary>Run as each question is asked, so a test can look at the page while the dialog would be open.</summary>
     public Action? WhileAsking { get; set; }
 
-    public Task<Confirmation?> AskAsync(ConfirmationRequirement requirement, CancellationToken ct = default)
+    public Task<IReadOnlyList<CleanConfirmationReply>?> AskAsync(CleanConfirmation confirmation, CancellationToken ct = default)
     {
-        Asked.Add(requirement);
+        Asked.Add(confirmation);
         WhileAsking?.Invoke();
 
-        return Task.FromResult(Agrees ? new Confirmation(requirement.ProviderId, requirement.RequiredPhrase) : null);
+        IReadOnlyList<CleanConfirmationReply>? replies = Agrees
+            ?
+            [
+                .. confirmation.Items.Select(item => new CleanConfirmationReply(
+                    item.ProviderId,
+                    Included: !Unticks.Contains(item.ProviderId),
+                    Acknowledged: true,
+                    item.Typing?.Phrase)),
+            ]
+            : null;
+
+        return Task.FromResult(replies);
     }
 }

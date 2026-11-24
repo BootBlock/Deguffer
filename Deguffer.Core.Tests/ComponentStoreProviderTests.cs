@@ -185,7 +185,11 @@ public sealed class ComponentStoreProviderTests : IDisposable
         IReadOnlyList<CleanupPlan> plans = [await Cleanup(analysis).PlanAsync(), await Reset(analysis).PlanAsync()];
 
         Assert.All(plans, plan => Assert.Equal(ComponentStoreProviderBase.Overhead, Assert.Single(plan.Steps).SharesReclaim));
-        Assert.Equal($"up to {FreeSpace.Format(3 * Gigabyte)}", CleanConfirmation.For(plans).TotalLabel);
+        var confirmation = CleanConfirmation.For(
+            [.. plans.Select(plan => new Finding(new FakeCleanupProvider(plan.ProviderId, plan.Tier), IsPresent: true, plan))],
+            requireTypedPhrase: true,
+            CompletionAction.Nothing);
+        Assert.Equal($"up to {FreeSpace.Format(3 * Gigabyte)}", confirmation.TotalOf(confirmation.Opening));
     }
 
     /// <summary>G4: the analysis takes a minute or more, so both rows share one per planning pass.</summary>

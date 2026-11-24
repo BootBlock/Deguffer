@@ -19,9 +19,9 @@ public enum ConfirmationLevel
     ///
     /// Reached only where the user has asked for it. §7 leaves how hard the confirmation is to give
     /// to the user, and with the typed phrase off a Tier 3 plan is <see cref="None"/> here and
-    /// confirmed by the shell's blanket question instead. What §7 does not make optional is saying
-    /// plainly what is unrecoverable, which is why <see cref="ConfirmationRequirement.ConsequenceOf"/>
-    /// reads from the tier rather than from this.
+    /// confirmed by the clean's one question without a box of its own. What §7 does not make optional
+    /// is saying plainly what is unrecoverable, which is why
+    /// <see cref="ConfirmationRequirement.ConsequenceOf"/> reads from the tier rather than from this.
     /// </summary>
     TypedPhrase,
 
@@ -63,14 +63,12 @@ public sealed record ConfirmationRequirement
     public required string Consequence { get; init; }
 
     /// <summary>
-    /// The verb the question and its button use: "Delete", or "Release" for a plan that only asks a sync
-    /// app to release local copies of cloud files.
-    ///
-    /// <para>Decided here with the rest of what the user is told, because "Delete" over a plan that
-    /// destroys nothing is a false statement about their cloud files, and the one a reader is most
-    /// likely to refuse a harmless clean over, or to learn to click through.</para>
+    /// The word for removing this plan: <see cref="ConfirmationVerb.Release"/> where every step only
+    /// releases local copies of cloud files, <see cref="ConfirmationVerb.Delete"/> for a permanent loss,
+    /// and <see cref="ConfirmationVerb.Clean"/> otherwise. Decided here with the rest of what the user
+    /// is told, from the same tier the consequence reads.
     /// </summary>
-    public required string Verb { get; init; }
+    public required ConfirmationVerb Verb { get; init; }
 
     /// <summary>
     /// The words the user must type, for <see cref="ConfirmationLevel.TypedPhrase"/> only, and so
@@ -82,55 +80,13 @@ public sealed record ConfirmationRequirement
     /// </summary>
     public string? RequiredPhrase { get; init; }
 
-    /// <summary>The question, which opens on <see cref="Verb"/> so the button repeats its word.</summary>
-    public string Title => $"{Verb} {ProviderName}?";
-
     /// <summary>What the dialog says about the phrase, or null where nothing is typed.</summary>
     public PhraseWording? Typing => RequiredPhrase is { } phrase ? new PhraseWording(phrase) : null;
 
-    /// <summary>
-    /// Whether §7 will put a question to the user about this plan. A plan with no steps destroys
-    /// nothing and so is never asked about, which is why emptiness is part of the rule rather than
-    /// the caller's business. That holds for one the planner runs only to verify what it withheld:
-    /// see <see cref="CleanupPlan.HasSomethingToProve"/>.
-    ///
-    /// The shell uses this to stand its own blanket confirmation down: asking twice about one
-    /// deletion trains people to dismiss the prompt that carries the §7 consequence.
-    /// </summary>
-    public static bool PromptsUser(CleanupPlan plan, bool requireTypedPhrase = true)
-    {
-        ArgumentNullException.ThrowIfNull(plan);
-
-        return !plan.IsEmpty && For(plan, requireTypedPhrase).Level != ConfirmationLevel.None;
-    }
-
-    /// <summary>
-    /// Of a selection, the items that will be deleted without §7 putting a question of its own —
-    /// what a shell-level "are you sure" must therefore cover to leave nothing unconfirmed.
-    ///
-    /// This is a decision about the whole selection rather than one plan, which is why it is here
-    /// and not left to the caller: treating "does anything here need §7?" as the same question as
-    /// "is everything here covered by §7?" deleted a mixed selection's Tier 1 items silently.
-    /// </summary>
-    public static IReadOnlyList<T> NotPromptedFor<T>(
-        IEnumerable<T> items,
-        Func<T, CleanupPlan?> planOf,
-        bool requireTypedPhrase = true)
-    {
-        ArgumentNullException.ThrowIfNull(items);
-        ArgumentNullException.ThrowIfNull(planOf);
-
-        return
-        [
-            .. items.Where(i =>
-                planOf(i) is { IsEmpty: false } plan && !PromptsUser(plan, requireTypedPhrase)),
-        ];
-    }
-
     /// <param name="requireTypedPhrase">
     /// Whether Tier 3 is held to §7's typed phrase, from the user's preference. With it false a
-    /// Tier 3 plan asks nothing of its own and is left to the shell's blanket confirmation, which
-    /// <see cref="NotPromptedFor"/> then includes it in.
+    /// Tier 3 plan asks nothing of its own, and the clean's one question lists it with its
+    /// consequence and no box (<see cref="CleanConfirmation"/>).
     ///
     /// It defaults to the strict rule so that a caller which never mentions the preference fails
     /// closed. It reaches Tier 3 and nothing else: Tier 4 stays refused whatever the user has set,
@@ -156,7 +112,7 @@ public sealed record ConfirmationRequirement
             Tier = plan.Tier,
             Level = level,
             Consequence = ConsequenceOf(plan),
-            Verb = plan.Steps.Count > 0 && plan.Steps.All(step => step is ReleaseLocalCopiesStep) ? "Release" : "Delete",
+            Verb = VerbFor(plan),
             RequiredPhrase = level == ConfirmationLevel.TypedPhrase ? plan.ProviderName : null,
         };
     }
@@ -225,9 +181,9 @@ public sealed record ConfirmationRequirement
     ///
     /// Read from the tier rather than from <see cref="Level"/>, because the consequence is a fact
     /// about the data and does not change when the user relaxes how hard the deletion is to
-    /// authorise. Public because the shell's blanket confirmation needs the same sentence for a
-    /// Tier 3 row the typed phrase is switched off for: §7 makes that confirmation optional, and
-    /// never made saying what is unrecoverable optional with it.
+    /// authorise. The clean's one question states it for a Tier 3 row the typed phrase is switched
+    /// off for: §7 makes the typing optional, and never made saying what is unrecoverable optional
+    /// with it.
     /// </summary>
     public static string ConsequenceOf(CleanupPlan plan)
     {
@@ -255,5 +211,19 @@ public sealed record ConfirmationRequirement
 
             _ => $"'{plan.ProviderName}' is {plan.Tier.ToDisplayName()} and is never offered for deletion.",
         };
+    }
+
+    private static ConfirmationVerb VerbFor(CleanupPlan plan)
+    {
+        if (plan.Steps.Count > 0 && plan.Steps.All(step => step is ReleaseLocalCopiesStep))
+        {
+            return ConfirmationVerb.Release;
+        }
+
+        // "Clean" is said only of the tiers known to lose nothing for good. A tier nobody decided falls
+        // to the heavier word, which is §5.2's direction: an unrecognised thing is not treated as safe.
+        return plan.Tier is SafetyTier.RegenerableCache or SafetyTier.RegenerableWithCost
+            ? ConfirmationVerb.Clean
+            : ConfirmationVerb.Delete;
     }
 }

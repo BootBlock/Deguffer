@@ -178,27 +178,27 @@ public sealed partial class CleanViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Asks the user to confirm before anything is deleted, returning whether to go ahead. The
-    /// view supplies it and decides *how* to ask; leaving it null means do not ask, which is how
-    /// the preference is expressed without this type knowing settings exist.
+    /// Whether a clean whose rows need no answer of their own is still confirmed. The view sets it from
+    /// the preference, so this type knows nothing about settings. It defaults to asking, so that a view
+    /// which never sets it fails closed. A row §7 asks something of is confirmed whatever this says
+    /// (<see cref="CleanConfirmation.MustAsk"/>).
     /// </summary>
-    public Func<CleanConfirmation, Task<bool>>? ConfirmCleanAsync { get; set; }
+    public bool ConfirmBeforeCleaning { get; set; } = true;
 
     /// <summary>
     /// Whether §7 holds Tier 3 to its typed phrase. The view sets it from the preference, the same
-    /// way it supplies <see cref="ConfirmCleanAsync"/>, so this type still knows nothing about
-    /// settings. It defaults to the strict rule so that a view which never sets it fails closed.
+    /// way it sets <see cref="ConfirmBeforeCleaning"/>. It defaults to the strict rule so that a view
+    /// which never sets it fails closed.
     ///
-    /// With it false a Tier 3 row asks nothing of its own and is covered by the blanket
-    /// confirmation instead, which <see cref="ConfirmationRequirement.NotPromptedFor"/> includes it
-    /// in.
+    /// With it false a Tier 3 row has no box of its own in the confirmation, which still lists it
+    /// with what it loses.
     /// </summary>
     public bool RequireTypedConfirmation { get; set; } = true;
 
     /// <summary>
     /// How recently a file must have been touched for the user to want it left alone, in whole
     /// hours, or zero for no such guard. The view sets it from the preference, the same way it
-    /// supplies <see cref="ConfirmCleanAsync"/>.
+    /// sets <see cref="ConfirmBeforeCleaning"/>.
     ///
     /// <para>The stored hours rather than the instant they become, and rather than a
     /// <see cref="TimeSpan"/>. The instant belongs to a preview rather than to a setting:
@@ -212,7 +212,7 @@ public sealed partial class CleanViewModel : ObservableObject
 
     /// <summary>
     /// Whether to list a provider whose toolchain is not on this machine. The view sets it from the
-    /// preference, the same way it supplies <see cref="ConfirmCleanAsync"/>, so this type still
+    /// preference, the same way it sets <see cref="ConfirmBeforeCleaning"/>, so this type still
     /// knows nothing about settings.
     ///
     /// A hidden row is still scanned, still counted and still in the list — it is drawn or not.
@@ -624,23 +624,28 @@ public sealed partial class CleanViewModel : ObservableObject
         // demand a phrase nobody was shown a box for, or skip an ask the run then relies on.
         var requireTypedPhrase = RequireTypedConfirmation;
 
-        // The blanket confirmation covers exactly what §7 will not ask about — nothing more, so no
-        // deletion is confirmed twice, and nothing less, so no deletion goes unconfirmed. Standing
-        // it down for the whole selection whenever any one row happened to be Tier 2 meant a mixed
-        // selection deleted its Tier 1 rows with no confirmation of any kind, including when the
-        // user declined the one dialog they were shown.
-        //
-        // Asked with the page idle again, before the run raises IsBusy, so declining leaves the screen
-        // as it was: no run result is cleared and nothing is shown as under way.
-        var unasked = ConfirmationRequirement.NotPromptedFor(selected, f => f.Plan, requireTypedPhrase);
+        // One question for the whole clean, built in Core from every narrowed row: each row with its
+        // size, what §7 asks of it, the true total, and what follows the clean. Asked with the page idle
+        // again, before the run raises IsBusy, so cancelling leaves the screen as it was: no run result
+        // is cleared and nothing is shown as under way. Cancel stops the whole clean; a row the user no
+        // longer wants is unticked in the dialog instead.
+        var confirmation = CleanConfirmation.For(selected, requireTypedPhrase, WhenComplete.Selected);
+        var replies = confirmation.Opening;
 
-        if (ConfirmCleanAsync is { } confirm && unasked.Count > 0)
+        if (confirmation.MustAsk(ConfirmBeforeCleaning))
         {
-            // NotPromptedFor keeps only the rows carrying a plan, so nothing is dropped here.
-            var plans = unasked.Select(f => f.Plan).OfType<CleanupPlan>().ToList();
-
-            if (!await confirm(CleanConfirmation.For(plans)))
+            try
             {
+                if (await _prompt().AskAsync(confirmation, ct) is not { } answered)
+                {
+                    return;
+                }
+
+                replies = answered;
+            }
+            catch (OperationCanceledException)
+            {
+                Report("Clean cancelled. Nothing was removed.", InfoBarSeverity.Warning);
                 return;
             }
         }
@@ -659,11 +664,10 @@ public sealed partial class CleanViewModel : ObservableObject
         {
             // A previous run's figures and its §5.6 verdict describe a machine state this run is
             // about to replace, exactly as a preview's do. Cleared here rather than when the new ones
-            // arrive, because a run that fails, or is cancelled while its confirmations are
-            // collected, never reaches RecordRunResult: leaving the old verdict up would stand "All
-            // protected paths survived" over a deletion nobody verified, which is the inversion §5.6
-            // exists to prevent. After the confirmation above, so declining still leaves the screen
-            // exactly as it was.
+            // arrive, because a run that fails never reaches RecordRunResult: leaving the old verdict
+            // up would stand "All protected paths survived" over a deletion nobody verified, which is
+            // the inversion §5.6 exists to prevent. After the confirmation above, so cancelling it
+            // still leaves the screen exactly as it was.
             ClearRunResult();
 
             var freeBefore = FreeSpaceOfProfile();
@@ -672,18 +676,9 @@ public sealed partial class CleanViewModel : ObservableObject
             // and a retrim is offered on each volume that freed enough.
             var volumesBefore = FreeSpaceReading.Take(_volumes);
 
-            // §7's confirmation is collected here, on the UI thread and before any work starts:
-            // a dialog cannot be raised from the worker below, and asking mid-deletion would be
-            // asking after the point the answer could still change anything.
-            IConfirmationPrompt? prompt = null;
-
-            // The prompt is built on first need, so a Tier 1 run never constructs a dialog it will
-            // not show.
-            var (authorised, confirmations, declined) = await Authorisation.CollectAsync(
-                selected,
-                requireTypedPhrase,
-                (requirement, token) => (prompt ??= _prompt()).AskAsync(requirement, token),
-                ct);
+            // Decided by Core from the answers, never by this type: an answer that does not satisfy a
+            // ticked row throws here, before anything runs, and the planner checks every answer again.
+            var (authorised, confirmations, declined) = confirmation.Authorise(replies);
 
             if (authorised.Count == 0)
             {
@@ -699,15 +694,15 @@ public sealed partial class CleanViewModel : ObservableObject
                 return;
             }
 
-            // From the last confirmation to the report, so the window will not close and no page will
-            // elevate under the run. Not before the confirmations: until they are answered nothing
-            // has changed, and a window closed over one of those dialogs loses nothing.
+            // From the confirmation to the report, so the window will not close and no page will elevate
+            // under the run. Not before the confirmation: until it is answered nothing has changed, and a
+            // window closed over the dialog loses nothing.
             using var running = _running.Begin(RunningAction.StorageClean);
 
             // Every row this run will not clean still owes it the proof that its kept items and its
             // Outlook data files are standing afterwards (§5.6), and the planner runs that proof after
-            // every deletion. Asked after the confirmations, because until they are answered nobody
-            // knows which of the ticked rows will run. See StandingProof.
+            // every deletion. Asked after the confirmation, because until it is answered nobody knows
+            // which of the ticked rows will run. See StandingProof.
             var proving = StandingProof.For(Findings.Select(row => row.Finding), authorised);
 
             // A provider's "Cleaning…" line, posted before the press and delivered after it, would
@@ -794,12 +789,6 @@ public sealed partial class CleanViewModel : ObservableObject
             // showing. See ReportOutcome for which of the two sentences wins it.
             ReportOutcome(outcome);
             finished = outcome;
-        }
-        catch (OperationCanceledException)
-        {
-            // Only the confirmations can be cancelled here: the run itself reports a cancellation
-            // rather than throwing it, and so does the re-plan after it.
-            Report("Clean cancelled. Nothing was removed.", InfoBarSeverity.Warning);
         }
         catch (Exception ex) when (ex is IOException
                                       or UnauthorizedAccessException
