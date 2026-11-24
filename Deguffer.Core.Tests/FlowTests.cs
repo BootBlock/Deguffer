@@ -11,10 +11,18 @@ public sealed class FlowTests
     public void AControlThatFitsStaysOnTheLine() =>
         Assert.False(Flow.Breaks(line: 100, width: 50, Gap, available: 158));
 
-    /// <summary>One pixel over is where the control would have been drawn half off the edge.</summary>
+    /// <summary>Past the rounding slack, the control would be drawn visibly off the edge.</summary>
     [Fact]
     public void AControlThatWouldCrossTheEdgeStartsANewLine() =>
-        Assert.True(Flow.Breaks(line: 100, width: 50, Gap, available: 157));
+        Assert.True(Flow.Breaks(line: 100, width: 50, Gap, available: 156.9));
+
+    /// <summary>
+    /// A row arranged at the width it asked for can get a fraction of a pixel less back from layout
+    /// rounding at 125% or 150%, and its last control must stay on the line it was measured on.
+    /// </summary>
+    [Fact]
+    public void ARowShortByARoundingFractionKeepsItsLine() =>
+        Assert.False(Flow.Breaks(line: 100, width: 50, Gap, available: 157.4));
 
     /// <summary>A control wider than the row would be no better off on the next line, and a line with nothing on it would be a gap.</summary>
     [Fact]
