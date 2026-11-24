@@ -24,7 +24,7 @@
               AutomationProperties.HelpText="{x:Bind Scanning.Summary, Mode=OneWay}">
         <Expander.Header>
             <!-- The columns a settings row has, so the header reads as the row it folds. -->
-            <Grid Padding="0,12" ColumnSpacing="16" ColumnDefinitions="Auto,*,Auto">
+            <Grid Padding="{StaticResource ExpanderRowPadding}" ColumnSpacing="16" ColumnDefinitions="Auto,*,Auto">
                 <FontIcon Glyph="&#xE9D9;"
                           FontSize="{StaticResource GlyphSizeLarge}"
                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"

@@ -251,7 +251,7 @@ public sealed class RetroArchDownloadProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         Assert.Equal([slang], plan.TargetedPaths);
-        Assert.Contains(plan.Notes, n => n.Message.Contains("Emulator folders", StringComparison.Ordinal));
+        Assert.Contains(plan.Notes, n => n.Message.Contains("Where Deguffer looks", StringComparison.Ordinal));
     }
 
     [Fact]

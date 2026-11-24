@@ -78,7 +78,7 @@ public sealed class RetroArchDownloadProvider : RetroArchProviderBase
             + "folders beside the program, and nothing ever removes them.",
         Recommendation = "Remove these if you do not use RetroArch's shaders, or to reclaim the space "
             + "until you next want them. Deguffer finds RetroArch where Steam installed it. For any other "
-            + "copy, add its folder under Emulator folders in Settings.",
+            + "copy, add its folder under Where Deguffer looks in Settings.",
     };
 
     private protected override string Taken => "downloaded shaders and game databases";

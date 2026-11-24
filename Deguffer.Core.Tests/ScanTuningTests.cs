@@ -357,10 +357,18 @@ public sealed class ScanTuningTests
     public void AValueSetForAnyKindOfDriveIsCounted(StorageMedia media) =>
         Assert.Equal(1, ScanPreferences.Default.With(media, new MediaScanPreferences(TableListReadsInFlight: 8)).ChosenValueCount);
 
-    /// <summary>The picker's items and the summary's words are one list, in <see cref="ScanRoute"/>'s order.</summary>
+    /// <summary>
+    /// The picker's items are indexed by <see cref="ScanRoute"/>, and the summary names each route as
+    /// the picker does, so the closed header and the open picker never disagree.
+    /// </summary>
     [Fact]
-    public void TheRouteNamesFollowTheRoutesOrder() =>
-        Assert.Equal([.. Enum.GetValues<ScanRoute>().Select(ScanTuningText.RouteName)], ScanTuningText.RouteNames);
+    public void TheRouteNamesFollowTheRoutesOrder()
+    {
+        Assert.Equal(Enum.GetValues<ScanRoute>().Length, ScanTuningText.RouteNames.Count);
+        Assert.All(Enum.GetValues<ScanRoute>(), route => Assert.Equal(
+            ScanTuningText.RouteNames[(int)route],
+            ScanTuningText.Summary(ScanPreferences.Default with { Route = route })));
+    }
 
     [Fact]
     public void EveryKindOfDriveHasAName()

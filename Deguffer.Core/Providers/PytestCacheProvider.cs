@@ -66,7 +66,7 @@ public sealed class PytestCacheProvider : BuildDirectoryProvider
             + "tests failed last time and anything a test asked it to remember.",
         Recommendation = "Deguffer offers one only where pytest's own cache tag is inside it and a "
             + "file pytest reads its settings from sits beside it, and only inside the folders "
-            + "listed under Settings, Source folders.",
+            + "listed under Settings, Where Deguffer looks.",
     };
 
     protected override string Subject => "a pytest cache";

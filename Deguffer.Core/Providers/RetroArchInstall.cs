@@ -107,7 +107,7 @@ internal sealed record RetroArchInstall(string? Program, RetroArchSettings? Sett
                 return new RetroArchFolder(
                     null,
                     $"'{Settings?.Path}' puts it beside the RetroArch program, and Deguffer does not know which "
-                    + "folder that is. Add the folder RetroArch is installed in under Emulator folders in Settings.");
+                    + "folder that is. Add the folder RetroArch is installed in under Where Deguffer looks in Settings.");
             }
 
             expanded = Appended(Program, value);

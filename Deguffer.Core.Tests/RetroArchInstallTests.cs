@@ -137,6 +137,6 @@ public sealed class RetroArchInstallTests : IDisposable
         var folder = Thumbnails(Install(null, "thumbnails_directory = \":\\thumbnails\""));
 
         Assert.Null(folder.Path);
-        Assert.Contains("Emulator folders", folder.Unresolved, StringComparison.Ordinal);
+        Assert.Contains("Where Deguffer looks", folder.Unresolved, StringComparison.Ordinal);
     }
 }

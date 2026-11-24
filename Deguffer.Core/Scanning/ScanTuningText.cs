@@ -29,7 +29,7 @@ public static class ScanTuningText
         [RouteName(ScanRoute.Auto), RouteName(ScanRoute.WalkOnly), RouteName(ScanRoute.Table)];
 
     /// <summary>A route, as the route picker names it.</summary>
-    public static string RouteName(ScanRoute route) => route switch
+    private static string RouteName(ScanRoute route) => route switch
     {
         ScanRoute.Auto => "Auto",
         ScanRoute.WalkOnly => "Walk folders only",

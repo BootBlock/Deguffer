@@ -64,22 +64,30 @@ public sealed class DesignSettingsLayoutTests
 
     /// <summary>
     /// Every control bound to the scanning section, its failure notice and the drives' readout
-    /// included, is inside the expander, and nothing outside the section binds to it, so no scanning
-    /// value is left in view beside the safety settings.
+    /// included, is in the expander's content, and nothing outside the section binds to it, so no
+    /// scanning value is left in view beside the safety settings. The header stays in view while the
+    /// expander is closed, so it may carry only the summary, and the expander itself only names it.
     /// </summary>
     [Fact]
     public void EveryScanningRowIsInsideTheExpander()
     {
         var expander = ScanningExpander();
+        var header = expander.Elements().Single(element => element.Name.LocalName == "Expander.Header");
         var bound = ShellMarkup.Files
             .SelectMany(file => file.Elements.Where(BindsScanning).Select(element => (file, element)))
+            .Where(found => found.element != expander && !IsTheSummary(found.element))
             .ToList();
 
         Assert.Contains(bound, found => found.element.Attribute("Value")?.Value.Contains("Scanning.WalkThreads", StringComparison.Ordinal) == true);
         Assert.All(bound, found => Assert.True(
-            found.file.Name == Section && found.element.AncestorsAndSelf().Contains(expander),
-            $"{found.file.Name}:{ShellMarkup.LineOf(found.element)} binds the scanning section outside its expander."));
+            found.file.Name == Section && found.element.Ancestors().Contains(expander) && !found.element.Ancestors().Contains(header),
+            $"{found.file.Name}:{ShellMarkup.LineOf(found.element)} binds the scanning section outside its expander's content."));
     }
+
+    private static bool IsTheSummary(XElement element) =>
+        element.Name.LocalName == "TextBlock"
+        && element.Attributes().Count(attribute => attribute.Value.Contains("x:Bind Scanning.", StringComparison.Ordinal)) == 1
+        && element.Attribute("Text")?.Value == "{x:Bind Scanning.Summary, Mode=OneWay}";
 
     /// <summary>The folded header says what holds, so a scan tuned on one kind of drive is never hidden by closing it.</summary>
     [Fact]

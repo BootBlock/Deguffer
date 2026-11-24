@@ -66,7 +66,7 @@ public sealed class MypyCacheProvider : BuildDirectoryProvider
             + "for every module so the next check reads only what changed.",
         Recommendation = "Deguffer offers one only where mypy's own cache tag is inside it and a "
             + "file mypy reads its settings from sits beside it, and only inside the folders listed "
-            + "under Settings, Source folders.",
+            + "under Settings, Where Deguffer looks.",
     };
 
     protected override string Subject => "a mypy cache";
