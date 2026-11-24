@@ -42,6 +42,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _keeps = keeps;
         _volumes = volumes;
 
+        _announcedSpacing = preferences.Current.TreemapSpacing;
         SourceRoots = [.. sourceRoots.Current];
         EmulatorFolders = [.. emulatorFolders.Current];
         KeptItems = [.. InDisplayOrder(keeps.Current)];
@@ -217,7 +218,37 @@ public sealed partial class SettingsViewModel : ObservableObject
     public int TreemapSpacingIndex
     {
         get => (int)_preferences.Current.TreemapSpacing;
-        set => Apply(current => current with { TreemapSpacing = (ExploreSpacing)value });
+        set
+        {
+            Apply(current => current with { TreemapSpacing = (ExploreSpacing)value });
+
+            // Apply has announced the stored spacing, written or put back.
+            _announcedSpacing = _preferences.Current.TreemapSpacing;
+        }
+    }
+
+    /// <summary>
+    /// The spacing <see cref="TreemapSpacingIndex"/> was last announced as, so a change to some other
+    /// preference does not make the box read it again.
+    /// </summary>
+    private ExploreSpacing _announcedSpacing;
+
+    /// <summary>
+    /// Show a spacing chosen in the map appearance window, which writes the same setting while this page
+    /// is open. The page calls this on every change to the preferences, so the spacing shown is one
+    /// already in the file. No other setting here has a second place it is written.
+    /// </summary>
+    public void FollowStoredSpacing()
+    {
+        var stored = _preferences.Current.TreemapSpacing;
+
+        if (stored == _announcedSpacing)
+        {
+            return;
+        }
+
+        _announcedSpacing = stored;
+        OnPropertyChanged(nameof(TreemapSpacingIndex));
     }
 
     public bool BackdropEnabled
