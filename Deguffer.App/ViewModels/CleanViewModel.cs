@@ -476,54 +476,12 @@ public sealed partial class CleanViewModel : ObservableObject
 
     public bool HasScheduled => !string.IsNullOrEmpty(ScheduledLabel);
 
-    /// <summary>
-    /// The run's own §5.6 verdict, beside its figures, for as long as those figures stand.
-    ///
-    /// <para>The info bar cannot be its home. The bar is a single line describing whatever happened
-    /// most recently, and what happens immediately after a clean is the re-plan that follows it —
-    /// so a verdict left there is displaced by the next provider's progress line. §5.6 exists to
-    /// turn "I think it worked" into evidence the user sees, which a message visible for the length
-    /// of one rescan is not.</para>
-    /// </summary>
-    [ObservableProperty]
-    public partial string RunStatement { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Whether that verdict is a failure, so the card can say so in more than words. The words
-    /// carry it on their own (§6.5) — the colour is what stops a protected path having gone missing
-    /// reading like the two neutral figures beside it.
-    /// </summary>
-    [ObservableProperty]
-    public partial bool RunVerificationFailed { get; set; }
-
-    /// <summary>
-    /// Every §5.6 check the run has something to answer for, in full and unabridged.
-    ///
-    /// <para>The sentence above tells the user a protected path went missing and, when it is a
-    /// failure, asks them to report it. Without this it asks them to report something it never told
-    /// them: the paths, the reasons they were protected, and what was found instead all existed in
-    /// <see cref="VerificationResult"/> and reached no surface at all. A request to report a fault,
-    /// with no way to say what the fault was, is a dead end.</para>
-    ///
-    /// <para>Every kind of check that is not a pass appears here, because each describes a path
-    /// nobody could verify. The sentence is what separates a fault to report from a folder that went
-    /// away on its own or one Windows would not describe, and each row's own detail repeats which of
-    /// those it is.</para>
-    /// </summary>
-    public ObservableCollection<VerificationCheck> RunVerificationNotes { get; } = [];
-
-    /// <summary>Whether there is anything in that list, so the card shows it only when there is.</summary>
-    public bool HasRunVerificationNotes => RunVerificationNotes.Count > 0;
+    /// <summary>The run's own §5.6 verdict, beside its figures, for as long as those figures stand.</summary>
+    public SafetyCheckViewModel SafetyCheck { get; } = new();
 
     public string FreeSpaceNowLabel => FreeSpaceNow is { } value ? FreeSpace.Format(value) : "—";
 
     public bool HasRunResult => !string.IsNullOrEmpty(RemovedLabel);
-
-    /// <summary>
-    /// The last run written out for a GitHub issue, which the result card's link copies. Empty
-    /// where no run's figures are on screen. See <see cref="CleanRunReport"/>.
-    /// </summary>
-    public string RunDiagnostics { get; private set; } = string.Empty;
 
     /// <summary>What the card says in place of its rows when it draws none.</summary>
     public StorageEmptyState EmptyState => _listed.Empty;
@@ -665,9 +623,9 @@ public sealed partial class CleanViewModel : ObservableObject
             // A previous run's figures and its §5.6 verdict describe a machine state this run is
             // about to replace, exactly as a preview's do. Cleared here rather than when the new ones
             // arrive, because a run that fails never reaches RecordRunResult: leaving the old verdict
-            // up would stand "All protected paths survived" over a deletion nobody verified, which is
-            // the inversion §5.6 exists to prevent. After the confirmation above, so cancelling it
-            // still leaves the screen exactly as it was.
+            // up would stand "Safety check passed" over a deletion nobody verified, which is the
+            // inversion §5.6 exists to prevent. After the confirmation above, so cancelling it still
+            // leaves the screen exactly as it was.
             ClearRunResult();
 
             var freeBefore = FreeSpaceOfProfile();
@@ -1120,15 +1078,7 @@ public sealed partial class CleanViewModel : ObservableObject
             : "—";
 
         var outcome = RunOutcome.For(results);
-        RunStatement = outcome.Statement;
-        RunDiagnostics = CleanRunReport.Describe(results, _origin, _environment);
-        RunVerificationFailed = outcome.VerificationFailed;
-
-        // Written over rather than emptied and filled, so a second run that meets the same checks
-        // leaves the panel alone instead of taking it down and putting it back up.
-        LiveList.Rewrite(RunVerificationNotes, figures.Checks);
-
-        OnPropertyChanged(nameof(HasRunVerificationNotes));
+        SafetyCheck.Show(outcome, figures.Checks, CleanRunReport.Describe(results, _origin, _environment));
         OnPropertyChanged(nameof(HasRunResult));
 
         return outcome;
@@ -1228,11 +1178,7 @@ public sealed partial class CleanViewModel : ObservableObject
         OnPropertyChanged(nameof(HasRequested));
         ScheduledLabel = string.Empty;
         OnPropertyChanged(nameof(HasScheduled));
-        RunStatement = string.Empty;
-        RunDiagnostics = string.Empty;
-        RunVerificationFailed = false;
-        RunVerificationNotes.Clear();
-        OnPropertyChanged(nameof(HasRunVerificationNotes));
+        SafetyCheck.Clear();
         OnPropertyChanged(nameof(HasRunResult));
     }
 

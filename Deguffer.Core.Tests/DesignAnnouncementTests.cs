@@ -13,7 +13,7 @@ public sealed class DesignAnnouncementTests
 {
     private static readonly Dictionary<string, int> Baseline = new(StringComparer.Ordinal)
     {
-        ["Deguffer.App/Views/CleanPage.xaml"] = 3,
+        ["Deguffer.App/Views/CleanPage.xaml"] = 2,
         ["Deguffer.App/Views/DuplicatesPage.xaml"] = 4,
         ["Deguffer.App/Views/ExplorePage.xaml"] = 4,
         ["Deguffer.App/Views/HealthPage.xaml"] = 1,
