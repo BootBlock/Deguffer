@@ -64,7 +64,7 @@ public sealed class RailFoldingTests : IDisposable
     [InlineData(RailChoice.Collapsed, Wide)]
     public void CrossingTheWidthDoesNotRewriteTheStoredChoice(RailChoice stored, double first)
     {
-        Assert.True(_preferences.Update(current => current with { Rail = stored }));
+        Assert.NotEqual(SaveOutcome.Refused, _preferences.Update(current => current with { Rail = stored }));
         var written = File.GetLastWriteTimeUtc(PreferencesFile);
         var rail = Rail();
         var second = first == Narrow ? Wide : Narrow;
@@ -109,7 +109,7 @@ public sealed class RailFoldingTests : IDisposable
     [Fact]
     public void FoldingTheRailBackOnANarrowWindowHandsItBackToTheWidth()
     {
-        Assert.True(_preferences.Update(current => current with { Rail = RailChoice.Open }));
+        Assert.Equal(SaveOutcome.Saved, _preferences.Update(current => current with { Rail = RailChoice.Open }));
         var rail = Rail();
         rail.Fit(Narrow);
 

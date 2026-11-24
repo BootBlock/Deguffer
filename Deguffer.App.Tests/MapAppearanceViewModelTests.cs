@@ -62,7 +62,7 @@ public sealed class MapAppearanceViewModelTests : IDisposable
 
     /// <summary>Another setting chosen on the Settings page, which is the next time this hears from the preferences.</summary>
     private void ChooseAnotherSetting() =>
-        Assert.True(_preferences.Update(current => current with { Theme = current.Theme == AppTheme.Dark ? AppTheme.Light : AppTheme.Dark }));
+        Assert.Equal(SaveOutcome.Saved, _preferences.Update(current => current with { Theme = current.Theme == AppTheme.Dark ? AppTheme.Light : AppTheme.Dark }));
 
     /// <summary>A list with nothing selected reports -1 while it rebuilds, which is not a choice.</summary>
     [Fact]
@@ -184,7 +184,7 @@ public sealed class MapAppearanceViewModelTests : IDisposable
         var raised = new List<string?>();
         window.PropertyChanged += (_, changed) => raised.Add(changed.PropertyName);
 
-        Assert.True(_preferences.Update(current => current with { TreemapSpacing = ExploreSpacing.Spacious }));
+        Assert.Equal(SaveOutcome.Saved, _preferences.Update(current => current with { TreemapSpacing = ExploreSpacing.Spacious }));
 
         Assert.Equal(1, changes);
         Assert.Equal(ExploreSpacing.Spacious, window.Look.Spacing);
@@ -412,7 +412,7 @@ public sealed class MapAppearanceViewModelTests : IDisposable
     [Fact]
     public void TheLookOpensOnTheViewAndColouringThePageWasLeftOn()
     {
-        Assert.True(_preferences.Update(current => current with { Explore = ExploreView.Sunburst, ExploreColours = ExploreColouring.Age }));
+        Assert.Equal(SaveOutcome.Saved, _preferences.Update(current => current with { Explore = ExploreView.Sunburst, ExploreColours = ExploreColouring.Age }));
 
         var window = Window();
 
@@ -497,7 +497,7 @@ public sealed class MapAppearanceViewModelTests : IDisposable
         var window = Window();
         var colourings = new List<ExploreColouring>();
         window.ColouringChosen += (_, colouring) => colourings.Add(colouring);
-        Assert.True(_preferences.Update(current => current with { ConfirmBeforeCleaning = false }));
+        Assert.Equal(SaveOutcome.Saved, _preferences.Update(current => current with { ConfirmBeforeCleaning = false }));
 
         window.PresetIndex = MapPreset.All.ToList().IndexOf(MapPreset.WizTree);
         window.View = ExploreView.Icicle;

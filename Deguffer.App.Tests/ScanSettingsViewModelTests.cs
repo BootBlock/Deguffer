@@ -205,6 +205,22 @@ public sealed class ScanSettingsViewModelTests : IDisposable
     }
 
     /// <summary>
+    /// The box put back to Auto sends Auto, which is what holds, so its row goes on saying the change
+    /// was not saved.
+    /// </summary>
+    [Fact]
+    public void ABoxPutBackAfterARefusedWriteLeavesItsNoticeStanding()
+    {
+        var (section, _, _) = Section();
+        Directory.CreateDirectory(Path.Combine(_environment.LocalAppData, "Deguffer", "preferences.json"));
+
+        section.WalkThreads = 4;
+        section.WalkThreads = section.WalkThreads;
+
+        Assert.Equal([nameof(ScanSettingsViewModel.WalkThreadsSave)], FailedRows.Of(section));
+    }
+
+    /// <summary>
     /// The drives present are listed with their kinds and what each scan of them runs with, and a
     /// change to a value redescribes them without asking any device again.
     /// </summary>

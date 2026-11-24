@@ -367,7 +367,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// <param name="setting">The property whose control made the change, which is the setter calling this.</param>
     private void Apply(SettingSave row, Func<AppPreferences, AppPreferences> change, [CallerMemberName] string setting = "")
     {
-        var saved = _latest.Report(row, _preferences.Update(change));
+        var outcome = _latest.Report(row, _preferences.Update(change));
 
         // A rejected write changes nothing, so the control is now showing a value that is not in
         // effect. Re-reading every bound property puts it back to what actually holds, rather than
@@ -376,6 +376,6 @@ public sealed partial class SettingsViewModel : ObservableObject
         // A write that succeeds can store something other than what was typed, because a number goes
         // through EnteredSetting first: half an hour is stored as one. The control that made the
         // change reads it back, or it goes on showing a value that is not in effect.
-        OnPropertyChanged(saved ? setting : string.Empty);
+        OnPropertyChanged(outcome is SaveOutcome.Refused ? string.Empty : setting);
     }
 }

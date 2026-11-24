@@ -256,14 +256,14 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
     /// <param name="setting">The property whose control made the change, which is the setter calling this.</param>
     private void Apply(SettingSave row, Func<ScanPreferences, ScanPreferences> change, [CallerMemberName] string setting = "")
     {
-        var saved = _latest.Report(row, _preferences.Update(current => current with { Scanning = change(current.Scanning) }));
+        var outcome = _latest.Report(row, _preferences.Update(current => current with { Scanning = change(current.Scanning) }));
 
         // As the rest of the page does: a rejected write puts every control back to what holds, and
         // an accepted one reads back what was stored, which the clamp can make differ from what was
         // typed.
-        OnPropertyChanged(saved ? setting : string.Empty);
+        OnPropertyChanged(outcome is SaveOutcome.Refused ? string.Empty : setting);
 
-        if (saved)
+        if (outcome is SaveOutcome.Saved)
         {
             OnPropertyChanged(nameof(Summary));
             DescribeDrives();

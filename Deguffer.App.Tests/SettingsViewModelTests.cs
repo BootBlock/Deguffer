@@ -130,6 +130,23 @@ public sealed class SettingsViewModelTests : IDisposable
     }
 
     /// <summary>
+    /// A box put back after a refused write sends the value it was put back to, which is the one
+    /// already stored. That asks for nothing new and says nothing about the folder, so the row goes on
+    /// saying the change was not saved, rather than closing the notice the moment it opened.
+    /// </summary>
+    [Fact]
+    public void ABoxPutBackAfterARefusedWriteLeavesItsNoticeStanding()
+    {
+        var (page, _) = Page();
+        Directory.CreateDirectory(Path.Combine(Settings, "preferences.json"));
+
+        page.FileHistoryRetentionDays = 30;
+        page.FileHistoryRetentionDays = page.FileHistoryRetentionDays;
+
+        Assert.Equal([nameof(SettingsViewModel.FileHistoryRetentionDaysSave)], FailedRows.Of(page));
+    }
+
+    /// <summary>
     /// One failure is stated once: a later change that fails moves the notice to its own row, and a
     /// change that saves clears it, because the folder it tells the reader to check took a write.
     /// </summary>
