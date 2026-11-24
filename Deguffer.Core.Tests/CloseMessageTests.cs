@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 
@@ -100,7 +101,7 @@ public sealed partial class CloseMessageTests
 
         Assert.Equal(file, Assert.Single(declared[TheOnlySessionEnd]));
 
-        var source = File.ReadAllText(Path.Combine(MarkdownGuide.RepositoryRoot, file));
+        var source = File.ReadAllText(Path.Combine(SourceTree.RepositoryRoot, file));
 
         Assert.Contains("private const uint ExitLogOff = 0x0;", source, StringComparison.Ordinal);
         Assert.Contains("private const uint ExitReboot = 0x2;", source, StringComparison.Ordinal);
@@ -139,7 +140,7 @@ public sealed partial class CloseMessageTests
 
         var callers = ProductSources.Files()
             .Where(file => TerminateCall().IsMatch(File.ReadAllText(file)))
-            .Select(file => Path.GetRelativePath(MarkdownGuide.RepositoryRoot, file));
+            .Select(file => Path.GetRelativePath(SourceTree.RepositoryRoot, file));
 
         Assert.Equal(Path.Combine("Deguffer.Core", "Safety", "ToolJob.cs"), Assert.Single(callers));
 
@@ -167,7 +168,7 @@ public sealed partial class CloseMessageTests
         var used = ProductSources.Files()
             .SelectMany(file => ProductSources.Code(File.ReadAllText(file))
                 .SelectMany(line => ManagedRoute().Matches(line))
-                .Select(match => (Route: match.Groups["route"].Value, File: Path.GetRelativePath(MarkdownGuide.RepositoryRoot, file))))
+                .Select(match => (Route: match.Groups["route"].Value, File: Path.GetRelativePath(SourceTree.RepositoryRoot, file))))
             .Where(use => !NativeLibraryAllowance(use.Route, use.File) && !WmiMethodAllowance(use.Route, use.File))
             .Select(use => $"{use.Route} in {use.File}")
             .ToList();
@@ -187,7 +188,7 @@ public sealed partial class CloseMessageTests
     [Fact]
     public void TheOnlyLibraryLoadedByNameRemovesARestorePoint()
     {
-        var code = string.Join('\n', ProductSources.Code(File.ReadAllText(Path.Combine(MarkdownGuide.RepositoryRoot, RestorePointCalls))));
+        var code = string.Join('\n', ProductSources.Code(File.ReadAllText(Path.Combine(SourceTree.RepositoryRoot, RestorePointCalls))));
 
         Assert.Equal(["\"SRRemoveRestorePoint\""], ExportLoaded().Matches(code).Select(match => match.Groups["export"].Value.Trim()));
     }
@@ -201,7 +202,7 @@ public sealed partial class CloseMessageTests
     [Fact]
     public void TheOnlyWmiMethodThatActsIsTheRetrim()
     {
-        var code = string.Join('\n', ProductSources.Code(File.ReadAllText(Path.Combine(MarkdownGuide.RepositoryRoot, VolumeRetrim))));
+        var code = string.Join('\n', ProductSources.Code(File.ReadAllText(Path.Combine(SourceTree.RepositoryRoot, VolumeRetrim))));
 
         Assert.Single(MethodCall().Matches(code));
         Assert.Contains("services.ExecMethod(path, Method,", code, StringComparison.Ordinal);
@@ -217,7 +218,7 @@ public sealed partial class CloseMessageTests
     [Fact]
     public void TheOnlyHyperVMethodCalledDescribesADisk()
     {
-        var code = string.Join('\n', ProductSources.Code(File.ReadAllText(Path.Combine(MarkdownGuide.RepositoryRoot, HyperVDisks))));
+        var code = string.Join('\n', ProductSources.Code(File.ReadAllText(Path.Combine(SourceTree.RepositoryRoot, HyperVDisks))));
 
         Assert.Single(MethodCall().Matches(code));
         Assert.Contains("services.ExecMethod(servicePath, Method,", code, StringComparison.Ordinal);
@@ -244,7 +245,7 @@ public sealed partial class CloseMessageTests
         route == "NativeLibrary" && file == RestorePointCalls;
 
     private static string Core =>
-        Path.Combine(MarkdownGuide.RepositoryRoot, "Deguffer.Core");
+        Path.Combine(SourceTree.RepositoryRoot, "Deguffer.Core");
 
     [GeneratedRegex(@"(?<route>\bKill\b|\bCloseMainWindow\b|\bGetProcessById\b|\bNativeLibrary\b|\bSystem\.Management\b|\bSendKeys\b|\bExecMethod\b)")]
     private static partial Regex ManagedRoute();

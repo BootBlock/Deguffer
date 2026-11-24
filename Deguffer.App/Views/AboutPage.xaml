@@ -67,21 +67,23 @@
 
                 <!-- Directly under the name, because "which build is this" is what an about box is
                      asked first, and the links belong beside it rather than at the foot of a page
-                     nobody scrolls to. -->
+                     nobody scrolls to. The scanning mode is here too: it is diagnostic, the
+                     difference between a scan that takes seconds and one that takes minutes, and a
+                     bug report needs it with the rest, which Copy details puts on the clipboard. -->
                 <Border Style="{StaticResource SolidCardStyle}">
                     <StackPanel Spacing="16">
                         <Grid ColumnSpacing="20" RowSpacing="8" ColumnDefinitions="Auto,*"
-                              RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+                              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
 
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="Version"
                                        Style="{StaticResource FieldLabel}" />
-                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{x:Bind Version}"
+                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{x:Bind Details.Version}"
                                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                        TextWrapping="Wrap" />
 
                             <TextBlock Grid.Row="1" Grid.Column="0" Text="Built"
                                        Style="{StaticResource FieldLabel}" />
-                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{x:Bind BuildDate}"
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{x:Bind Details.BuildDateText}"
                                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                        TextWrapping="Wrap" />
 
@@ -106,48 +108,73 @@
                                             ToolTipService.ToolTip="{x:Bind ArchitectureExplanation}"
                                             AutomationProperties.LabeledBy="{x:Bind ArchitectureLabel}"
                                             AutomationProperties.HelpText="{x:Bind ArchitectureExplanation}">
-                                <TextBlock Text="{x:Bind Architecture}"
+                                <TextBlock Text="{x:Bind Details.ArchitectureText}"
                                            Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                            TextWrapping="Wrap" />
                             </ContentControl>
 
-                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Author"
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Windows"
                                        Style="{StaticResource FieldLabel}" />
-                            <TextBlock Grid.Row="3" Grid.Column="1" Text="Joe Cox"
+                            <TextBlock Grid.Row="3" Grid.Column="1" Text="{x:Bind Details.WindowsText}"
                                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                        TextWrapping="Wrap" />
 
-                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Built in"
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Scanning"
                                        Style="{StaticResource FieldLabel}" />
-                            <TextBlock Grid.Row="4" Grid.Column="1" Text="Scunthorpe, England"
+                            <StackPanel Grid.Row="4" Grid.Column="1" Spacing="{StaticResource LabelGap}">
+                                <TextBlock Text="{x:Bind Details.ScanModeText}"
+                                           Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Text="{x:Bind ScanModeExplanation}" Style="{StaticResource Caption}" />
+                            </StackPanel>
+
+                            <TextBlock Grid.Row="5" Grid.Column="0" Text="Author"
+                                       Style="{StaticResource FieldLabel}" />
+                            <TextBlock Grid.Row="5" Grid.Column="1" Text="Joe Cox"
+                                       Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                       TextWrapping="Wrap" />
+
+                            <TextBlock Grid.Row="6" Grid.Column="0" Text="Built in"
+                                       Style="{StaticResource FieldLabel}" />
+                            <TextBlock Grid.Row="6" Grid.Column="1" Text="Scunthorpe, England"
                                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                        TextWrapping="Wrap" />
                         </Grid>
 
-                        <StackPanel Orientation="Horizontal" Spacing="16">
-                            <HyperlinkButton Content="GitHub repository"
+                        <!-- What a bug report needs, as plain text with no path in it. -->
+                        <controls:FlowRow ColumnSpacing="{StaticResource ControlGap}" RowSpacing="{StaticResource ControlGap}">
+                            <Button x:Name="CopyDetailsButton"
+                                    Content="Copy details"
+                                    AutomationProperties.HelpText="Copies the version, build date, architecture, Windows version and scanning mode, to paste into a bug report."
+                                    Click="OnCopyDetails" />
+                            <TextBlock x:Name="CopyDetailsResult"
+                                       VerticalAlignment="Center"
+                                       Style="{StaticResource SecondaryText}" />
+                        </controls:FlowRow>
+
+                        <!-- The issue tracker leads, because a problem is why most readers look for a
+                             link here, and its new-issue page offers the report forms. -->
+                        <controls:FlowRow ColumnSpacing="{StaticResource RegionGap}" RowSpacing="{StaticResource ControlGap}">
+                            <HyperlinkButton x:Name="ReportProblemLink"
+                                             Content="Report a problem"
+                                             NavigateUri="https://github.com/BootBlock/Deguffer/issues/new/choose"
+                                             Padding="0" />
+                            <HyperlinkButton x:Name="RepositoryLink"
+                                             Content="GitHub repository"
                                              NavigateUri="https://github.com/BootBlock/Deguffer"
                                              Padding="0" />
-                            <HyperlinkButton Content="bootblock.co.uk"
+                            <HyperlinkButton x:Name="AuthorSiteLink"
+                                             Content="bootblock.co.uk"
                                              NavigateUri="https://bootblock.co.uk"
                                              Padding="0" />
-                            <HyperlinkButton Content="BootBlock on GitHub"
+                            <HyperlinkButton x:Name="AuthorProfileLink"
+                                             Content="BootBlock on GitHub"
                                              NavigateUri="https://github.com/BootBlock?tab=repositories"
                                              Padding="0" />
-                        </StackPanel>
+                        </controls:FlowRow>
                     </StackPanel>
                 </Border>
 
-                <!-- Diagnostic, because it is the difference between a scan that takes seconds and one
-                     that takes minutes, and there is otherwise nowhere to find out which one you got. -->
-                <Border Style="{StaticResource SolidCardStyle}">
-                    <StackPanel Spacing="4">
-                        <TextBlock Text="Scanning" Style="{StaticResource FieldLabel}" />
-                        <TextBlock Text="{x:Bind ScanMode}"
-                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                   TextWrapping="Wrap" />
-                    </StackPanel>
-                </Border>
 
                 <!-- One line a page, in the words its rail item states, after the build's details
                      because "which build is this" is asked first. -->
@@ -213,9 +240,38 @@
                     </StackPanel>
                 </Border>
 
+                <!-- The licence, then what ships inside each build under its own: every build is
+                     self-contained (§6.3), so .NET and the Windows App SDK are redistributed in it
+                     beside the referenced packages, and their licences expect the credit. -->
                 <Border Style="{StaticResource SolidCardStyle}">
-                    <TextBlock Style="{StaticResource SecondaryText}"
-                               Text="Open source under the MIT licence." />
+                    <StackPanel Spacing="{StaticResource ControlGap}">
+                        <TextBlock Text="Licences" Style="{StaticResource GroupHeading}" />
+                        <TextBlock Style="{StaticResource SecondaryText}">
+                            <Run Text="Deguffer is open source under the" />
+                            <Hyperlink NavigateUri="https://github.com/BootBlock/Deguffer/blob/main/LICENSE">MIT licence</Hyperlink><Run Text=". Each build includes these components, under their own licences:" />
+                        </TextBlock>
+                        <ItemsControl ItemsSource="{x:Bind Components}" IsTabStop="False">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Spacing="{StaticResource LabelGap}" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="shell:ThirdPartyComponent">
+                                    <controls:FlowRow ColumnSpacing="{StaticResource ControlGap}" RowSpacing="{StaticResource LabelGap}">
+                                        <TextBlock Text="{x:Bind Name}"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                                        <HyperlinkButton Content="{x:Bind Licence}"
+                                                         NavigateUri="{x:Bind LicenceUri}"
+                                                         Padding="0"
+                                                         AutomationProperties.Name="{x:Bind LicenceLinkName}"
+                                                         AutomationProperties.AutomationId="{x:Bind LicenceLinkName}" />
+                                    </controls:FlowRow>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
                 </Border>
             </StackPanel>
         </ScrollViewer>

@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 
@@ -79,7 +80,7 @@ public sealed partial class DesignUserTextTests
     [Fact]
     public void TheShellNeverShowsAnExceptionsOwnMessage()
     {
-        var app = TestProjects.SourceFiles(Path.Combine(MarkdownGuide.RepositoryRoot, "Deguffer.App"));
+        var app = TestProjects.SourceFiles(Path.Combine(SourceTree.RepositoryRoot, "Deguffer.App"));
 
         RuleBaseline.Hold("no exception Message interpolated into text the shell shows", InLiterals(app, ExceptionMessage(), "shows an exception's own message"), ExceptionTextBaseline);
     }
@@ -110,10 +111,10 @@ public sealed partial class DesignUserTextTests
 
     /// <summary>The projects whose words reach a user: the shell, and the Core that words its sentences.</summary>
     private static IEnumerable<string> ShownSources() =>
-        ShellSources().Concat(TestProjects.SourceFiles(Path.Combine(MarkdownGuide.RepositoryRoot, "Deguffer.Core")));
+        ShellSources().Concat(TestProjects.SourceFiles(Path.Combine(SourceTree.RepositoryRoot, "Deguffer.Core")));
 
     private static IEnumerable<string> ShellSources() =>
-        TestProjects.SourceFiles(Path.Combine(MarkdownGuide.RepositoryRoot, "Deguffer.App"));
+        TestProjects.SourceFiles(Path.Combine(SourceTree.RepositoryRoot, "Deguffer.App"));
 
     private static IEnumerable<RuleViolation> InLiterals(IEnumerable<string> files, Regex pattern, string detail) =>
         files.SelectMany(file => Lines(file)
@@ -123,7 +124,7 @@ public sealed partial class DesignUserTextTests
 
     private static IEnumerable<(string File, int Number, string Line)> Lines(string file)
     {
-        var name = Path.GetRelativePath(MarkdownGuide.RepositoryRoot, file).Replace('\\', '/');
+        var name = Path.GetRelativePath(SourceTree.RepositoryRoot, file).Replace('\\', '/');
 
         return ProductSources.NumberedCode(File.ReadAllText(file).ReplaceLineEndings("\n"))
             .Select(code => (name, code.Number, code.Line));

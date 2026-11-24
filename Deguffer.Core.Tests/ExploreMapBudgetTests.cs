@@ -1,4 +1,5 @@
 using System.Globalization;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 
@@ -17,7 +18,7 @@ public sealed class ExploreMapBudgetTests
     private const int LineBudget = 2_300;
 
     private static readonly string Host =
-        Path.Combine(MarkdownGuide.RepositoryRoot, "Deguffer.App", "Controls", "ExploreMap.cs");
+        Path.Combine(SourceTree.RepositoryRoot, "Deguffer.App", "Controls", "ExploreMap.cs");
 
     [Fact]
     public void TheMapsHostStaysWithinItsBudget()

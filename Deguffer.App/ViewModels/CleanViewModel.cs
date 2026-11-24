@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Runtime.InteropServices;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Deguffer.App.Shell;
@@ -106,7 +105,7 @@ public sealed partial class CleanViewModel : ObservableObject
     /// Deferred rather than injected directly: a dialog needs the page's <c>XamlRoot</c>, which does
     /// not exist while the view-model is being constructed.
     /// </param>
-    /// <param name="appVersion">Deguffer's own version, which a run's diagnostic report names.</param>
+    /// <param name="build">Which build this is and what it runs on, which a run's diagnostic report names.</param>
     /// <param name="whenComplete">What follows a finished clean, chosen beside the Clean button.</param>
     /// <param name="retrim">The offer of Windows' retrim on the volumes a finished clean freed space on.</param>
     /// <param name="scanChoice">
@@ -127,7 +126,7 @@ public sealed partial class CleanViewModel : ObservableObject
         RunningActions running,
         BusyWork work,
         Func<IConfirmationPrompt> prompt,
-        string appVersion,
+        BuildDetails build,
         WhenCompleteViewModel whenComplete,
         RetrimViewModel retrim,
         ScanChoiceViewModel scanChoice,
@@ -157,10 +156,7 @@ public sealed partial class CleanViewModel : ObservableObject
         // the volume list, which may not have been read yet.
         DriveHealth = new DriveHealthLine(driveHealth, volumes.MountPointOf(environment.UserProfile));
         _coverage = new ScanCoverage(planner.Providers.Count, planner.Providers.Count);
-        _origin = new ReportOrigin(
-            appVersion,
-            $"{RuntimeInformation.OSDescription} ({RuntimeInformation.ProcessArchitecture})",
-            isElevated);
+        _origin = new ReportOrigin(build.Version, build.PlatformText, isElevated);
 
         // Capacity cannot change while the app is open, so it is read once; only the free figure
         // is re-read after a run.

@@ -1,3 +1,5 @@
+using Deguffer.Testing;
+
 namespace Deguffer.Core.Tests;
 
 /// <summary>
@@ -8,7 +10,7 @@ internal static class TestProjects
 {
     /// <summary>Every project whose name ends <c>.Tests</c>.</summary>
     public static IEnumerable<string> Directories() =>
-        Directory.EnumerateDirectories(MarkdownGuide.RepositoryRoot)
+        Directory.EnumerateDirectories(SourceTree.RepositoryRoot)
             .Where(project => Path.GetFileName(project).EndsWith(".Tests", StringComparison.Ordinal));
 
     /// <summary>
@@ -16,7 +18,7 @@ internal static class TestProjects
     /// for a sweep of everything a test runs.
     /// </summary>
     public static IEnumerable<string> SourcesWithFixtures() =>
-        Directories().Append(Path.Combine(MarkdownGuide.RepositoryRoot, "Deguffer.Testing")).SelectMany(SourceFiles);
+        Directories().Append(Path.Combine(SourceTree.RepositoryRoot, "Deguffer.Testing")).SelectMany(SourceFiles);
 
     /// <summary>The C# files of <paramref name="project"/>, leaving out what a build wrote.</summary>
     public static IEnumerable<string> SourceFiles(string project) =>

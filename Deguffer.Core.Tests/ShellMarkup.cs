@@ -1,6 +1,7 @@
 using System.Globalization;
-using System.Xml;
 using System.Xml.Linq;
+using System.Xml;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 
@@ -86,13 +87,13 @@ internal static class ShellMarkup
 
     private static IReadOnlyList<MarkupFile> Load()
     {
-        var app = Path.Combine(MarkdownGuide.RepositoryRoot, "Deguffer.App");
+        var app = Path.Combine(SourceTree.RepositoryRoot, "Deguffer.App");
 
         var files = Directory.EnumerateFiles(app, "*.xaml", SearchOption.AllDirectories)
             .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
                 && !file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
             .Select(file => new MarkupFile(
-                Path.GetRelativePath(MarkdownGuide.RepositoryRoot, file).Replace('\\', '/'),
+                Path.GetRelativePath(SourceTree.RepositoryRoot, file).Replace('\\', '/'),
                 XDocument.Load(file, LoadOptions.SetLineInfo),
                 File.ReadLines(file).Count()))
             .OrderBy(file => file.Name, StringComparer.Ordinal)

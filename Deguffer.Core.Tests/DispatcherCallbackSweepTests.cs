@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 
@@ -32,11 +33,11 @@ public sealed partial class DispatcherCallbackSweepTests
     public void EveryDispatcherCallbackInTheAppIsGuarded()
     {
         var found = new SortedDictionary<string, int>(StringComparer.Ordinal);
-        var app = Path.Combine(MarkdownGuide.RepositoryRoot, "Deguffer.App");
+        var app = Path.Combine(SourceTree.RepositoryRoot, "Deguffer.App");
 
         foreach (var file in Directory.EnumerateFiles(app, "*.cs", SearchOption.AllDirectories).Where(file => !IsBuildOutput(file)))
         {
-            var name = Path.GetRelativePath(MarkdownGuide.RepositoryRoot, file).Replace('\\', '/');
+            var name = Path.GetRelativePath(SourceTree.RepositoryRoot, file).Replace('\\', '/');
 
             // Comment lines are skipped, because a doc comment names these to explain them.
             var uses = ProductSources.Code(File.ReadAllText(file))

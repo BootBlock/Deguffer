@@ -1,20 +1,13 @@
-using System.Globalization;
-using System.Reflection;
-using System.Runtime.InteropServices;
 using Deguffer.App.Shell;
 using Deguffer.Core.Viewing;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
-using RuntimeArchitecture = System.Runtime.InteropServices.Architecture;
 
 namespace Deguffer.App.Views;
 
 public sealed partial class AboutPage : Page
 {
-    /// <summary>
-    /// The key the build stamps the date under; see the AssemblyMetadata item in the project file.
-    /// </summary>
-    private const string BuildDateKey = "BuildDate";
-
     /// <summary>
     /// Whether the mark has flown in already while the app has been running. It flies once: the page
     /// is built again on every visit, and a flourish played every time is one the reader has to wait
@@ -38,34 +31,20 @@ public sealed partial class AboutPage : Page
         };
     }
 
-    public string Version => AppVersion.Current;
-
-    /// <summary>
-    /// The date the build stamped into the assembly, in the reader's own culture. Nothing in the
-    /// compiled output carries it otherwise, so an unstamped assembly says so rather than guessing
-    /// from a file timestamp, which a copy or a restore would silently change.
-    /// </summary>
-    public string BuildDate { get; } = ReadStampedBuildDate();
-
-    /// <summary>
-    /// Named as the project's platforms are (<c>x86</c>, <c>x64</c>, <c>ARM64</c>) rather than as
-    /// the runtime's enum is, because that is what the download the user chose was called.
-    /// </summary>
-    public string Architecture { get; } = DisplayName(RuntimeInformation.ProcessArchitecture);
+    /// <summary>Which build this is and what it runs on, which the version card shows and Copy details copies.</summary>
+    public BuildDetails Details => BuildDetails.Current;
 
     /// <summary>
     /// What the architecture actually means for the reader. The app ships self-contained per
     /// architecture (§6.3), so this build runs on one processor family and no other, and the
     /// explanation says which and why that matters rather than leaving a bare "x64" on the page.
     /// </summary>
-    public string ArchitectureExplanation { get; } =
-        BuildArchitectureExplanation(
-            RuntimeInformation.ProcessArchitecture,
-            RuntimeInformation.OSArchitecture);
+    public string ArchitectureExplanation { get; } = BuildArchitectureExplanation(BuildDetails.Current);
 
     /// <summary>
-    /// §5.5: the fast path reads the volume's file table, which needs administrator rights, and
-    /// falls back to walking wherever the table cannot answer.
+    /// What the Scanning row's value means, under it. §5.5: the fast path reads the volume's file
+    /// table, which needs administrator rights, and falls back to walking wherever the table cannot
+    /// answer.
     ///
     /// <para>Neither sentence promises a quicker scan, and that is deliberate. Elevating buys a
     /// route, not a stopwatch: on a real machine the table declined 13 of 48 measured locations —
@@ -76,9 +55,9 @@ public sealed partial class AboutPage : Page
     /// that says so where it applies. A promise the machine can contradict is worse than no
     /// promise.</para>
     /// </summary>
-    public string ScanMode { get; } = ElevatedRelaunch.IsElevated
-        ? "Running as administrator, so Deguffer can read the volume's file table. Locations it accounts for are measured from it instead of being walked; anything it does not account for is walked, and the plan says which happened."
-        : "Running without administrator rights, so every location is measured by walking it. The sizes are the same either way — the Storage, Explore and Duplicates pages each offer to restart elevated, and Installed apps offers it for entries that apply to all users.";
+    public string ScanModeExplanation { get; } = BuildDetails.Current.IsElevated
+        ? "Locations the table accounts for are measured from it instead of being walked. Anything it does not account for is walked, and the plan says which happened."
+        : "The sizes are the same either way. The Storage, Explore and Duplicates pages each offer to restart as administrator, and Installed apps offers it for entries that apply to all users.";
 
     /// <inheritdoc cref="AboutStatements.Summary" />
     public string Summary => AboutStatements.Summary;
@@ -101,42 +80,29 @@ public sealed partial class AboutPage : Page
     /// <inheritdoc cref="AboutStatements.Safeguards" />
     public IReadOnlyList<PageStatement> Safeguards => AboutStatements.Safeguards;
 
-    private static string ReadStampedBuildDate()
-    {
-        var stamped = Assembly.GetExecutingAssembly()
-            .GetCustomAttributes<AssemblyMetadataAttribute>()
-            .FirstOrDefault(attribute => attribute.Key == BuildDateKey)
-            ?.Value;
+    /// <inheritdoc cref="ThirdPartyNotices.Components" />
+    public IReadOnlyList<ThirdPartyComponent> Components => ThirdPartyNotices.Components;
 
-        // Stamped in UTC so the value does not depend on how the build machine's clock is set.
-        return DateOnly.TryParseExact(
-            stamped,
-            "yyyy-MM-dd",
-            CultureInfo.InvariantCulture,
-            DateTimeStyles.None,
-            out var date)
-            ? date.ToString("D", CultureInfo.CurrentCulture)
-            : "not known";
+    /// <summary>
+    /// Puts the version card's details on the clipboard, says so beside the button, and announces it,
+    /// because a screen reader otherwise hears nothing happen when the button is pressed.
+    /// </summary>
+    private async void OnCopyDetails(object sender, RoutedEventArgs e)
+    {
+        var said = await ClipboardText.PutAsync(Details.ToClipboardText(), CancellationToken.None) ?? "Copied. Paste it into your report.";
+
+        CopyDetailsResult.Text = said;
+        FrameworkElementAutomationPeer.FromElement(CopyDetailsButton)?.RaiseNotificationEvent(
+            AutomationNotificationKind.ActionCompleted,
+            AutomationNotificationProcessing.ImportantMostRecent,
+            said,
+            "CopyDetails");
     }
 
-    private static string DisplayName(RuntimeArchitecture architecture) =>
-        architecture switch
-        {
-            RuntimeArchitecture.X86 => "x86",
-            RuntimeArchitecture.X64 => "x64",
-            RuntimeArchitecture.Arm64 => "ARM64",
-
-            // Nothing publishes these, but the runtime enum is wider than the project's platforms
-            // and a bare enum name is a better answer than a wrong one.
-            _ => architecture.ToString(),
-        };
-
-    private static string BuildArchitectureExplanation(
-        RuntimeArchitecture process,
-        RuntimeArchitecture operatingSystem)
+    private static string BuildArchitectureExplanation(BuildDetails details)
     {
-        var built = DisplayName(process);
-        var machine = DisplayName(operatingSystem);
+        var built = details.ArchitectureText;
+        var machine = details.MachineText;
 
         var explanation =
             $"Deguffer is built once for each kind of processor, and this copy is the {built} build. " +
@@ -147,7 +113,7 @@ public sealed partial class AboutPage : Page
         // x64 and x86 on ARM64, and it runs x86 beside x64 through WOW64, which is not emulation.
         // Only the first is reliably slower, so the sentence names the compatibility layer rather
         // than promising a speed the machine can contradict.
-        return process == operatingSystem
+        return details.Process == details.Machine
             ? $"{explanation} This machine's processor is {machine}, so this is the native build for it."
             : $"{explanation} This machine's processor is {machine}, so the {machine} build is the " +
               "native one here and this one is not. Windows runs this one through a compatibility " +

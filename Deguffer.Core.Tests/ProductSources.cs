@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 
@@ -16,7 +17,7 @@ internal static partial class ProductSources
     /// moment it exists.
     /// </summary>
     public static IEnumerable<string> Files() =>
-        Directory.EnumerateDirectories(MarkdownGuide.RepositoryRoot, "Deguffer.*")
+        Directory.EnumerateDirectories(SourceTree.RepositoryRoot, "Deguffer.*")
             .Where(project => Path.GetFileName(project) is { } name
                 && !name.EndsWith(".Tests", StringComparison.Ordinal)
                 && name != "Deguffer.Testing")
@@ -45,7 +46,7 @@ internal static partial class ProductSources
 
                 imports.Add((
                     entryPoint.Length > 0 ? entryPoint : match.Groups["method"].Value,
-                    Path.GetRelativePath(MarkdownGuide.RepositoryRoot, file)));
+                    Path.GetRelativePath(SourceTree.RepositoryRoot, file)));
             }
         }
 

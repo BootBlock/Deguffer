@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 
@@ -65,7 +66,7 @@ public sealed partial class PresenceProbeSweepTests
         foreach (var file in ProductSources.Files()
             .Where(file => !Path.GetFileName(file).Equals("LongPath.cs", StringComparison.OrdinalIgnoreCase)))
         {
-            var name = Path.GetRelativePath(MarkdownGuide.RepositoryRoot, file).Replace('\\', '/');
+            var name = Path.GetRelativePath(SourceTree.RepositoryRoot, file).Replace('\\', '/');
 
             // Comment lines are skipped, because a doc comment names these to explain them.
             var uses = ProductSources.Code(File.ReadAllText(file))

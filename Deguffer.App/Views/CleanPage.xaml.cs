@@ -59,7 +59,7 @@ public sealed partial class CleanPage : Page
             App.Running,
             App.Work,
             () => new ContentDialogConfirmationPrompt(this),
-            AppVersion.Current,
+            BuildDetails.Current,
             new WhenCompleteViewModel(App.Preferences, WindowsSession.Current),
             new RetrimViewModel(
                 VolumeInventory.Current,
@@ -357,8 +357,8 @@ public sealed partial class CleanPage : Page
     /// the clipboard after Deguffer closes, which is when a user filing an issue is most likely to
     /// paste it.
     /// </summary>
-    private void OnCopyRunDiagnostics(object sender, RoutedEventArgs e) =>
-        CopyRunDiagnosticsResult.Text = ClipboardText.Put(ViewModel.RunDiagnostics) ?? "Copied. Paste it into a GitHub issue.";
+    private async void OnCopyRunDiagnostics(object sender, RoutedEventArgs e) =>
+        CopyRunDiagnosticsResult.Text = await ClipboardText.PutAsync(ViewModel.RunDiagnostics, CancellationToken.None) ?? "Copied. Paste it into a GitHub issue.";
 
     /// <summary>
     /// Put the item list the view-model names on the card, or take it off and give the keyboard back

@@ -1,3 +1,5 @@
+using Deguffer.Testing;
+
 namespace Deguffer.Core.Tests;
 
 /// <summary>
@@ -6,15 +8,11 @@ namespace Deguffer.Core.Tests;
 /// </summary>
 internal sealed class MarkdownGuide
 {
-    private static readonly Lazy<string> Root = new(FindRepositoryRoot);
-
     private MarkdownGuide(string name, string text)
     {
         Name = name;
         Text = text;
     }
-
-    public static string RepositoryRoot => Root.Value;
 
     /// <summary>The path relative to the repository root, for failure messages.</summary>
     public string Name { get; }
@@ -26,11 +24,11 @@ internal sealed class MarkdownGuide
     public string Text { get; }
 
     public static MarkdownGuide AtRepositoryRoot(string fileName) =>
-        At(Path.Combine(RepositoryRoot, fileName));
+        At(Path.Combine(SourceTree.RepositoryRoot, fileName));
 
     public static MarkdownGuide At(string path)
     {
-        var name = Path.GetRelativePath(RepositoryRoot, path);
+        var name = Path.GetRelativePath(SourceTree.RepositoryRoot, path);
         Assert.True(File.Exists(path), $"{name} does not exist.");
 
         return new MarkdownGuide(name, File.ReadAllText(path).ReplaceLineEndings("\n"));
@@ -134,23 +132,5 @@ internal sealed class MarkdownGuide
 
             yield return (line, !fenced);
         }
-    }
-
-    private static string FindRepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null
-            && !File.Exists(Path.Combine(directory.FullName, "Deguffer.sln")))
-        {
-            directory = directory.Parent;
-        }
-
-        Assert.True(
-            directory is not null,
-            $"No directory above {AppContext.BaseDirectory} contains Deguffer.sln, so the "
-                + "repository root could not be found.");
-
-        return directory!.FullName;
     }
 }

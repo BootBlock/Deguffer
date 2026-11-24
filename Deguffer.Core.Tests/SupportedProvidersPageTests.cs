@@ -21,7 +21,7 @@ public sealed class SupportedProvidersPageTests
             liveTrees: FakeLiveTreeInspector.NothingLive,
             environment: new FakeUserEnvironment(temp.Path));
         var expected = SupportedProvidersPage.Render(planner.Providers);
-        var path = Path.Combine(MarkdownGuide.RepositoryRoot, SupportedProvidersPage.RelativePath);
+        var path = Path.Combine(SourceTree.RepositoryRoot, SupportedProvidersPage.RelativePath);
 
         if (Environment.GetEnvironmentVariable(RewriteVariable) == "1")
         {
