@@ -45,6 +45,85 @@ public sealed partial class SettingsViewModel : ObservableObject
         SourceRoots = [.. sourceRoots.Current];
         EmulatorFolders = [.. emulatorFolders.Current];
         KeptItems = [.. InDisplayOrder(keeps.Current)];
+
+        _defaults =
+        [
+            ThemeDefault = Row(ShippedSettings.Theme),
+            BackdropEnabledDefault = Row(ShippedSettings.BackdropEnabled),
+            TreemapSpacingDefault = Row(ShippedSettings.TreemapSpacing),
+            ShowAlreadyClearDefault = Row(ShippedSettings.ShowAlreadyClear),
+            SpotlightCleanedRowDefault = Row(ShippedSettings.SpotlightCleanedRow),
+            ConfirmBeforeCleaningDefault = Row(ShippedSettings.ConfirmBeforeCleaning),
+            RequireTypedConfirmationDefault = Row(ShippedSettings.RequireTypedConfirmation),
+            KeepFilesChangedWithinHoursDefault = Row(ShippedSettings.KeepFilesChangedWithinHours),
+            MinimumTemporaryFileAgeDefault = Row(ShippedSettings.MinimumTemporaryFileAgeDays),
+            FileHistoryRetentionDaysDefault = Row(ShippedSettings.FileHistoryRetentionDays),
+            EmptyRecycleBinsDirectlyDefault = Row(ShippedSettings.EmptyRecycleBinsDirectly),
+        ];
+    }
+
+    /// <summary>Every row's default, refreshed together after any write.</summary>
+    private readonly SettingReset[] _defaults;
+
+    public SettingReset ThemeDefault { get; }
+
+    public SettingReset BackdropEnabledDefault { get; }
+
+    public SettingReset TreemapSpacingDefault { get; }
+
+    public SettingReset ShowAlreadyClearDefault { get; }
+
+    public SettingReset SpotlightCleanedRowDefault { get; }
+
+    public SettingReset ConfirmBeforeCleaningDefault { get; }
+
+    public SettingReset RequireTypedConfirmationDefault { get; }
+
+    public SettingReset KeepFilesChangedWithinHoursDefault { get; }
+
+    public SettingReset MinimumTemporaryFileAgeDefault { get; }
+
+    public SettingReset FileHistoryRetentionDaysDefault { get; }
+
+    public SettingReset EmptyRecycleBinsDirectlyDefault { get; }
+
+    private SettingReset Row(SettingDefault setting) => new(_preferences, () => setting, Reset);
+
+    /// <summary>
+    /// Put one setting back to its default. Every control reads the stored settings again, because the
+    /// row that asked does not say which property its control is bound to.
+    /// </summary>
+    private void Reset(SettingDefault setting) => Apply(setting.Reset, string.Empty);
+
+    /// <summary>
+    /// Whether any setting on the page is off its default, the scanning values included, which is when
+    /// the page offers to restore them.
+    /// </summary>
+    public bool CanRestoreDefaults => ShippedSettings.Changed(_preferences.Current).Count > 0;
+
+    /// <summary>What the reader is asked before every setting goes back, or null where none is off its default.</summary>
+    public RestoreDefaultsPrompt? RestorePrompt() => RestoreDefaultsPrompt.For(_preferences.Current);
+
+    /// <summary>
+    /// Put every setting on the page back to its default, and leave the keep list, the source folders and
+    /// the emulator folders as they are: those are lists the reader built, kept by services of their own,
+    /// and this writes only the preferences. The scanning section reads its own values again, as the page
+    /// tells it to.
+    /// </summary>
+    public void RestoreDefaults() => Apply(ShippedSettings.RestoreAll, string.Empty);
+
+    /// <summary>
+    /// Read every row's default and the restore again, after a write this view-model did not make: the
+    /// scanning section's, which the page passes on.
+    /// </summary>
+    public void FollowStoredDefaults()
+    {
+        foreach (var row in _defaults)
+        {
+            row.Refresh();
+        }
+
+        OnPropertyChanged(nameof(CanRestoreDefaults));
     }
 
     /// <summary>
@@ -353,5 +432,6 @@ public sealed partial class SettingsViewModel : ObservableObject
         // through EnteredSetting first: half an hour is stored as one. The control that made the
         // change reads it back, or it goes on showing a value that is not in effect.
         OnPropertyChanged(SaveFailed ? string.Empty : setting);
+        FollowStoredDefaults();
     }
 }

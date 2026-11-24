@@ -9,20 +9,7 @@ public sealed class ContentDialogInstalledAppsConfirmation(FrameworkElement owne
 {
     public async Task<bool> AskAsync(InstalledAppsPrompt prompt, CancellationToken ct)
     {
-        var content = new StackPanel { Spacing = 12 };
-        content.Children.Add(DialogFactory.Paragraph(prompt.Consequence));
-        content.Children.Add(new ScrollViewer
-        {
-            MaxHeight = 240,
-            Content = new TextBlock
-            {
-                Text = string.Join(Environment.NewLine, prompt.Items),
-                TextWrapping = TextWrapping.Wrap,
-                IsTextSelectionEnabled = true,
-            },
-        });
-
-        var dialog = DialogFactory.Question(owner, prompt.Title, content, prompt.ConfirmLabel);
+        var dialog = DialogFactory.Question(owner, prompt.Title, DialogFactory.Listing(prompt.Consequence, prompt.Items), prompt.ConfirmLabel);
 
         return await ModalDialog.ShowAsync(dialog, ct) == ContentDialogResult.Primary;
     }

@@ -34,7 +34,37 @@ public sealed partial class SettingsPage : Page
     /// The preview follows the stored preferences rather than the box, so it shows what took effect:
     /// a spacing that could not be saved puts the box back, and the preview with it.
     /// </summary>
-    private void OnPreferencesChanged(object? sender, EventArgs e) => ShowSpacing();
+    private void OnPreferencesChanged(object? sender, EventArgs e)
+    {
+        ShowSpacing();
+
+        // The page's restore and each row's reset follow every write, the scanning section's included,
+        // which the page's view-model does not make.
+        ViewModel.FollowStoredDefaults();
+        ScanningSection.Scanning.FollowStoredDefaults();
+    }
+
+    /// <summary>
+    /// Ask before every setting on the page goes back to its default, naming each one that will change,
+    /// then put them back and have both parts of the page read what was stored.
+    /// </summary>
+    private async void OnRestoreDefaults(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.RestorePrompt() is not { } prompt)
+        {
+            return;
+        }
+
+        var dialog = DialogFactory.Question(this, prompt.Title, DialogFactory.Listing(prompt.Consequence, prompt.Items), prompt.ConfirmLabel);
+
+        if (await ModalDialog.ShowAsync(dialog) != ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        ViewModel.RestoreDefaults();
+        ScanningSection.Scanning.ShowStored();
+    }
 
     private void ShowSpacing() => SpacingPreview.Show(MapLook.From(App.Preferences.Current), ExploreView.Treemap);
 

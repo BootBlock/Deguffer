@@ -55,6 +55,7 @@
             <views:SettingsRow Glyph="&#xE721;"
                                Title="How to scan"
                                Description="Whether a scan walks folders, reads the file table, or both. None of the choices changes what is found."
+                               Default="{x:Bind Scanning.RouteDefault}"
                                Details="Reading a volume's file table needs Deguffer to run as administrator on an NTFS volume. Auto walks folders while it reads the table and uses whichever answers first, and walks everywhere the table cannot be read. Walk folders only is slower on a large folder, and is the choice if you doubt what the file table says. File table first waits for the table instead, which may suit a spinning disk.">
                 <views:SettingsRow.Control>
                     <ComboBox x:Name="RouteBox"
@@ -69,7 +70,8 @@
             <views:SettingsRow Glyph="&#xE950;"
                                Title="File table parse threads"
                                Description="Threads that turn a file table into folders and sizes, on every kind of drive. Administrator only. Empty the box for Auto."
-                               Unit="{x:Bind text:SettingUnit.Threads(Scanning.TableParseThreads, Scanning.AutoTableParseThreadsCount), Mode=OneWay}">
+                               Unit="{x:Bind text:SettingUnit.Threads(Scanning.TableParseThreads, Scanning.AutoTableParseThreadsCount), Mode=OneWay}"
+                               Default="{x:Bind Scanning.TableParseThreadsDefault}">
                 <views:SettingsRow.Control>
                     <NumberBox x:Name="TableParseThreadsBox"
                                Value="{x:Bind Scanning.TableParseThreads, Mode=TwoWay}"
@@ -105,7 +107,8 @@
                         <views:SettingsRow Glyph="&#xE8B7;"
                                            Title="Folders read at once"
                                            Description="How many folders a walk reads at the same time on this kind of drive. Empty the box to go back to Auto."
-                                           Unit="{x:Bind text:SettingUnit.Threads(Scanning.WalkThreads, Scanning.AutoWalkThreadsCount), Mode=OneWay}">
+                                           Unit="{x:Bind text:SettingUnit.Threads(Scanning.WalkThreads, Scanning.AutoWalkThreadsCount), Mode=OneWay}"
+                                           Default="{x:Bind Scanning.WalkThreadsDefault}">
                             <views:SettingsRow.Control>
                                 <NumberBox x:Name="WalkThreadsBox"
                                            Value="{x:Bind Scanning.WalkThreads, Mode=TwoWay}"
@@ -126,6 +129,7 @@
                                            Title="Listing buffer"
                                            Description="How much of a folder's listing Windows hands over in each call on this kind of drive. Empty the box for Auto."
                                            Details="A larger buffer means fewer calls, and each call costs the whole buffer however few entries the folder holds."
+                                           Default="{x:Bind Scanning.ListingBufferKiBDefault}"
                                            Unit="KB">
                             <views:SettingsRow.Control>
                                 <NumberBox x:Name="ListingBufferBox"
@@ -146,6 +150,7 @@
                         <views:SettingsRow Glyph="&#xE9F5;"
                                            Title="File table read size"
                                            Description="How much of a volume's file table each read asks for on this kind of drive. Administrator only. Empty the box for Auto."
+                                           Default="{x:Bind Scanning.TableReadKiBDefault}"
                                            Unit="KB">
                             <views:SettingsRow.Control>
                                 <NumberBox x:Name="TableReadBox"
@@ -167,7 +172,8 @@
                                            Title="File table reads at once"
                                            Description="How many file table reads wait at once on this kind of drive. Administrator only. Empty the box for Auto."
                                            Details="Each read and each parse thread holds a buffer of the read size until the scan ends."
-                                           Unit="{x:Bind text:SettingUnit.Reads(Scanning.TableReadsInFlight, Scanning.AutoTableReadsInFlightCount), Mode=OneWay}">
+                                           Unit="{x:Bind text:SettingUnit.Reads(Scanning.TableReadsInFlight, Scanning.AutoTableReadsInFlightCount), Mode=OneWay}"
+                                           Default="{x:Bind Scanning.TableReadsInFlightDefault}">
                             <views:SettingsRow.Control>
                                 <NumberBox x:Name="TableReadsInFlightBox"
                                            Value="{x:Bind Scanning.TableReadsInFlight, Mode=TwoWay}"
@@ -187,7 +193,8 @@
                         <views:SettingsRow Glyph="&#xE8FD;"
                                            Title="Attribute list reads at once"
                                            Description="How many lists kept outside the file table are read at once on this kind of drive. Used only when Deguffer runs as administrator."
-                                           Unit="{x:Bind text:SettingUnit.Reads(Scanning.TableListReadsInFlight, Scanning.AutoTableListReadsInFlightCount), Mode=OneWay}">
+                                           Unit="{x:Bind text:SettingUnit.Reads(Scanning.TableListReadsInFlight, Scanning.AutoTableListReadsInFlightCount), Mode=OneWay}"
+                                           Default="{x:Bind Scanning.TableListReadsInFlightDefault}">
                             <views:SettingsRow.Control>
                                 <NumberBox x:Name="TableListReadsInFlightBox"
                                            Value="{x:Bind Scanning.TableListReadsInFlight, Mode=TwoWay}"

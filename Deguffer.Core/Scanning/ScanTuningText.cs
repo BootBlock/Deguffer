@@ -11,6 +11,26 @@ namespace Deguffer.Core.Scanning;
 /// </summary>
 public static class ScanTuningText
 {
+    /// <summary>The kinds of drive in the order the kind picker lists them, the common ones first.</summary>
+    public static IReadOnlyList<StorageMedia> Kinds => KindOrder;
+
+    private static readonly StorageMedia[] KindOrder =
+    [
+        StorageMedia.Nvme,
+        StorageMedia.SolidState,
+        StorageMedia.Rotational,
+        StorageMedia.Removable,
+        StorageMedia.Network,
+        StorageMedia.Virtual,
+        StorageMedia.Unknown,
+    ];
+
+    /// <summary>Where <paramref name="media"/> stands in <see cref="Kinds"/>.</summary>
+    public static int KindIndex(StorageMedia media) =>
+        Array.IndexOf(KindOrder, media) is var index and >= 0
+            ? index
+            : throw new ArgumentOutOfRangeException(nameof(media), media, null);
+
     /// <summary>A kind of storage, as a person names it.</summary>
     public static string MediaName(StorageMedia media) => media switch
     {
@@ -29,7 +49,7 @@ public static class ScanTuningText
         [RouteName(ScanRoute.Auto), RouteName(ScanRoute.WalkOnly), RouteName(ScanRoute.Table)];
 
     /// <summary>A route, as the route picker names it.</summary>
-    private static string RouteName(ScanRoute route) => route switch
+    public static string RouteName(ScanRoute route) => route switch
     {
         ScanRoute.Auto => "Auto",
         ScanRoute.WalkOnly => "Walk folders only",

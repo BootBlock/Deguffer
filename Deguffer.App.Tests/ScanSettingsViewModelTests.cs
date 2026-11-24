@@ -230,6 +230,54 @@ public sealed class ScanSettingsViewModelTests : IDisposable
         Assert.Equal(asked, queries.ExtentsAsked);
     }
 
+    /// <summary>
+    /// A box's reset puts back the value of the kind the picker names and no other kind's, and the row
+    /// follows the picker: a kind whose value is on Auto offers no reset.
+    /// </summary>
+    [Fact]
+    public void AResetPutsBackTheChosenKindsValueAlone()
+    {
+        var (section, preferences, _) = Section();
+        section.KindIndex = KindIndex(section, StorageMedia.Rotational);
+        section.ListingBufferKiB = 64;
+        section.KindIndex = KindIndex(section, StorageMedia.SolidState);
+        section.ListingBufferKiB = 32;
+
+        Assert.True(section.ListingBufferKiBDefault.CanReset);
+
+        section.ListingBufferKiBDefault.Reset();
+
+        Assert.Null(preferences.Current.Scanning.SolidState.ListingBufferKiB);
+        Assert.Equal(64, preferences.Current.Scanning.Rotational.ListingBufferKiB);
+        Assert.False(section.ListingBufferKiBDefault.CanReset);
+        Assert.True(double.IsNaN(section.ListingBufferKiB));
+
+        section.KindIndex = KindIndex(section, StorageMedia.Rotational);
+
+        Assert.True(section.ListingBufferKiBDefault.CanReset);
+        Assert.Equal("Default: Auto", section.ListingBufferKiBDefault.Statement);
+    }
+
+    /// <summary>After the page restores every setting, the section reads back each value, its summary and its drives.</summary>
+    [Fact]
+    public async Task ShowingWhatIsStoredReadsBackTheSummaryAndTheDrives()
+    {
+        var (section, preferences, _) = Section();
+        section.RouteIndex = (int)ScanRoute.WalkOnly;
+        section.WalkThreads = 3;
+        await section.RefreshDrivesAsync(CancellationToken.None);
+        var raised = new List<string?>();
+        section.PropertyChanged += (_, changed) => raised.Add(changed.PropertyName);
+
+        preferences.Update(ShippedSettings.RestoreAll);
+        section.ShowStored();
+
+        Assert.Contains(string.Empty, raised);
+        Assert.Equal(ScanTuningText.Summary(ScanPreferences.Default), section.Summary);
+        Assert.False(section.RouteDefault.CanReset);
+        Assert.All(section.Drives, drive => Assert.DoesNotContain("3 threads,", drive.Text, StringComparison.Ordinal));
+    }
+
     private static int KindIndex(ScanSettingsViewModel section, StorageMedia media) =>
         section.KindNames.ToList().IndexOf(ScanTuningText.MediaName(media));
 

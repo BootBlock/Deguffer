@@ -1,3 +1,4 @@
+using Deguffer.App.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -34,6 +35,9 @@ public sealed partial class SettingsRow : UserControl
 
     public static readonly DependencyProperty UnitProperty =
         DependencyProperty.Register(nameof(Unit), typeof(string), typeof(SettingsRow), new PropertyMetadata(string.Empty));
+
+    public static readonly DependencyProperty DefaultProperty =
+        DependencyProperty.Register(nameof(Default), typeof(SettingReset), typeof(SettingsRow), new PropertyMetadata(null));
 
     public static readonly DependencyProperty ControlProperty =
         DependencyProperty.Register(nameof(Control), typeof(object), typeof(SettingsRow), new PropertyMetadata(null));
@@ -87,6 +91,31 @@ public sealed partial class SettingsRow : UserControl
         get => GetValue(ControlProperty);
         set => SetValue(ControlProperty, value);
     }
+
+    /// <summary>
+    /// The setting's default, for a row that sets a value: the row states it under the description and
+    /// offers a reset while the value is off it. Null draws neither, for a row that lists or acts.
+    /// </summary>
+    public SettingReset? Default
+    {
+        get => (SettingReset?)GetValue(DefaultProperty);
+        set => SetValue(DefaultProperty, value);
+    }
+
+    /// <summary>Whether the row has a default to state.</summary>
+    public static Visibility IsStated(SettingReset? setting) => setting is null ? Visibility.Collapsed : Visibility.Visible;
+
+    /// <summary>The reset's accessible name, which starts with the word it shows: <c>Reset Theme</c>.</summary>
+    public static string ResetName(string title) => $"Reset {title}";
+
+    /// <summary>
+    /// The reset's automation id, from the row's title, as every row has its own and the words of a
+    /// title are its name: <c>ResetLeaveRecentlyChangedFilesAlone</c>.
+    /// </summary>
+    public static string ResetId(string title) =>
+        string.Concat(ResetName(title).Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(word => char.ToUpperInvariant(word[0]) + word[1..]));
+
+    private void OnResetClicked(object sender, RoutedEventArgs e) => Default?.Reset();
 
     /// <summary>Whether a part of the row with words in it, its details or its unit, is drawn.</summary>
     public static Visibility IsShown(string words) =>

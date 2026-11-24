@@ -27,6 +27,26 @@
                            TextWrapping="Wrap" />
                 <TextBlock Text="{x:Bind Description, Mode=OneWay}"
                            Style="{StaticResource Caption}" />
+
+                <!-- The shipped value, so a reader can tell whether they are on it, and the way back to it
+                     while they are not. The line is as tall as the link whether or not the link is drawn,
+                     so the row does not grow under the pointer when its value first moves off the default. -->
+                <StackPanel Orientation="Horizontal"
+                            Spacing="{StaticResource ControlGap}"
+                            MinHeight="24"
+                            Visibility="{x:Bind views:SettingsRow.IsStated(Default), Mode=OneWay}">
+                    <TextBlock Text="{x:Bind Default.Statement, Mode=OneWay}"
+                               Style="{StaticResource Caption}"
+                               VerticalAlignment="Center" />
+                    <HyperlinkButton Content="Reset"
+                                     Padding="{StaticResource InlineLinkPadding}"
+                                     VerticalAlignment="Center"
+                                     Visibility="{x:Bind Default.CanReset, Mode=OneWay}"
+                                     Click="OnResetClicked"
+                                     AutomationProperties.Name="{x:Bind views:SettingsRow.ResetName(Title), Mode=OneWay}"
+                                     AutomationProperties.AutomationId="{x:Bind views:SettingsRow.ResetId(Title), Mode=OneWay}"
+                                     AutomationProperties.HelpText="{x:Bind Default.Statement, Mode=OneWay}" />
+                </StackPanel>
             </StackPanel>
 
             <!-- Right-aligned, so the control and its unit end at the card's padding on every row

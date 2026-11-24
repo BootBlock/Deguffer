@@ -21,18 +21,6 @@ namespace Deguffer.App.ViewModels;
 /// </summary>
 public sealed partial class ScanSettingsViewModel : ObservableObject
 {
-    /// <summary>The kinds in the order the picker lists them, the common ones first.</summary>
-    private static readonly StorageMedia[] Kinds =
-    [
-        StorageMedia.Nvme,
-        StorageMedia.SolidState,
-        StorageMedia.Rotational,
-        StorageMedia.Removable,
-        StorageMedia.Network,
-        StorageMedia.Virtual,
-        StorageMedia.Unknown,
-    ];
-
     private readonly PreferenceService _preferences;
     private readonly ScanTuner _tuner;
     private readonly IVolumeInventory _volumes;
@@ -47,9 +35,68 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
         _preferences = preferences;
         _tuner = tuner;
         _volumes = volumes;
+
+        _defaults =
+        [
+            RouteDefault = Row(() => ShippedSettings.Route),
+            TableParseThreadsDefault = Row(() => ShippedSettings.TableParseThreads),
+            WalkThreadsDefault = Row(() => ChosenDefaults.WalkThreads),
+            ListingBufferKiBDefault = Row(() => ChosenDefaults.ListingBufferKiB),
+            TableReadKiBDefault = Row(() => ChosenDefaults.TableReadKiB),
+            TableReadsInFlightDefault = Row(() => ChosenDefaults.TableReadsInFlight),
+            TableListReadsInFlightDefault = Row(() => ChosenDefaults.TableListReadsInFlight),
+        ];
     }
 
-    public IReadOnlyList<string> KindNames { get; } = (string[])[.. Kinds.Select(ScanTuningText.MediaName)];
+    /// <summary>Every row's default, refreshed together after any write and whenever the kind picker moves.</summary>
+    private readonly SettingReset[] _defaults;
+
+    public SettingReset RouteDefault { get; }
+
+    public SettingReset TableParseThreadsDefault { get; }
+
+    /// <summary>The chosen kind's default, as each of the five boxes under the picker is that kind's value.</summary>
+    public SettingReset WalkThreadsDefault { get; }
+
+    public SettingReset ListingBufferKiBDefault { get; }
+
+    public SettingReset TableReadKiBDefault { get; }
+
+    public SettingReset TableReadsInFlightDefault { get; }
+
+    public SettingReset TableListReadsInFlightDefault { get; }
+
+    private KindSettingDefaults ChosenDefaults => ShippedSettings.ForKind(Kind);
+
+    private SettingReset Row(Func<SettingDefault> setting) => new(_preferences, setting, Reset);
+
+    /// <summary>
+    /// Put one value back to its default, for the chosen kind alone where it is one kind's value. Every
+    /// control reads the stored values again, as the row does not say which one its control shows.
+    /// </summary>
+    private void Reset(SettingDefault setting) => Store(setting.Reset, string.Empty);
+
+    /// <summary>
+    /// Read every stored value again, after the page restored them all: every control, the folded
+    /// header's summary, what each drive is scanned with, and each row's default.
+    /// </summary>
+    public void ShowStored()
+    {
+        OnPropertyChanged(string.Empty);
+        DescribeDrives();
+        FollowStoredDefaults();
+    }
+
+    /// <summary>Read each row's default again, after a write this view-model did not make.</summary>
+    public void FollowStoredDefaults()
+    {
+        foreach (var row in _defaults)
+        {
+            row.Refresh();
+        }
+    }
+
+    public IReadOnlyList<string> KindNames { get; } = (string[])[.. ScanTuningText.Kinds.Select(ScanTuningText.MediaName)];
 
     /// <summary>The route picker's items, indexed as <see cref="RouteIndex"/> is.</summary>
     public IReadOnlyList<string> RouteNames => ScanTuningText.RouteNames;
@@ -73,10 +120,11 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
         get;
         set
         {
-            if (SetProperty(ref field, Math.Clamp(value, 0, Kinds.Length - 1)))
+            if (SetProperty(ref field, Math.Clamp(value, 0, ScanTuningText.Kinds.Count - 1)))
             {
-                // Everything below the picker describes the kind it names.
+                // Everything below the picker describes the kind it names, its defaults included.
                 OnPropertyChanged(string.Empty);
+                FollowStoredDefaults();
             }
         }
     }
@@ -217,7 +265,7 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
 
     private ScanPreferences Scanning => _preferences.Current.Scanning;
 
-    private StorageMedia Kind => Kinds[KindIndex];
+    private StorageMedia Kind => ScanTuningText.Kinds[KindIndex];
 
     private MediaScanPreferences Chosen => Scanning.For(Kind);
 
@@ -236,9 +284,13 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
     }
 
     /// <param name="setting">The property whose control made the change, which is the setter calling this.</param>
-    private void Apply(Func<ScanPreferences, ScanPreferences> change, [CallerMemberName] string setting = "")
+    private void Apply(Func<ScanPreferences, ScanPreferences> change, [CallerMemberName] string setting = "") =>
+        Store(current => current with { Scanning = change(current.Scanning) }, setting);
+
+    /// <param name="setting">The property whose control made the change, or empty where every control is to read back.</param>
+    private void Store(Func<AppPreferences, AppPreferences> change, string setting)
     {
-        SaveFailed = !_preferences.Update(current => current with { Scanning = change(current.Scanning) });
+        SaveFailed = !_preferences.Update(change);
 
         // As the rest of the page does: a rejected write puts every control back to what holds, and
         // an accepted one reads back what was stored, which the clamp can make differ from what was
@@ -250,5 +302,7 @@ public sealed partial class ScanSettingsViewModel : ObservableObject
             OnPropertyChanged(nameof(Summary));
             DescribeDrives();
         }
+
+        FollowStoredDefaults();
     }
 }

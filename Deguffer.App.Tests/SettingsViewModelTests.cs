@@ -130,7 +130,11 @@ public sealed class SettingsViewModelTests : IDisposable
         Assert.Equal(1, page.KeepFilesChangedWithinHours);
     }
 
-    /// <summary>A write that succeeds is read back by the control that made it, and by no other.</summary>
+    /// <summary>
+    /// A write that succeeds is read back by the control that made it, and by no other. The page's
+    /// restore is the one other thing told, as a write can be what takes the last setting off its
+    /// default or puts it back on.
+    /// </summary>
     [Fact]
     public void AWriteThatSucceedsLeavesTheOtherControlsAlone()
     {
@@ -142,7 +146,8 @@ public sealed class SettingsViewModelTests : IDisposable
 
         Assert.False(page.SaveFailed);
         Assert.False(preferences.Current.BackdropEnabled);
-        Assert.Equal([nameof(SettingsViewModel.BackdropEnabled)], raised);
+        Assert.Equal([nameof(SettingsViewModel.BackdropEnabled), nameof(SettingsViewModel.CanRestoreDefaults)], raised);
+        Assert.True(page.CanRestoreDefaults);
     }
 
     /// <summary>
@@ -260,5 +265,101 @@ public sealed class SettingsViewModelTests : IDisposable
 
         Assert.Equal([folder], page.EmulatorFolders);
         Assert.False(page.EmulatorFolderNotOnDisk);
+    }
+
+    /// <summary>
+    /// A row's reset writes that setting's default, leaves every other setting where the reader put it,
+    /// and stops offering itself, while the row still off its default goes on offering its own.
+    /// </summary>
+    [Fact]
+    public void ResettingOneRowWritesItsDefaultAndLeavesTheOthersAlone()
+    {
+        var (page, preferences) = Page();
+        page.KeepFilesChangedWithinHours = 8;
+        page.MinimumTemporaryFileAge = 3;
+
+        Assert.True(page.KeepFilesChangedWithinHoursDefault.CanReset);
+
+        page.KeepFilesChangedWithinHoursDefault.Reset();
+
+        Assert.Equal(AppPreferences.Default.KeepFilesChangedWithinHours, preferences.Current.KeepFilesChangedWithinHours);
+        Assert.Equal(3, preferences.Current.MinimumTemporaryFileAgeDays);
+        Assert.False(page.KeepFilesChangedWithinHoursDefault.CanReset);
+        Assert.True(page.MinimumTemporaryFileAgeDefault.CanReset);
+        Assert.Equal("Default: 0 hours", page.KeepFilesChangedWithinHoursDefault.Statement);
+        Assert.False(page.SaveFailed);
+    }
+
+    /// <summary>
+    /// A reset does not know which property its row's control is bound to, so every control reads back
+    /// what was stored, and the row's own default reads again so its reset is withdrawn.
+    /// </summary>
+    [Fact]
+    public void AResetHasEveryControlAndTheRowReadBack()
+    {
+        var (page, _) = Page();
+        page.BackdropEnabled = false;
+        var raised = new List<string?>();
+        var row = new List<string?>();
+        page.PropertyChanged += (_, changed) => raised.Add(changed.PropertyName);
+        page.BackdropEnabledDefault.PropertyChanged += (_, changed) => row.Add(changed.PropertyName);
+
+        page.BackdropEnabledDefault.Reset();
+
+        Assert.True(page.BackdropEnabled);
+        Assert.Contains(string.Empty, raised);
+        Assert.Contains(string.Empty, row);
+    }
+
+    /// <summary>
+    /// Restoring every setting writes each one's default and leaves the lists the reader built, the keep
+    /// list, the source folders and the emulator folders, as they were, on the page and in their stores.
+    /// </summary>
+    [Fact]
+    public async Task RestoringAllLeavesTheKeepListAndTheFoldersUntouched()
+    {
+        var keeps = new KeepService(new KeepStore(_environment));
+        keeps.Keep(Kept("npm", "alpha"));
+        var (page, preferences) = Page(keeps);
+        var source = Path.Combine(_temp.Path, "src");
+        var emulator = Path.Combine(_temp.Path, "Cemu");
+        page.AddSourceRoot((await page.ApprovalForAsync(source, CancellationToken.None))!);
+        page.AddEmulatorFolder(emulator);
+        page.ThemeIndex = (int)AppTheme.Dark;
+        page.FileHistoryRetentionDays = 30;
+        page.ConfirmBeforeCleaning = false;
+
+        Assert.True(page.CanRestoreDefaults);
+        Assert.Equal(3, page.RestorePrompt()?.Items.Count);
+
+        page.RestoreDefaults();
+
+        Assert.Empty(ShippedSettings.Changed(preferences.Current));
+        Assert.False(page.CanRestoreDefaults);
+        Assert.Null(page.RestorePrompt());
+        Assert.False(page.SaveFailed);
+        Assert.Equal([source], page.SourceRoots.Select(root => root.Path));
+        Assert.Equal([emulator], page.EmulatorFolders);
+        Assert.Equal(["alpha"], page.KeptItems.Select(kept => kept.Item.Name));
+        Assert.Equal([source], new SourceRootService(new SourceRootStore(_environment)).Current.Select(root => root.Path));
+        Assert.Equal([emulator], new EmulatorFolderService(new EmulatorFolderStore(_environment)).Current);
+        Assert.Single(new KeepService(new KeepStore(_environment)).Current.Items);
+    }
+
+    /// <summary>A restore that could not be written says so, and every control reads what still holds.</summary>
+    [Fact]
+    public void ARestoreThatFailsSaysSoAndChangesNothing()
+    {
+        var (page, preferences) = Page();
+        page.KeepFilesChangedWithinHours = 8;
+        File.Delete(Path.Combine(Settings, "preferences.json"));
+        Directory.CreateDirectory(Path.Combine(Settings, "preferences.json"));
+
+        page.RestoreDefaults();
+
+        Assert.True(page.SaveFailed);
+        Assert.Equal(8, preferences.Current.KeepFilesChangedWithinHours);
+        Assert.Equal(8, page.KeepFilesChangedWithinHours);
+        Assert.True(page.CanRestoreDefaults);
     }
 }
