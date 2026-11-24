@@ -82,6 +82,12 @@ public sealed record ConfirmationRequirement
     /// </summary>
     public string? RequiredPhrase { get; init; }
 
+    /// <summary>The question, which opens on <see cref="Verb"/> so the button repeats its word.</summary>
+    public string Title => $"{Verb} {ProviderName}?";
+
+    /// <summary>What the dialog says about the phrase, or null where nothing is typed.</summary>
+    public PhraseWording? Typing => RequiredPhrase is { } phrase ? new PhraseWording(phrase) : null;
+
     /// <summary>
     /// Whether §7 will put a question to the user about this plan. A plan with no steps destroys
     /// nothing and so is never asked about, which is why emptiness is part of the rule rather than

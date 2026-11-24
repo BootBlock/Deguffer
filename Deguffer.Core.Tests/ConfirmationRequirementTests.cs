@@ -306,6 +306,46 @@ public sealed class ConfirmationRequirementTests
         Assert.Equal("Delete", ConfirmationRequirement.For(plan).Verb);
     }
 
+    /// <summary>
+    /// The question opens on the verb its button carries, so a reader who reads only the title and
+    /// the button sees one word for one action, and a release is never asked as a deletion.
+    /// </summary>
+    [Fact]
+    public void TheTitleAsksWithTheButtonsVerb()
+    {
+        var release = new ReleaseLocalCopiesStep(@"C:\Users\testuser\OneDrive", "OneDrive", "Local copies");
+        var plan = PlanFor(SafetyTier.RegenerableWithCost);
+
+        Assert.Equal("Delete Android SDK?", ConfirmationRequirement.For(WorkToDo(plan)).Title);
+        Assert.Equal("Release Android SDK?", ConfirmationRequirement.For(plan with { Steps = [release] }).Title);
+    }
+
+    /// <summary>
+    /// The instruction quotes the phrase the gate compares against, and the box's accessible name
+    /// says it too, because a placeholder is no longer read once the user starts typing.
+    /// </summary>
+    [Fact]
+    public void ATypedPhraseIsQuotedAboveTheBoxAndInItsName()
+    {
+        var typing = ConfirmationRequirement.For(PlanFor(SafetyTier.UserData)).Typing;
+
+        Assert.NotNull(typing);
+        Assert.Equal("Android SDK", typing.Phrase);
+        Assert.Equal("Type “Android SDK” to confirm.", typing.Instruction);
+        Assert.Equal("Type Android SDK to confirm deletion", typing.BoxName);
+    }
+
+    /// <summary>
+    /// Where nothing is typed there is no box, so a row whose phrase the user switched off is not
+    /// shown a box it could never fill.
+    /// </summary>
+    [Fact]
+    public void NothingIsSaidAboutAPhraseNobodyTypes()
+    {
+        Assert.Null(ConfirmationRequirement.For(PlanFor(SafetyTier.RegenerableWithCost)).Typing);
+        Assert.Null(ConfirmationRequirement.For(PlanFor(SafetyTier.UserData), requireTypedPhrase: false).Typing);
+    }
+
     private static CleanupPlan PlanFor(SafetyTier tier) => new()
     {
         ProviderId = "subject",

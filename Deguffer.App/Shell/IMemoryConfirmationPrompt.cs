@@ -23,42 +23,17 @@ public interface IMemoryConfirmationPrompt
 /// Renders a Memory close as a dialog. Every word comes from the prompt; this chooses only how it
 /// looks.
 /// </summary>
-public sealed class ContentDialogMemoryConfirmation(XamlRoot xamlRoot, ElementTheme theme)
+public sealed class ContentDialogMemoryConfirmation(FrameworkElement owner)
     : IMemoryConfirmationPrompt
 {
     public async Task<bool> AskAsync(MemoryClosePrompt prompt, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(prompt);
 
-        // Checked before the dialog is built, on ContentDialogConfirmationPrompt's reasoning: a
-        // token already cancelled would otherwise fire Hide against a dialog ShowAsync has not yet
-        // opened, leaving a modal up that the cancel path can no longer take down.
-        ct.ThrowIfCancellationRequested();
+        // Cancel is the default button. A posted message cannot be recalled and what is at risk is
+        // another program's unsaved state, so nobody reaches this from one keystroke.
+        var dialog = DialogFactory.Question(owner, prompt.Title, DialogFactory.Paragraph(prompt.Consequence), prompt.ConfirmLabel);
 
-        var dialog = new ContentDialog
-        {
-            XamlRoot = xamlRoot,
-
-            // The popup layer does not inherit the theme applied to the window root, so without
-            // this it renders dark over a light window.
-            RequestedTheme = theme,
-
-            Title = prompt.Title,
-            Content = new TextBlock
-            {
-                Text = prompt.Consequence,
-                TextWrapping = TextWrapping.WrapWholeWords,
-            },
-            PrimaryButtonText = prompt.ConfirmLabel,
-            CloseButtonText = "Cancel",
-
-            // Cancel is the default. A posted message cannot be recalled and what is at risk is
-            // another program's unsaved state, so nobody reaches this from one keystroke.
-            DefaultButton = ContentDialogButton.Close,
-        };
-
-        using var registration = ct.Register(dialog.Hide);
-
-        return await ModalDialog.ShowAsync(dialog) == ContentDialogResult.Primary;
+        return await ModalDialog.ShowAsync(dialog, ct) == ContentDialogResult.Primary;
     }
 }

@@ -97,7 +97,7 @@ public sealed partial class SettingsPage : Page
             return;
         }
 
-        if (approval.NeedsConfirming && !await AcceptsAsync(approval))
+        if (approval.Consequence is { } consequence && !await AcceptsAsync(approval, consequence))
         {
             return;
         }
@@ -115,26 +115,9 @@ public sealed partial class SettingsPage : Page
     /// <see cref="ContentDialogExploreConfirmation"/>'s reasoning: a reader who presses Enter on a
     /// dialog they have not read must not consent by reflex.</para>
     /// </summary>
-    private async Task<bool> AcceptsAsync(SourceRootApproval approval)
+    private async Task<bool> AcceptsAsync(SourceRootApproval approval, string consequence)
     {
-        var dialog = new ContentDialog
-        {
-            XamlRoot = XamlRoot,
-
-            // The popup layer does not inherit the theme applied to the window root, so without this
-            // it renders dark over a light window.
-            RequestedTheme = ActualTheme,
-
-            Title = "Add this folder anyway?",
-            Content = new TextBlock
-            {
-                Text = $"{approval.Path}\n\n{approval.Warning}",
-                TextWrapping = TextWrapping.WrapWholeWords,
-            },
-            PrimaryButtonText = "Add folder",
-            CloseButtonText = "Cancel",
-            DefaultButton = ContentDialogButton.Close,
-        };
+        var dialog = DialogFactory.Question(this, approval.Title, DialogFactory.Paragraph(consequence), approval.ConfirmLabel);
 
         return await ModalDialog.ShowAsync(dialog) == ContentDialogResult.Primary;
     }
