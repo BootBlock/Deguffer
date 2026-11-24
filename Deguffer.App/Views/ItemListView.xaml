@@ -275,12 +275,10 @@
                 </ListView.GroupStyle>
             </ListView>
 
-            <TextBlock Text="No item matches the search."
-                       Visibility="{x:Bind ViewModel.HasNoMatches, Mode=OneWay}"
-                       Style="{StaticResource SecondaryText}"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Top"
-                       Margin="0,24,0,0" />
+            <controls:EmptyState Glyph="&#xE721;" Title="No item matches the search"
+                                 ActionLabel="Clear the search"
+                                 ActionCommand="{x:Bind ViewModel.ClearSearchCommand}"
+                                 Visibility="{x:Bind ViewModel.HasNoMatches, Mode=OneWay}" />
         </Grid>
     </Grid>
 </UserControl>

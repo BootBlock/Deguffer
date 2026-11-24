@@ -171,6 +171,39 @@ public sealed class InstalledAppsViewModelTests : IDisposable
         Assert.Null(page.StaleEmpty);
     });
 
+    /// <summary>
+    /// The empty state's button lists what keeps the stale rows back: it clears the filter where the
+    /// filter does, and shows the entries Windows hides where they do.
+    /// </summary>
+    [Fact]
+    public void TheEmptyStatesButtonListsWhatItKeepsBack() => UiThread.Run(async () =>
+    {
+        Stale("Gone");
+        _registry.With(UninstallScope.CurrentUser, "Hidden",
+            ("DisplayName", "Hidden"), ("SystemComponent", 1), ("UninstallString", $"\"{Path.Combine(_temp.Path, "Hidden", "unins000.exe")}\""));
+        Installed("Tool");
+        var page = Page();
+        await page.RefreshAsync();
+
+        page.Filter = "tool";
+        Assert.Equal("Clear the filter", page.StaleEmpty!.Remedy);
+
+        page.ShowWhatTheStaleListKeepsBackCommand.Execute(null);
+
+        Assert.Empty(page.Filter);
+        Assert.Equal(["Gone"], page.StaleRows.Select(row => row.Name));
+
+        page.Filter = "hidden";
+        Assert.Equal(EmptyListCause.Hidden, page.StaleEmpty!.Cause);
+        Assert.Equal("Show hidden entries", page.StaleEmpty.Remedy);
+
+        page.ShowWhatTheStaleListKeepsBackCommand.Execute(null);
+
+        Assert.True(page.ShowHidden);
+        Assert.Equal("hidden", page.Filter);
+        Assert.Equal(["Hidden"], page.StaleRows.Select(row => row.Name));
+    });
+
     [Fact]
     public void TheFilterNarrowsTheListsWithoutReadingAgain() => UiThread.Run(async () =>
     {

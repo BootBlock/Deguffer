@@ -258,7 +258,7 @@ public sealed class DuplicatesViewModelTests : DuplicatesPageScene
         await searching;
 
         Assert.Equal(["kept.jpg"], page.Groups.Select(row => row[0].Copy.Name));
-        Assert.StartsWith("Stopped.", page.Headline, StringComparison.Ordinal);
+        Assert.StartsWith("Stopped.", page.Headline.Sentence, StringComparison.Ordinal);
         Assert.Equal(DuplicateSearchNotes.Stopped, page.Notes[^1]);
         Assert.False(page.IsSearching);
     });
@@ -294,8 +294,8 @@ public sealed class DuplicatesViewModelTests : DuplicatesPageScene
 
         string[] confirmed = afterAGroup ? ["kept.jpg"] : [];
         Assert.Equal(confirmed, page.Groups.Select(row => row[0].Copy.Name));
-        Assert.StartsWith("The search ran out of memory", page.Headline, StringComparison.Ordinal);
-        Assert.Equal(afterAGroup, page.Headline.Contains("may still have copies", StringComparison.Ordinal));
+        Assert.StartsWith("The search ran out of memory", page.Headline.Sentence, StringComparison.Ordinal);
+        Assert.Equal(afterAGroup, page.Headline.Sentence.Contains("may still have copies", StringComparison.Ordinal));
         Assert.False(page.IsSearching);
         Assert.True(page.SearchCommand.CanExecute(null));
     });
@@ -405,6 +405,35 @@ public sealed class DuplicatesViewModelTests : DuplicatesPageScene
 
         await PageWithPhotos(run).SearchCommand.ExecuteAsync(null);
     }));
+
+    /// <summary>
+    /// With no group to list, the empty state has a short title over the search's sentence, as every
+    /// other page's does, rather than the sentence drawn as its title: before a search, and after one
+    /// that confirmed nothing.
+    /// </summary>
+    [Fact]
+    public void TheEmptyStateHasATitleOverTheSentence() => UiThread.Run(async () =>
+    {
+        RunDuplicateSearch run = async (search, marksMade, finding, found, progress, ct) =>
+        {
+            var candidates = DuplicateScene.Finding();
+            await HandOverAsync(candidates, marksMade, ct);
+            finding.Report(candidates);
+
+            return new DuplicateSearchResult(candidates, [], default, Stopped: false);
+        };
+
+        var page = PageWithPhotos(run);
+
+        Assert.Equal("Nothing searched yet", page.Headline.Title);
+        Assert.StartsWith("Choose the drives and folders", page.Headline.Sentence, StringComparison.Ordinal);
+
+        await page.SearchCommand.ExecuteAsync(null);
+
+        Assert.True(page.HasNoGroups);
+        Assert.Equal("No duplicates found", page.Headline.Title);
+        Assert.Equal("No two files in the locations searched matched.", page.Headline.Sentence);
+    });
 
     [Fact]
     public void ASearchEndingWithoutTheMarksIsAnError() => UiThread.Run(async () =>

@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Deguffer.App.Shell;
 using Deguffer.Core.Choosing;
 using Deguffer.Core.Configuration;
@@ -65,6 +66,10 @@ public sealed partial class ScanChoiceViewModel : ObservableObject
 
     /// <summary>Whether the search hides every location, so the list can say so rather than stand empty.</summary>
     public bool HasNoMatches => Shown.Count == 0;
+
+    /// <summary>Empty the search, so every location is listed again. Offered where it hides them all.</summary>
+    [RelayCommand]
+    private void ClearSearch() => Search = string.Empty;
 
     /// <summary>The stored choice, which a chosen scan measures.</summary>
     public ProviderChoice Choice => _choice;

@@ -94,6 +94,25 @@ public sealed partial class InstalledAppsViewModel : ObservableObject
 
     partial void OnShowHiddenChanged(bool value) => ShowLists();
 
+    /// <summary>
+    /// List what the stale list's empty state says keeps its rows back: the filter cleared, or the
+    /// entries Windows hides shown. Offered only where <see cref="EmptyListNote.Remedy"/> names it.
+    /// </summary>
+    [RelayCommand]
+    private void ShowWhatTheStaleListKeepsBack()
+    {
+        switch (StaleEmpty?.Cause)
+        {
+            case EmptyListCause.Filtered:
+                Filter = string.Empty;
+                break;
+
+            case EmptyListCause.Hidden:
+                ShowHidden = true;
+                break;
+        }
+    }
+
     /// <summary>Read every entry again. A read already running is abandoned for this one.</summary>
     [RelayCommand]
     public async Task RefreshAsync()

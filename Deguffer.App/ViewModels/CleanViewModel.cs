@@ -333,9 +333,9 @@ public sealed partial class CleanViewModel : ObservableObject
         ShownItems = null;
     }
 
+    /// <summary>Empty before a scan, so the bar is closed while the empty state says what to do.</summary>
     [ObservableProperty]
-    public partial string Status { get; set; } =
-        "Scan to see what can be reclaimed. Nothing is removed until you say so.";
+    public partial string Status { get; set; } = string.Empty;
 
     /// <summary>
     /// How loudly to say it. A §5.6 verification failure and a routine progress message used to

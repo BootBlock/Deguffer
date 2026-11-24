@@ -38,6 +38,7 @@ public sealed record InstalledAppsLists(
     /// Why no stale entry is shown. A stale entry the hidden switch keeps back, though the filter
     /// matches it, is named first, because turning the switch on lists it. Any other stale entry
     /// the reading holds is kept back by the filter. Only a reading with none says there are none.
+    /// Each of the first two offers the press that lists what it keeps back.
     /// </summary>
     private static EmptyListNote WhyNoneStale(InstalledAppsReading reading, bool showHidden, string? filter)
     {
@@ -48,8 +49,8 @@ public sealed record InstalledAppsLists(
             return new EmptyListNote(
                 EmptyListCause.Hidden,
                 "No stale entries in the list Windows shows",
-                $"{Counted.Of(hidden, "stale entry is", "stale entries are")} hidden. "
-                + "Turn on Show entries Windows hides to list hidden entries too.");
+                $"{Counted.Of(hidden, "stale entry is", "stale entries are")} among the entries Windows hides from its list.",
+                "Show hidden entries");
         }
 
         if (!string.IsNullOrEmpty(filter) && reading.Entries.Any(e => e.IsStale))
@@ -57,7 +58,8 @@ public sealed record InstalledAppsLists(
             return new EmptyListNote(
                 EmptyListCause.Filtered,
                 "No stale entry matches the filter",
-                "Change or clear the filter to see the rest.");
+                "Change the filter, or clear it to see the rest.",
+                "Clear the filter");
         }
 
         return new EmptyListNote(
@@ -66,7 +68,8 @@ public sealed record InstalledAppsLists(
             reading.RefusedScopes.Count == 0
                 ? "Every entry belongs to a program that is still there, or that nothing proves gone."
                 : "Every entry Deguffer could read belongs to a program that is still there, or that nothing proves gone. "
-                  + $"Windows would not open {string.Join(" or ", reading.RefusedScopes.Select(s => s.PhysicalPath()))}, so entries there were not read.");
+                  + $"Windows would not open {string.Join(" or ", reading.RefusedScopes.Select(s => s.PhysicalPath()))}, so entries there were not read.",
+            Remedy: null);
     }
 
     /// <summary>What the reading found, in one sentence, with the keys Windows would not open named.</summary>

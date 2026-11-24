@@ -53,6 +53,23 @@ public class ItemListViewModelTests
         Assert.False(list.CanToggleAllShown);
     }
 
+    /// <summary>A search that hides every item offers the press that clears it, and the press lists them all again.</summary>
+    [Fact]
+    public void ClearingASearchThatHidesEveryItemListsThemAgain()
+    {
+        var row = Rows.Row(Rows.Found(Workspaces, Rows.Folder("alpha", 10), Rows.Folder("beta", 10)));
+        using var list = new ItemListViewModel(row);
+        list.Query = "gamma";
+
+        Assert.True(list.HasNoMatches);
+
+        list.ClearSearchCommand.Execute(null);
+
+        Assert.Empty(list.Query);
+        Assert.False(list.HasNoMatches);
+        Assert.Equal(2, list.ShownItems.Count);
+    }
+
     /// <summary>The checkbox over the list covers what the search shows, so a click never reaches a hidden item.</summary>
     [Fact]
     public void TheCheckboxOverEveryItemReachesOnlyWhatTheSearchShows()
