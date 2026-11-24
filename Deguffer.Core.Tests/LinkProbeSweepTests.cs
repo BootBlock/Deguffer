@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 
@@ -33,7 +34,7 @@ public sealed partial class LinkProbeSweepTests
         foreach (var file in ProductSources.Files()
             .Where(file => !Path.GetFileName(file).Equals("LongPath.cs", StringComparison.OrdinalIgnoreCase)))
         {
-            var name = Path.GetRelativePath(MarkdownGuide.RepositoryRoot, file).Replace('\\', '/');
+            var name = Path.GetRelativePath(SourceTree.RepositoryRoot, file).Replace('\\', '/');
             var member = new List<string>();
 
             foreach (var line in ProductSources.Code(File.ReadAllText(file)))
@@ -87,7 +88,7 @@ public sealed partial class LinkProbeSweepTests
 
             removals++;
 
-            var name = Path.GetRelativePath(MarkdownGuide.RepositoryRoot, file).Replace('\\', '/');
+            var name = Path.GetRelativePath(SourceTree.RepositoryRoot, file).Replace('\\', '/');
 
             bypasses.AddRange(code
                 .Where(line => AnyLinkCheck().IsMatch(line))

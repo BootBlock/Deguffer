@@ -1,4 +1,5 @@
 using System.Globalization;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests.CodeRules;
 
@@ -13,7 +14,7 @@ namespace Deguffer.Core.Tests.CodeRules;
 internal static class Baseline
 {
     public static readonly string Folder =
-        Path.Combine(MarkdownGuide.RepositoryRoot, "Deguffer.Core.Tests", "CodeRules", "Baselines");
+        Path.Combine(SourceTree.RepositoryRoot, "Deguffer.Core.Tests", "CodeRules", "Baselines");
 
     public static SortedDictionary<string, int> Read(string name)
     {

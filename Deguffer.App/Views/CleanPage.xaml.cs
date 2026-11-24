@@ -59,7 +59,7 @@ public sealed partial class CleanPage : Page
             App.Running,
             App.Work,
             () => new ContentDialogConfirmationPrompt(this),
-            AppVersion.Current,
+            BuildDetails.Current,
             new WhenCompleteViewModel(App.Preferences, WindowsSession.Current),
             new RetrimViewModel(
                 VolumeInventory.Current,

@@ -18,6 +18,15 @@ namespace Deguffer.App.Tests;
 /// </summary>
 internal sealed class StoragePage : IDisposable
 {
+    /// <summary>The build a run's diagnostic report names: an invented version on a machine it describes plainly.</summary>
+    public static readonly BuildDetails StorageBuild = new(
+        "0.0.0-test",
+        new DateOnly(2026, 1, 1),
+        System.Runtime.InteropServices.Architecture.X64,
+        System.Runtime.InteropServices.Architecture.Arm64,
+        new Version(10, 0, 26100, 0),
+        IsElevated: false);
+
     public const long Capacity = 1_000_000;
 
     private readonly TempDirectory _temp = new();
@@ -80,7 +89,7 @@ internal sealed class StoragePage : IDisposable
                 PromptsBuilt++;
                 return Prompt;
             },
-            appVersion: "0.0.0-test",
+            build: StorageBuild,
             new WhenCompleteViewModel(Preferences, Session),
             new RetrimViewModel(
                 Volumes,

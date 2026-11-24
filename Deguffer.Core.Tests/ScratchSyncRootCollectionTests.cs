@@ -53,7 +53,7 @@ public sealed class ScratchSyncRootCollectionTests
             .Where(project => Path.GetFileName(project) != typeof(ScratchSyncRootCollectionTests).Assembly.GetName().Name)
             .SelectMany(TestProjects.SourceFiles)
             .Where(file => File.ReadAllText(file).Contains(nameof(ScratchSyncRoot), StringComparison.Ordinal))
-            .Select(file => Path.GetRelativePath(MarkdownGuide.RepositoryRoot, file));
+            .Select(file => Path.GetRelativePath(SourceTree.RepositoryRoot, file));
 
         Assert.Empty(elsewhere);
     }

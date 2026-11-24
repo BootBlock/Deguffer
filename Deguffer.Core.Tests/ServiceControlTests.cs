@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 
@@ -54,7 +55,7 @@ public sealed partial class ServiceControlTests
                 .Where(declaration => WithoutCharacterSet(declaration.Key) == ServiceManager)
                 .SelectMany(declaration => declaration)));
 
-        var source = File.ReadAllText(Path.Combine(MarkdownGuide.RepositoryRoot, file));
+        var source = File.ReadAllText(Path.Combine(SourceTree.RepositoryRoot, file));
 
         Assert.Contains("private const uint EnumerateService = 0x0004;", source, StringComparison.Ordinal);
 
@@ -80,7 +81,7 @@ public sealed partial class ServiceControlTests
             .SelectMany(file => ProductSources.Code(File.ReadAllText(file))
                 .Select(line => ServiceCommand().Match(line))
                 .Where(match => match.Success)
-                .Select(match => $"{Path.GetRelativePath(MarkdownGuide.RepositoryRoot, file)}: {match.Value}"))
+                .Select(match => $"{Path.GetRelativePath(SourceTree.RepositoryRoot, file)}: {match.Value}"))
             .ToList();
 
         Assert.Empty(named);

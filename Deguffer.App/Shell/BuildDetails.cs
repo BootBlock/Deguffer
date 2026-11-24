@@ -55,6 +55,15 @@ public sealed record BuildDetails(
     public string MachineText => NameOf(Machine);
 
     /// <summary>
+    /// This build's architecture, then the machine's where the two differ, because a build Windows
+    /// runs through a compatibility layer is what a slow report most needs to say.
+    /// </summary>
+    public string ArchitectureSummary => Process == Machine ? ArchitectureText : $"{ArchitectureText}, on an {MachineText} processor";
+
+    /// <summary>Windows and this build's architecture on one line, for a report that names the platform once.</summary>
+    public string PlatformText => $"{WindowsText}, {ArchitectureSummary}";
+
+    /// <summary>
     /// Windows by the name a reader knows it by, then its version number. Windows 11 reports itself as
     /// 10.0, so the name comes from the build number.
     /// </summary>
@@ -78,9 +87,7 @@ public sealed record BuildDetails(
             Environment.NewLine,
             $"Deguffer {Version}",
             $"Built: {BuildDate?.ToString("O", CultureInfo.InvariantCulture) ?? "not known"}",
-            Process == Machine
-                ? $"Architecture: {ArchitectureText}"
-                : $"Architecture: {ArchitectureText}, on an {MachineText} processor",
+            $"Architecture: {ArchitectureSummary}",
             $"Windows: {WindowsText}",
             $"Scanning: {ScanModeText}");
 

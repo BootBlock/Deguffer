@@ -1,3 +1,5 @@
+using Deguffer.Testing;
+
 namespace Deguffer.Core.Tests.CodeRules;
 
 /// <summary>
@@ -119,6 +121,6 @@ public sealed class CodeRuleSweepTests
     internal static readonly Lazy<IReadOnlyList<(string Path, string Text)>> ProductFiles = new(() =>
         [.. ProductSources.Files()
             .Select(file => (
-                Path.GetRelativePath(MarkdownGuide.RepositoryRoot, file).Replace('\\', '/'),
+                Path.GetRelativePath(SourceTree.RepositoryRoot, file).Replace('\\', '/'),
                 File.ReadAllText(file)))]);
 }

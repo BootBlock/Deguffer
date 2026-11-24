@@ -872,6 +872,7 @@ public class CleanViewModelCleanTests
         var report = page.ViewModel.RunDiagnostics;
 
         Assert.Contains("- Deguffer: 0.0.0-test", report, StringComparison.Ordinal);
+        Assert.Contains("- Windows: Windows 11 (10.0.26100), x64, on an ARM64 processor", report, StringComparison.Ordinal);
         Assert.Contains($"- Outcome: {page.ViewModel.RunStatement}", report, StringComparison.Ordinal);
         Assert.Contains("- Failed: `%USERPROFILE%", report, StringComparison.Ordinal);
         Assert.DoesNotContain(page.Environment.UserProfile, report, StringComparison.OrdinalIgnoreCase);

@@ -7,7 +7,7 @@ namespace Deguffer.Core.Diagnostics;
 
 /// <summary>The build and the machine a report comes from, without naming either.</summary>
 /// <param name="AppVersion">Deguffer's own version, as the About page states it.</param>
-/// <param name="OperatingSystem">Windows' own description of itself, with its build number.</param>
+/// <param name="OperatingSystem">Windows, its version number and the build's architecture, as About names them.</param>
 /// <param name="Elevated">Whether Deguffer ran as administrator, which changes what it may reach.</param>
 public sealed record ReportOrigin(string AppVersion, string OperatingSystem, bool Elevated);
 

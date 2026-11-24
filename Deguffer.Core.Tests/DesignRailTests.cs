@@ -1,4 +1,5 @@
 using System.Xml.Linq;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 
@@ -77,7 +78,7 @@ public sealed class DesignRailTests
     [Fact]
     public void TheWindowGivesEveryRailItemItsPurposeAsHelpTextAndTooltip()
     {
-        var source = File.ReadAllText(Path.Combine(MarkdownGuide.RepositoryRoot, "Deguffer.App", "MainWindow.xaml.cs"));
+        var source = File.ReadAllText(Path.Combine(SourceTree.RepositoryRoot, "Deguffer.App", "MainWindow.xaml.cs"));
 
         Assert.Contains("AutomationProperties.SetHelpText(item, DestinationPurposes.Of(destination));", source, StringComparison.Ordinal);
         Assert.Contains("ToolTipService.SetToolTip(item, DestinationNames.RailTooltip(destination));", source, StringComparison.Ordinal);

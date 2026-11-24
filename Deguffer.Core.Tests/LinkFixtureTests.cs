@@ -152,7 +152,7 @@ public sealed partial class LinkFixtureTests : IDisposable
     {
         var creating = TestProjects.SourcesWithFixtures()
             .Where(file => LinkCreation().IsMatch(File.ReadAllText(file)))
-            .Select(file => Path.GetRelativePath(MarkdownGuide.RepositoryRoot, file))
+            .Select(file => Path.GetRelativePath(SourceTree.RepositoryRoot, file))
             .Order(StringComparer.Ordinal);
 
         Assert.Equal(

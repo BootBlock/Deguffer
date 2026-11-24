@@ -71,17 +71,23 @@ public sealed class BuildDetailsTests
         Assert.Equal(named, (Native with { WindowsVersion = new Version(10, 0, build, 0) }).WindowsText);
 
     /// <summary>
-    /// This process's own details, read from the machine the tests run on, hold none of its user's
-    /// folder, user name or machine name.
+    /// Every field is built from a version, a date, two processor families, a version number and
+    /// whether the process is elevated, so nothing that names a folder can reach the text.
     /// </summary>
     [Fact]
-    public void TheCopiedTextNamesNoUserPathOrMachine()
+    public void TheCopiedTextHoldsNoPath()
     {
-        var text = BuildDetails.Current.ToClipboardText();
+        var text = (Native with { Machine = RuntimeArchitecture.Arm64, IsElevated = true }).ToClipboardText();
 
-        Assert.DoesNotContain(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), text, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(@":\", text, StringComparison.Ordinal);
-        Assert.DoesNotContain(Environment.UserName, text, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(Environment.MachineName, text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(@"\", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("/", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("%", text, StringComparison.Ordinal);
     }
+
+    /// <summary>A report that names the platform once names it as the copied lines do.</summary>
+    [Fact]
+    public void ThePlatformLineNamesWindowsThenTheArchitecture() =>
+        Assert.Equal(
+            "Windows 11 (10.0.26100), x64, on an ARM64 processor",
+            (Native with { Machine = RuntimeArchitecture.Arm64 }).PlatformText);
 }

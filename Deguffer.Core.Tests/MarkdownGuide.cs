@@ -14,8 +14,6 @@ internal sealed class MarkdownGuide
         Text = text;
     }
 
-    public static string RepositoryRoot => SourceTree.RepositoryRoot;
-
     /// <summary>The path relative to the repository root, for failure messages.</summary>
     public string Name { get; }
 
@@ -26,11 +24,11 @@ internal sealed class MarkdownGuide
     public string Text { get; }
 
     public static MarkdownGuide AtRepositoryRoot(string fileName) =>
-        At(Path.Combine(RepositoryRoot, fileName));
+        At(Path.Combine(SourceTree.RepositoryRoot, fileName));
 
     public static MarkdownGuide At(string path)
     {
-        var name = Path.GetRelativePath(RepositoryRoot, path);
+        var name = Path.GetRelativePath(SourceTree.RepositoryRoot, path);
         Assert.True(File.Exists(path), $"{name} does not exist.");
 
         return new MarkdownGuide(name, File.ReadAllText(path).ReplaceLineEndings("\n"));

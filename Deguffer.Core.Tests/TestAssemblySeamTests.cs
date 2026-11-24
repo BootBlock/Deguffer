@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 
@@ -45,7 +46,7 @@ public sealed partial class TestAssemblySeamTests
 
         foreach (var file in TestSources())
         {
-            var name = Path.GetRelativePath(MarkdownGuide.RepositoryRoot, file).Replace('\\', '/');
+            var name = Path.GetRelativePath(SourceTree.RepositoryRoot, file).Replace('\\', '/');
 
             foreach (Match use in RealRoute().Matches(File.ReadAllText(file)))
             {

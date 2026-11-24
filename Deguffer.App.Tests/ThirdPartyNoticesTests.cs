@@ -20,6 +20,15 @@ public sealed class ThirdPartyNoticesTests
     /// </summary>
     private static readonly string[] BuildOnly = ["Microsoft.Windows.SDK.BuildTools"];
 
+    /// <summary>Which credited component each referenced package is. The .NET runtime ships with no package reference.</summary>
+    private static readonly Dictionary<string, string> CreditedAs = new(StringComparer.Ordinal)
+    {
+        ["Microsoft.WindowsAppSDK"] = "Windows App SDK",
+        ["Microsoft.Graphics.Win2D"] = "Win2D",
+        ["CommunityToolkit.Mvvm"] = "CommunityToolkit.Mvvm",
+        ["System.IO.Hashing"] = "System.IO.Hashing",
+    };
+
     [Fact]
     public void EveryPackageAShippingProjectReferencesIsCreditedAndNoOtherIs()
     {
@@ -31,15 +40,16 @@ public sealed class ThirdPartyNoticesTests
             .Except(BuildOnly, StringComparer.Ordinal)
             .Order(StringComparer.Ordinal);
 
+        Assert.Equal(CreditedAs.Keys.Order(StringComparer.Ordinal), referenced);
         Assert.Equal(
-            referenced,
-            ThirdPartyNotices.Components.SelectMany(component => component.Packages).Order(StringComparer.Ordinal));
+            CreditedAs.Values.Append(".NET").Order(StringComparer.Ordinal),
+            ThirdPartyNotices.Components.Select(component => component.Name).Order(StringComparer.Ordinal));
     }
 
     /// <summary>Each build is self-contained, so the runtime ships in it and is credited too.</summary>
     [Fact]
     public void TheDotNetRuntimeIsCredited() =>
-        Assert.Contains(ThirdPartyNotices.Components, component => component.Name == ".NET" && component.Packages.Count == 0);
+        Assert.Contains(ThirdPartyNotices.Components, component => component.Name == ".NET");
 
     [Fact]
     public void EveryLicenceIsReadOverHttps() =>

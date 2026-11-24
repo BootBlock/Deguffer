@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 
@@ -58,11 +59,11 @@ public sealed partial class DesignTitleBarTests
     }
 
     private static IEnumerable<DragRegion> DragRegions() =>
-        TestProjects.SourceFiles(Path.Combine(MarkdownGuide.RepositoryRoot, "Deguffer.App"))
+        TestProjects.SourceFiles(Path.Combine(SourceTree.RepositoryRoot, "Deguffer.App"))
             .SelectMany(file => ProductSources.NumberedCode(File.ReadAllText(file).ReplaceLineEndings("\n"))
                 .SelectMany(code => SetTitleBarCall().Matches(code.Line)
                     .Select(match => new DragRegion(
-                        Path.GetRelativePath(MarkdownGuide.RepositoryRoot, file).Replace('\\', '/'),
+                        Path.GetRelativePath(SourceTree.RepositoryRoot, file).Replace('\\', '/'),
                         code.Number,
                         match.Groups["name"].Value))));
 

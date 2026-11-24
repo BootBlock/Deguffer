@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 
@@ -48,7 +49,7 @@ public sealed class AgentGuideLinkTests
         var dead = new List<string>();
         var followed = 0;
 
-        foreach (var path in MarkdownFiles(MarkdownGuide.RepositoryRoot))
+        foreach (var path in MarkdownFiles(SourceTree.RepositoryRoot))
         {
             var guide = MarkdownGuide.At(path);
 

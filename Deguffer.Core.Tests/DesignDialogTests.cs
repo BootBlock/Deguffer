@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 
@@ -41,9 +42,9 @@ public sealed partial class DesignDialogTests
     }
 
     private static IEnumerable<(string Name, IReadOnlyList<(int Number, string Line)> Code)> AppSources() =>
-        TestProjects.SourceFiles(Path.Combine(MarkdownGuide.RepositoryRoot, "Deguffer.App"))
+        TestProjects.SourceFiles(Path.Combine(SourceTree.RepositoryRoot, "Deguffer.App"))
             .Select(file => (
-                Path.GetRelativePath(MarkdownGuide.RepositoryRoot, file).Replace('\\', '/'),
+                Path.GetRelativePath(SourceTree.RepositoryRoot, file).Replace('\\', '/'),
                 (IReadOnlyList<(int Number, string Line)>)ProductSources.NumberedCode(File.ReadAllText(file).ReplaceLineEndings("\n")).ToList()));
 
     // A qualified name and a target-typed new() are both ways to build one that a bare match misses.
