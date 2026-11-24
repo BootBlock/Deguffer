@@ -61,7 +61,7 @@ public class ChosenOfWholeTests
         var whole = ScanSize.Approximate(2048);
 
         Assert.EndsWith($"of {FreeSpace.Format(whole)}", ChosenOfWhole.Size(true, ScanSize.FromLengths(1024), whole));
-        Assert.StartsWith("about ", FreeSpace.Format(whole));
+        Assert.StartsWith("~", FreeSpace.Format(whole));
     }
 
     [Fact]

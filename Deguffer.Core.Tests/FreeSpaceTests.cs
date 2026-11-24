@@ -46,10 +46,10 @@ public class FreeSpaceTests
     /// </summary>
     [Fact]
     public void SaysWhenASizeIsAPredictionRatherThanAMeasurement() =>
-        Assert.Equal("about 1.5 MB", FreeSpace.Format(ScanSize.Approximate(1536 * 1024)));
+        Assert.Equal("~1.5 MB", FreeSpace.Format(ScanSize.Approximate(1536 * 1024)));
 
     /// <summary>
-    /// A ceiling the removal is known to fall short of says "up to", never "about", and stays a ceiling
+    /// A ceiling the removal is known to fall short of says "up to", never "~", and stays a ceiling
     /// in any total it is part of.
     /// </summary>
     [Fact]
@@ -64,7 +64,7 @@ public class FreeSpaceTests
     /// §5.5's fallback walk is <em>not</em> hedged, and this is the assertion that changed when
     /// <see cref="ScanSize.Reclaimable"/> became the logical figure. The walk reports file lengths;
     /// file lengths are now the number reported; so the walk measures the reported number exactly,
-    /// and "about" would be a qualification on every unelevated preview with nothing behind it.
+    /// and a "~" would be a qualification on every unelevated preview with nothing behind it.
     /// </summary>
     [Fact]
     public void DoesNotHedgeAWalkedSizeBecauseTheWalkMeasuresTheReportedNumberExactly() =>

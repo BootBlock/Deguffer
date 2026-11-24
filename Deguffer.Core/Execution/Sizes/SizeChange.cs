@@ -1,4 +1,5 @@
 using Deguffer.Core.Exploring.History;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Execution.Sizes;
 
@@ -28,7 +29,7 @@ public sealed record SizeChange(long Bytes, DateTime SinceUtc, bool Approximate)
     /// <summary>How far it moved, with its sign so growth and shrinkage read apart without colour.</summary>
     public string Amount => Bytes == 0
         ? "No change"
-        : Approximate ? $"About {GrowthText.Signed(Bytes)}" : GrowthText.Signed(Bytes);
+        : Approximate ? $"{FreeSpace.Approximately}{GrowthText.Signed(Bytes)}" : GrowthText.Signed(Bytes);
 
     /// <summary>How far it moved, and since when.</summary>
     /// <param name="date">Words a UTC instant in the user's own format.</param>

@@ -39,7 +39,7 @@ namespace Deguffer.Core.Providers;
 /// in advance, so the figure is Deguffer's own measurement of the first of Microsoft's two
 /// conditions: what the target holds that is older than the retention age. The second condition can
 /// only reduce it, so the number is a ceiling rather than a forecast — it is carried as
-/// <see cref="ScanSize.Approximate"/>, rendered as "about", and the plan says in plain words that
+/// <see cref="ScanSize.Approximate"/>, rendered as "~", and the plan says in plain words that
 /// Windows keeps the newest copy of anything it still protects. The honest figure for what was
 /// actually freed is the one measured after the run, which the executor already reports.</para>
 ///

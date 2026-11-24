@@ -23,7 +23,7 @@
         <x:Double x:Key="FacetColumnWidth">150</x:Double>
 
         <!-- The size and age column, one width for every row and its heading: the widest figure's.
-             A fixed width would cut off an estimate such as "about 1.0 GB", and any figure under
+             A fixed width would cut off an estimate such as "~1.0 GB", and any figure under
              Windows text scaling. See WidthGroup. -->
         <controls:WidthGroup x:Key="FigureWidths" />
 

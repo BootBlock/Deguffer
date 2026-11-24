@@ -7,7 +7,7 @@ namespace Deguffer.App.Controls;
 /// rows that each build their own <c>Grid</c>. WinUI 3 has no <c>SharedSizeGroup</c>.
 ///
 /// <para>A fixed column width cannot do it, because the column holds text the app does not control:
-/// an estimate reads "about 1.0 GB" and a ceiling "up to 99.9 GB", and Windows text scaling widens
+/// an estimate reads "~1.0 GB" and a ceiling "up to 99.9 GB", and Windows text scaling widens
 /// every figure. A column too narrow for its text cuts the figure off, which is the one thing on the
 /// row that must be read whole.</para>
 ///

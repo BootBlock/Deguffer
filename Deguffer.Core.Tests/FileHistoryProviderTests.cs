@@ -249,7 +249,7 @@ public sealed class FileHistoryProviderTests : IDisposable
     /// <summary>
     /// The second condition cannot be measured in advance — <c>FhManagew.exe</c> reports nothing
     /// before it runs — so the figure is a ceiling rather than a forecast and has to say so. The
-    /// flag is what makes the shell render it as "about".
+    /// flag is what makes the shell render it with a "~".
     /// </summary>
     [Fact]
     public async Task SaysTheFigureIsAnUpperBoundRatherThanAMeasurement()
