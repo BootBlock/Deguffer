@@ -33,13 +33,14 @@ public static class DestinationNames
 
     /// <summary>
     /// The tooltip of <paramref name="destination"/>'s rail item: its name, then the question the page
-    /// answers (<paramref name="help"/>, the item's help text) as the rest of one sentence. With the
-    /// rail collapsed to its icons the tooltip is the only name an item shows, so it leads with it.
+    /// answers (<see cref="DestinationPurposes"/>, the item's help text) as the rest of one sentence.
+    /// With the rail collapsed to its icons the tooltip is the only name an item shows, so it leads
+    /// with it.
     /// </summary>
-    public static string RailTooltip(Destination destination, string help)
+    public static string RailTooltip(Destination destination)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(help);
+        var purpose = DestinationPurposes.Of(destination);
 
-        return $"{Of(destination)}: {char.ToLowerInvariant(help[0])}{help[1..]}";
+        return $"{Of(destination)}: {char.ToLowerInvariant(purpose[0])}{purpose[1..]}";
     }
 }

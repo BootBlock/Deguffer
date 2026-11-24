@@ -32,7 +32,27 @@ public sealed class DestinationNamesTests
     public void ARailTooltipLeadsWithThePageNameThenItsQuestion() =>
         Assert.Equal(
             "Installed apps: remove entries for programs that are gone, or uninstall one",
-            DestinationNames.RailTooltip(Destination.InstalledApps, "Remove entries for programs that are gone, or uninstall one"));
+            DestinationNames.RailTooltip(Destination.InstalledApps));
+
+    /// <summary>
+    /// A one-word label cannot say what its page is for, so every page's purpose is a question of its
+    /// own rather than its name again, and no two pages share one.
+    /// </summary>
+    [Fact]
+    public void EveryDestinationStatesAPurposeOfItsOwn()
+    {
+        var destinations = Enum.GetValues<Destination>();
+
+        Assert.All(destinations, destination =>
+        {
+            var purpose = DestinationPurposes.Of(destination);
+
+            Assert.False(string.IsNullOrWhiteSpace(purpose), $"{destination} has no purpose.");
+            Assert.NotEqual(DestinationNames.Of(destination), purpose, StringComparer.OrdinalIgnoreCase);
+            Assert.False(purpose.EndsWith('.'), $"{destination}'s purpose ends in a full stop, which help text does not.");
+        });
+        Assert.Equal(destinations.Length, destinations.Select(DestinationPurposes.Of).Distinct(StringComparer.Ordinal).Count());
+    }
 
     [Fact]
     public void EveryDestinationHasATitleOfItsOwn()
