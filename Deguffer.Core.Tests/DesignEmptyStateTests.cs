@@ -15,6 +15,12 @@ public sealed partial class DesignEmptyStateTests
 
     private const string ControlFile = "Deguffer.App/Controls/EmptyState.xaml";
 
+    /// <summary>The controls that take the pointer over their whole area even when they hold no rows.</summary>
+    private static readonly IReadOnlySet<string> Lists = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "ListView", "GridView", "ItemsView", "TreeView", "ScrollViewer",
+    };
+
     /// <summary>The pages that show a list or a picture in place of which they say why it is empty.</summary>
     public static TheoryData<string> PagesWithAnEmptyState =>
     [
@@ -72,6 +78,24 @@ public sealed partial class DesignEmptyStateTests
         RuleBaseline.Hold("only EmptyState draws its parts", found, new Dictionary<string, int>());
     }
 
+    /// <summary>
+    /// An empty state shares its grid cell with the list it stands in for, so it is drawn after the
+    /// list, over it. A list takes the pointer over its whole area even with no rows, so one drawn
+    /// over the empty state swallowed every click on the action under its words: the Storage page's
+    /// Scan could not be pressed with a mouse.
+    /// </summary>
+    [Fact]
+    public void EachEmptyStateIsDrawnOverTheListItSharesACellWith()
+    {
+        var found = ShellMarkup.Files.SelectMany(file => file.Elements
+            .Where(element => element.Name.LocalName == Control && element.Parent?.Name.LocalName == "Grid")
+            .SelectMany(state => state.ElementsAfterSelf()
+                .Where(sibling => Lists.Contains(sibling.Name.LocalName) && CellOf(sibling) == CellOf(state))
+                .Select(list => file.At(list, $"<{list.Name.LocalName}> is drawn over the {Control} at line {ShellMarkup.LineOf(state)}; put the {Control} after it"))));
+
+        Assert.Empty(found);
+    }
+
     // A sweep that stopped finding the controls would pass the rules above with nothing to check,
     // so it must find at least one on each page listed above and in each of the two searches' lists.
     [Fact]
@@ -81,6 +105,9 @@ public sealed partial class DesignEmptyStateTests
 
         Assert.True(count >= 7, $"Only {count} {Control} elements were found, so the rule is no longer reading the pages.");
     }
+
+    private static (string? Row, string? Column) CellOf(XElement element) =>
+        (element.Attribute("Grid.Row")?.Value ?? "0", element.Attribute("Grid.Column")?.Value ?? "0");
 
     private static bool IsShownWhenEmpty(XElement element) =>
         element.Attribute("Visibility")?.Value is { } visibility && EmptyFlag().IsMatch(visibility);
