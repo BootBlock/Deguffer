@@ -476,81 +476,81 @@
                         <StackPanel x:Name="ListControls"
                                     Grid.Row="0"
                                     Visibility="{x:Bind ViewModel.Controls.ListControls, Mode=OneWay}">
-                            <controls:ReflowRow ColumnSpacing="{StaticResource RegionGap}"
-                                                RowSpacing="{StaticResource ControlGap}"
-                                                Margin="{StaticResource CardRowPadding}">
-                                <controls:FlowRow ColumnSpacing="{StaticResource RegionGap}"
-                                                  RowSpacing="{StaticResource ControlGap}"
-                                                  VerticalAlignment="Center">
-                                    <!-- A provider whose toolchain is absent has nothing to reclaim and
-                                         nothing to tick, so by default it is not drawn: it lengthens the
-                                         list without adding a decision to it. -->
-                                    <CheckBox x:Name="NotInstalledToggle"
-                                              Content="Show items not installed"
-                                              MinWidth="0"
-                                              VerticalAlignment="Center"
-                                              Checked="OnShowNotInstalledChanged"
-                                              Unchecked="OnShowNotInstalledChanged" />
+                            <StackPanel Margin="{StaticResource CardRowPadding}" Spacing="{StaticResource ControlGap}">
+                                <controls:ReflowRow ColumnSpacing="{StaticResource RegionGap}"
+                                                    RowSpacing="{StaticResource ControlGap}">
+                                    <controls:FlowRow ColumnSpacing="{StaticResource RegionGap}"
+                                                      RowSpacing="{StaticResource ControlGap}"
+                                                      VerticalAlignment="Center">
+                                        <!-- A provider whose toolchain is absent has nothing to reclaim and
+                                             nothing to tick, so by default it is not drawn: it lengthens the
+                                             list without adding a decision to it. -->
+                                        <CheckBox x:Name="NotInstalledToggle"
+                                                  Content="Show items not installed"
+                                                  MinWidth="0"
+                                                  VerticalAlignment="Center"
+                                                  Checked="OnShowNotInstalledChanged"
+                                                  Unchecked="OnShowNotInstalledChanged" />
 
-                                    <!-- The preference Settings sets as well, read and written here
-                                         through the same one. See AlreadyClearSwitch. -->
-                                    <CheckBox x:Name="AlreadyClearToggle"
-                                              Content="Show items that are already clear"
-                                              MinWidth="0"
-                                              VerticalAlignment="Center"
-                                              IsChecked="{x:Bind AlreadyClear.IsOn, Mode=TwoWay}" />
-                                </controls:FlowRow>
+                                        <!-- The preference Settings sets as well, read and written here
+                                             through the same one. See AlreadyClearSwitch. -->
+                                        <CheckBox x:Name="AlreadyClearToggle"
+                                                  Content="Show items that are already clear"
+                                                  MinWidth="0"
+                                                  VerticalAlignment="Center"
+                                                  IsChecked="{x:Bind AlreadyClear.IsOn, Mode=TwoWay}" />
+                                    </controls:FlowRow>
 
-                                <controls:FlowRow ColumnSpacing="{StaticResource RegionGap}"
-                                                  RowSpacing="{StaticResource ControlGap}"
-                                                  VerticalAlignment="Center">
-                                    <!-- How much of each row to draw: what differs is how much of the row
-                                         is on screen and how much is one click inside it. The label is raw
-                                         for assistive technology: the combo box carries the same name,
-                                         and without this a screen reader announces "View" twice. -->
-                                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
-                                        <TextBlock Text="View"
-                                                   Style="{StaticResource FieldLabel}"
-                                                   VerticalAlignment="Center"
-                                                   AutomationProperties.AccessibilityView="Raw" />
-                                        <ComboBox x:Name="ViewSelector"
-                                                  MinWidth="132"
-                                                  SelectionChanged="OnViewSelectionChanged"
-                                                  AutomationProperties.Name="View">
-                                            <ComboBoxItem Content="Standard" />
-                                            <ComboBoxItem Content="Compact" />
-                                        </ComboBox>
-                                    </StackPanel>
+                                    <controls:FlowRow ColumnSpacing="{StaticResource RegionGap}"
+                                                      RowSpacing="{StaticResource ControlGap}"
+                                                      VerticalAlignment="Center">
+                                        <!-- How much of each row to draw: what differs is how much of the row
+                                             is on screen and how much is one click inside it. The label is raw
+                                             for assistive technology: the combo box carries the same name,
+                                             and without this a screen reader announces "View" twice. -->
+                                        <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
+                                            <TextBlock Text="View"
+                                                       Style="{StaticResource FieldLabel}"
+                                                       VerticalAlignment="Center"
+                                                       AutomationProperties.AccessibilityView="Raw" />
+                                            <ComboBox x:Name="ViewSelector"
+                                                      MinWidth="132"
+                                                      SelectionChanged="OnViewSelectionChanged"
+                                                      AutomationProperties.Name="View">
+                                                <ComboBoxItem Content="Standard" />
+                                                <ComboBoxItem Content="Compact" />
+                                            </ComboBox>
+                                        </StackPanel>
 
-                                    <!-- §7 lists the rows largest first, and that stays the default. A
-                                         reader looking for one location by name, or taking the tiers one
-                                         at a time, can reorder them here. The label is raw for the reason
-                                         the View label is. -->
-                                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
-                                        <TextBlock Text="Sort by"
-                                                   Style="{StaticResource FieldLabel}"
-                                                   VerticalAlignment="Center"
-                                                   AutomationProperties.AccessibilityView="Raw" />
-                                        <ComboBox x:Name="OrderSelector"
-                                                  MinWidth="132"
-                                                  SelectionChanged="OnOrderSelectionChanged"
-                                                  AutomationProperties.Name="Sort by">
-                                            <ComboBoxItem Content="Size" />
-                                            <ComboBoxItem Content="Name" />
-                                            <ComboBoxItem Content="Safety tier" />
-                                        </ComboBox>
-                                        <views:StorageSelectionMenu Selection="{x:Bind ViewModel.Selection}" />
-                                    </StackPanel>
-                                </controls:FlowRow>
-                            </controls:ReflowRow>
+                                        <!-- §7 lists the rows largest first, and that stays the default. A
+                                             reader looking for one location by name, or taking the tiers one
+                                             at a time, can reorder them here. The label is raw for the reason
+                                             the View label is. -->
+                                        <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
+                                            <TextBlock Text="Sort by"
+                                                       Style="{StaticResource FieldLabel}"
+                                                       VerticalAlignment="Center"
+                                                       AutomationProperties.AccessibilityView="Raw" />
+                                            <ComboBox x:Name="OrderSelector"
+                                                      MinWidth="132"
+                                                      SelectionChanged="OnOrderSelectionChanged"
+                                                      AutomationProperties.Name="Sort by">
+                                                <ComboBoxItem Content="Size" />
+                                                <ComboBoxItem Content="Name" />
+                                                <ComboBoxItem Content="Safety tier" />
+                                            </ComboBox>
+                                            <views:StorageSelectionMenu Selection="{x:Bind ViewModel.Selection}" />
+                                        </StackPanel>
+                                    </controls:FlowRow>
+                                </controls:ReflowRow>
 
-                            <!-- The box goes back when its write is refused, and this says why. -->
-                            <InfoBar IsOpen="{x:Bind AlreadyClear.Save.Failed, Mode=OneWay}"
-                                     IsClosable="False"
-                                     Severity="Warning"
-                                     Margin="16,0,16,12"
-                                     Title="{x:Bind vm:SettingSave.NoticeTitle}"
-                                     Message="{x:Bind vm:SettingSave.NoticeMessage}" />
+                                <!-- The box goes back when its write is refused, and this says why. -->
+                                <InfoBar IsOpen="{x:Bind AlreadyClear.Save.Failed, Mode=OneWay}"
+                                         IsClosable="False"
+                                         Severity="Warning"
+                                         Title="{x:Bind vm:SettingSave.NoticeTitle}"
+                                         Message="{x:Bind vm:SettingSave.NoticeMessage}" />
+                            </StackPanel>
 
                             <Border Style="{StaticResource Divider}" Margin="16,0" />
                         </StackPanel>

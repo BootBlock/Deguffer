@@ -18,6 +18,9 @@ public sealed partial class AlreadyClearSwitch : ObservableObject
 {
     private readonly PreferenceService _preferences;
 
+    /// <summary>Decides when <see cref="Save"/> opens and closes, as on the Settings page.</summary>
+    private readonly LatestSave _latest = new();
+
     public AlreadyClearSwitch(PreferenceService preferences) => _preferences = preferences;
 
     public bool IsOn
@@ -25,7 +28,9 @@ public sealed partial class AlreadyClearSwitch : ObservableObject
         get => _preferences.Current.ShowAlreadyClear;
         set
         {
-            Save.Failed = _preferences.Update(current => current with { ShowAlreadyClear = value }) is SaveOutcome.Refused;
+            // Through LatestSave, because the box put back after a refused write sends the stored
+            // value, which writes nothing and must not close the notice of the refusal.
+            _latest.Report(Save, _preferences.Update(current => current with { ShowAlreadyClear = value }));
 
             // Whatever the outcome. After a refused write the box shows a value that is not in
             // effect until it reads this again.

@@ -69,6 +69,29 @@ public sealed class AlreadyClearSwitchTests : IDisposable
         Assert.Equal([nameof(AlreadyClearSwitch.IsOn)], raised);
     }
 
+    /// <summary>
+    /// The box put back after a refused write sends the value already stored, which writes nothing,
+    /// and the notice of the refusal stays open. A later write that saves closes it.
+    /// </summary>
+    [Fact]
+    public void TheBoxPutBackAfterARefusalLeavesTheNoticeOpenUntilAWriteSaves()
+    {
+        var box = new AlreadyClearSwitch(_preferences);
+        var blocker = Path.Combine(_environment.LocalAppData, "Deguffer", "preferences.json");
+        Directory.CreateDirectory(blocker);
+
+        box.IsOn = true;
+        box.IsOn = false;
+
+        Assert.True(box.Save.Failed);
+
+        Directory.Delete(blocker);
+        box.IsOn = true;
+
+        Assert.False(box.Save.Failed);
+        Assert.True(_preferences.Current.ShowAlreadyClear);
+    }
+
     private SettingsViewModel Settings()
     {
         var roots = new SourceRootService(new SourceRootStore(_environment));

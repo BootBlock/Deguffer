@@ -30,9 +30,6 @@ public sealed partial class StoragePageControls : ObservableObject
         };
     }
 
-    /// <summary>Whether any scan on the page has produced a row, drawn or not.</summary>
-    public bool HasProducedRows => _rowsProduced;
-
     /// <inheritdoc cref="StorageControls.ListControls"/>
     public bool ListControls => Shown.ListControls;
 
@@ -53,7 +50,6 @@ public sealed partial class StoragePageControls : ObservableObject
 
     private void Changed()
     {
-        OnPropertyChanged(nameof(HasProducedRows));
         OnPropertyChanged(nameof(ListControls));
         OnPropertyChanged(nameof(ActionBar));
         OnPropertyChanged(nameof(EmptyStateOffersScan));

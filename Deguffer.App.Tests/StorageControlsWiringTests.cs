@@ -46,7 +46,6 @@ public sealed class StorageControlsWiringTests
         page.Scan();
 
         Assert.Equal((false, true, false), whileScanning);
-        Assert.True(controls.HasProducedRows);
         Assert.Equal((true, true, false), Read(controls));
         Assert.Equal([(false, true, false), (true, true, false), (true, true, false)], told);
     }
@@ -85,7 +84,6 @@ public sealed class StorageControlsWiringTests
 
         page.Scan();
 
-        Assert.False(page.ViewModel.Controls.HasProducedRows);
         Assert.Equal((false, false, true), Read(page.ViewModel.Controls));
     }
 
