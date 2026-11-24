@@ -28,6 +28,16 @@ public sealed class SideShareTests
     public void ACardThatWouldSqueezeThePictureGoesUnderIt() =>
         Assert.True(SideShare.Stacks(available: 536, side: 240, gap: 8, mainMinimum: 400));
 
+    /// <summary>A picture left exactly its narrowest still has room for a name and its figures.</summary>
+    [Fact]
+    public void APictureLeftExactlyItsNarrowestKeepsTheCardBesideIt() =>
+        Assert.False(SideShare.Stacks(available: 648, side: 240, gap: 8, mainMinimum: 400));
+
+    /// <summary>The gap between the two is not the picture's to draw in, so it counts against it.</summary>
+    [Fact]
+    public void TheGapCountsAgainstThePicture() =>
+        Assert.True(SideShare.Stacks(available: 644, side: 240, gap: 8, mainMinimum: 400));
+
     [Fact]
     public void AnUnboundedRegionGivesTheCardItsWidest() =>
         Assert.Equal(340, SideShare.Width(double.PositiveInfinity, 0.4, 240, 340));
