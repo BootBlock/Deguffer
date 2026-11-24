@@ -3,10 +3,9 @@ using Deguffer.Core.Safety;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// A tier's name is <see cref="SafetyTierExtensions.ToDisplayName"/>'s, everywhere it is shown. About
-/// once wrote the four names as literals, which a rename of a tier would have left behind, so the
-/// page would call a tier something the Storage rows and dialogs do not. The page binds them instead,
-/// and no attribute in the shell's markup may spell one out.
+/// A tier's name is <see cref="SafetyTierExtensions.ToDisplayName"/>'s, everywhere it is shown. A
+/// literal copy in markup survives a rename of the tier, and then one page calls a tier something the
+/// Storage rows and dialogs do not, so markup binds the name and no attribute may spell one out.
 /// </summary>
 public sealed class DesignTierNameTests
 {

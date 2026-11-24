@@ -12,8 +12,9 @@ public static class AboutStatements
 {
     /// <summary>The line under the application's name.</summary>
     public const string Summary =
-        "Deguffer shows what is using the space, the memory and the start-up time on this PC, says " +
-        "what each thing is, and tells you what each one costs to lose before you agree to lose it.";
+        "Deguffer shows what is using the space and the memory on this PC, and what Windows starts " +
+        "when you sign in. Storage recognises what each location it offers is, and tells you what " +
+        "it costs to lose before you agree to lose it.";
 
     /// <summary>The heading of the card that says what each page is for.</summary>
     public const string PurposesHeading = "What each page is for";

@@ -69,6 +69,20 @@ public sealed class DesignRailTests
             Assert.Null(item.Attribute("ToolTipService.ToolTip"));
         });
 
+    /// <summary>
+    /// The markup leaves the help text and the tooltip to the window, so the window must give both,
+    /// from the one sentence per page. A WinUI window cannot be built in a test process, so the rule
+    /// reads the constructor's source; that the rail shows them is observed by driving it.
+    /// </summary>
+    [Fact]
+    public void TheWindowGivesEveryRailItemItsPurposeAsHelpTextAndTooltip()
+    {
+        var source = File.ReadAllText(Path.Combine(MarkdownGuide.RepositoryRoot, "Deguffer.App", "MainWindow.xaml.cs"));
+
+        Assert.Contains("AutomationProperties.SetHelpText(item, DestinationPurposes.Of(destination));", source, StringComparison.Ordinal);
+        Assert.Contains("ToolTipService.SetToolTip(item, DestinationNames.RailTooltip(destination));", source, StringComparison.Ordinal);
+    }
+
     private static List<XElement> Items() =>
         Rail().Descendants().Where(element => element.Name.LocalName == "NavigationViewItem").ToList();
 

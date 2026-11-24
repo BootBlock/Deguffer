@@ -183,7 +183,7 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="shell:TierStatement">
-                                    <StackPanel Spacing="4">
+                                    <StackPanel Spacing="{StaticResource LabelGap}">
                                         <ContentControl Content="{x:Bind Name}"
                                                         AutomationProperties.Name="{x:Bind Name}"
                                                         Style="{x:Bind Tier, Converter={StaticResource TierChipStyle}}"
@@ -198,8 +198,7 @@
 
                 <!-- Said page by page, because the pages differ: Storage removes outright, Explore and
                      Duplicates use the Recycle Bin, Installed apps keeps a backup, Startup's Disable
-                     is undone by Enable, and the rest change nothing. One sentence for the whole
-                     application was true of one page and false of the others. -->
+                     is undone by Enable, and the rest change nothing. -->
                 <Border Style="{StaticResource SolidCardStyle}">
                     <StackPanel Spacing="{StaticResource ControlGap}">
                         <TextBlock Text="{x:Bind SafeguardsHeading}" Style="{StaticResource GroupHeading}" />

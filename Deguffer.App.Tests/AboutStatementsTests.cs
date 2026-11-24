@@ -32,9 +32,8 @@ public sealed class AboutStatementsTests
             AboutStatements.Purposes.Select(statement => (statement.Name, Assert.Single(statement.Sentences))));
 
     /// <summary>
-    /// Only Storage's clean removes outright with no other route. A sentence of the whole
-    /// application's that said so was true of Storage and false of Explore, Duplicates, Installed
-    /// apps and Startup.
+    /// Only Storage's clean removes outright with no other route, so a sentence about the whole
+    /// application that said so would be false of Explore, Duplicates, Installed apps and Startup.
     /// </summary>
     [Fact]
     public void NoSentenceForTheWholeApplicationClaimsEveryRemovalIsOutright() =>
