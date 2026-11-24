@@ -85,7 +85,7 @@ public sealed partial class FindingViewModel : ObservableObject
         OnPropertyChanged(string.Empty);
     }
 
-    [MemberNotNull(nameof(_found), nameof(Finding), nameof(Notes), nameof(FacetColumns), nameof(Steps), nameof(Text))]
+    [MemberNotNull(nameof(_found), nameof(Finding), nameof(Contents), nameof(FacetColumns), nameof(Steps), nameof(Text))]
     private void Load(Finding finding, SelectionMemory memory, KeepList keepList)
     {
         _found = finding;
@@ -94,9 +94,6 @@ public sealed partial class FindingViewModel : ObservableObject
         var provider = finding.Provider;
         var startsSelected = memory.RowStartsSelected(provider, Finding.IsPreSelectedByDefault);
 
-        // Materialised once per plan. These are bound per row, and rebuilding a list inside a
-        // property getter puts an allocation on every binding evaluation.
-        Notes = NotesOf(Finding);
         var offered = OfferedSteps(Finding);
 
         // Worked out once across every step, so each row of the item list is handed its values in the
@@ -129,6 +126,7 @@ public sealed partial class FindingViewModel : ObservableObject
         ];
 
         Text = new FindingRowText(Name, Steps.Count, finding.AwaitingSourceFolders);
+        Contents = new FindingContents(Steps, OffersItems, Finding);
 
         // Subscribed only once every step exists. Handing each step a callback in its constructor
         // re-entered this one — the first pre-selected step raised the change before Steps had been
@@ -309,19 +307,11 @@ public sealed partial class FindingViewModel : ObservableObject
     /// <summary>What this row says about itself in words that change only with its plan. See <see cref="FindingRowText"/>.</summary>
     public FindingRowText Text { get; private set; }
 
-    /// <summary>
-    /// The one step of a row that has nothing to choose between, which the Contents tab still states
-    /// in full: §7 makes the plan inspectable before anything is deleted. Null for a row whose steps
-    /// are listed as items, and for a row with none.
-    /// </summary>
-    public StepViewModel? SoleStep => !OffersItems && Steps.Count == 1 ? Steps[0] : null;
-
-    public bool HasSoleStep => SoleStep is not null;
+    /// <summary>What this row's information dialog states on its Contents tab. See <see cref="FindingContents"/>.</summary>
+    public FindingContents Contents { get; private set; }
 
     /// <summary>The headings of the item list's facet columns, in order. Empty where no step carries a facet.</summary>
     public IReadOnlyList<string> FacetColumns { get; private set; }
-
-    public IReadOnlyList<string> Notes { get; private set; }
 
     /// <summary>
     /// Bring this row up to date with a keep list that changed while it was on screen, from its own
@@ -351,7 +341,7 @@ public sealed partial class FindingViewModel : ObservableObject
         }
 
         Finding = applied;
-        Notes = NotesOf(applied);
+        Contents = new FindingContents(Steps, OffersItems, applied);
 
         _syncingSelection = true;
 
@@ -385,9 +375,6 @@ public sealed partial class FindingViewModel : ObservableObject
     /// </summary>
     private static HashSet<CleanupStep> OfferedSteps(Finding finding) => [.. finding.Plan?.Steps ?? []];
 
-    private static IReadOnlyList<string> NotesOf(Finding finding) =>
-        (string[])[.. finding.Plan?.Notes.Select(n => n.Message) ?? []];
-
     /// <summary>
     /// What to remember about this row, so a later scan starts where the user left it.
     ///
@@ -400,22 +387,6 @@ public sealed partial class FindingViewModel : ObservableObject
     public RememberedSelection ToRemembered() => RememberedSelection.Of(
         IsSelected,
         Steps.Select(s => (s.Step.SelectionKey, s.IsSelected, s.CanBeSelected)));
-
-    /// <summary>
-    /// Shown whenever there is anything to say — including for a tool with nothing to reclaim.
-    /// A provider that decided to leave children alone under §5.2 has recorded *why*, and that
-    /// reasoning is the audit trail; hiding it because the tool happens to be clean would throw
-    /// away the most useful thing Deguffer knows about it.
-    /// </summary>
-    public bool HasDetail => Steps.Count > 0 || Notes.Count > 0;
-
-    /// <summary>
-    /// Whether the Contents tab has to say that there is nothing to list. Stated here rather than
-    /// negated in the template for the reason <see cref="CannotBeSelected"/> is: x:Bind has no
-    /// operators, and a converter for one "not" would be more machinery than the property it
-    /// replaces.
-    /// </summary>
-    public bool HasNoDetail => !HasDetail;
 
     /// <summary>
     /// A click on the row's checkbox. A clear row ticks every step it can, and a ticked or mixed row

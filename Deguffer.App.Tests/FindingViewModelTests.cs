@@ -405,8 +405,8 @@ public class FindingViewModelTests
     {
         var parts = new FakeCleanupProvider("parts") { Grain = StepGrain.Parts };
 
-        Assert.NotNull(Rows.Row(Rows.Found(parts, Rows.Folder("a", 10))).SoleStep);
-        Assert.Null(Rows.Row(Rows.Found(parts, Rows.Folder("a", 10), Rows.Folder("b", 10))).SoleStep);
-        Assert.Null(Rows.Row(Rows.Found(Cache, Rows.Folder("a", 10))).SoleStep);
+        Assert.NotNull(Rows.Row(Rows.Found(parts, Rows.Folder("a", 10))).Contents.SoleStep);
+        Assert.Null(Rows.Row(Rows.Found(parts, Rows.Folder("a", 10), Rows.Folder("b", 10))).Contents.SoleStep);
+        Assert.Null(Rows.Row(Rows.Found(Cache, Rows.Folder("a", 10))).Contents.SoleStep);
     }
 }
