@@ -35,6 +35,9 @@ public sealed class MapAppearanceWindow : Window, IToolWindow
     private const int MinimumHeight = 560;
 
     private readonly MapAppearanceView _view;
+
+    /// <summary>The window's name, which the Settings row that opens it and Explore's button read as well.</summary>
+    public static string Name => "Map appearance";
     private readonly FrameworkElement? _ownerRoot;
     private readonly ToolWindowPlacement _placement;
     private readonly WindowBackdrop _backdrop;
@@ -47,7 +50,7 @@ public sealed class MapAppearanceWindow : Window, IToolWindow
         Content = _view;
 
         // One name for the taskbar, Alt+Tab and the row drawn along the top.
-        Title = "Map appearance";
+        Title = Name;
         _view.TitleBar.Title = Title;
         WindowIcon.Apply(this);
 

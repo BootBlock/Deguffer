@@ -9,19 +9,16 @@
          and in every list: these change the picture, never what it stands for. -->
     <StackPanel Spacing="8">
 
-        <!-- Indexed against ExploreSpacing, like the same box on the Settings page. The two write one
-             setting, which the Memory page's treemap follows as well. -->
-        <views:SettingsRow Glyph="&#xECA5;"
-                           Title="Room round each folder"
-                           Description="The gap a treemap leaves round what each folder holds.">
+        <!-- The same setting as the Settings page's spacing row, worded from the same place so a reader
+             recognises it here. The Memory page's treemap follows it as well. -->
+        <views:SettingsRow Glyph="{x:Bind views:TreemapSpacingSetting.Glyph}"
+                           Title="{x:Bind views:TreemapSpacingSetting.Title}"
+                           Description="{x:Bind views:TreemapSpacingSetting.Description}">
             <views:SettingsRow.Control>
                 <ComboBox x:Name="SpacingBox" MinWidth="140"
+                          ItemsSource="{x:Bind views:TreemapSpacingSetting.Choices}"
                           SelectedIndex="{x:Bind ViewModel.SpacingIndex, Mode=TwoWay}"
-                          AutomationProperties.Name="Room round each folder in the treemap">
-                    <ComboBoxItem Content="Dense" />
-                    <ComboBoxItem Content="Comfortable" />
-                    <ComboBoxItem Content="Spacious" />
-                </ComboBox>
+                          AutomationProperties.Name="{x:Bind views:TreemapSpacingSetting.Title}" />
             </views:SettingsRow.Control>
         </views:SettingsRow>
 
