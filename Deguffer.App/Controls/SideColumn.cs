@@ -10,9 +10,9 @@ namespace Deguffer.App.Controls;
 /// card leaves; every later child is a card for that place, of which the page shows at most one at a
 /// time. <see cref="SideShare"/> sets the card's width.
 ///
-/// <para>A fixed card width left the Explore map a sliver of a narrow window, and a star column
-/// reserved the card's room even while no card was shown. Here a card takes a share of the width,
-/// and the picture takes everything while no card is visible. Where the card would leave the
+/// <para>A card takes a share of the width, so the picture keeps most of a narrow window, and the
+/// picture takes everything while no card is visible, where a star column would hold the card's
+/// room empty. Where the card would leave the
 /// picture narrower than <see cref="MinimumMainWidth"/>, the card goes under the picture instead,
 /// taking the same share of the height.</para>
 /// </summary>

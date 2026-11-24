@@ -15,9 +15,9 @@ namespace Deguffer.Core.Viewing;
 public static class RailFold
 {
     /// <summary>
-    /// The narrowest window, in effective pixels, that opens the rail on its own. The old minimum
-    /// window width: every page was laid out and checked with the rail open at that width, and the
-    /// first launch's 1000 pixel window is above it, so a new reader sees every destination named.
+    /// The narrowest window, in effective pixels, that opens the rail on its own. Every page is laid
+    /// out to fit beside the open rail at this width, and the first launch's 1000 pixel window is
+    /// above it, so a new reader sees every destination named.
     /// </summary>
     public const double OpenWidth = 880;
 

@@ -594,10 +594,10 @@
             over the one action that cannot be undone. The menu below names all five, which is where
             somebody looks for them.
         -->
-        <!-- The map, and the card for the colouring beside it, which takes a share of a narrow
-             window rather than a fixed width that left the map a sliver, and goes under the map
-             where beside it the list would have no room for a name and its figures (SideColumn). -->
-        <controls:SideColumn Grid.Row="5" ColumnSpacing="{StaticResource ControlGap}"
+        <!-- The map, and the card for the colouring beside it, which takes a share of the window so
+             the map keeps most of a narrow one, and goes under the map where beside it the list
+             would have no room for a name and its figures (SideColumn). -->
+        <controls:SideColumn Grid.Row="5" ColumnSpacing="{StaticResource ControlGap}" Share="0.4"
                              MinimumSideWidth="240" MaximumSideWidth="340" MinimumMainWidth="400">
         <Border Style="{StaticResource CardStyle}"
                 Padding="0">

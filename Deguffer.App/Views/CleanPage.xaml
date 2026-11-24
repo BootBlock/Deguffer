@@ -163,7 +163,7 @@
                              they do not, the chips and the "What is this?" link move to a line of
                              their own under the name (ReflowRow), rather than any of them giving
                              up letters: the name is what says which row this is, a half-drawn
-                             link reads as a defect, and a trimmed chip once read "erable cache".
+                             link reads as a defect, and a trimmed chip can lose the word that names its tier.
                              Right-aligned on either line, so the chips form one column down the
                              list with the rows that did not wrap. -->
                         <controls:ReflowRow ColumnSpacing="{StaticResource ControlGap}"
