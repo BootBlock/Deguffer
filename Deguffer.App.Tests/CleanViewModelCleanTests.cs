@@ -617,7 +617,7 @@ public class CleanViewModelCleanTests
         Assert.Equal(otherPlans, other.PlanCount);
         Assert.Single(row.Steps);
         Assert.False(row.IsSelected);
-        Assert.Equal("0 B", page.ViewModel.Selection.TotalLabel);
+        Assert.Equal("Clean", page.ViewModel.Selection.CleanLabel);
         Assert.True(page.ViewModel.HasPreview);
     }
 
@@ -916,10 +916,10 @@ public class CleanViewModelCleanTests
         Assert.Equal(page.ViewModel.RunStatement, page.ViewModel.Status);
         Assert.Contains(page.ViewModel.RunVerificationNotes, check => check.Subject == inside);
 
-        Assert.Equal("0 B", page.ViewModel.Selection.TotalLabel);
+        Assert.Equal("Clean", page.ViewModel.Selection.CleanLabel);
         page.Row("cache").Steps[0].IsSelected = true;
 
-        Assert.Equal("1 KB", page.ViewModel.Selection.TotalLabel);
+        Assert.Equal("Clean 1 KB", page.ViewModel.Selection.CleanLabel);
         Assert.Equal(page.ViewModel.RunStatement, page.ViewModel.Status);
         Assert.Equal(InfoBarSeverity.Error, page.ViewModel.StatusSeverity);
     }
