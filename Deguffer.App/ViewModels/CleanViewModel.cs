@@ -168,6 +168,7 @@ public sealed partial class CleanViewModel : ObservableObject
         FreeSpaceNow = space?.Free;
 
         _listed = new StorageListedRows(Findings);
+        Controls = new StoragePageControls(Findings);
 
         // Offered before anything has been scanned, so an elevated preview does not have to be
         // reached through the unelevated one it replaces.
@@ -383,27 +384,12 @@ public sealed partial class CleanViewModel : ObservableObject
 
     partial void OnShowAlreadyClearChanged(bool value) => RefilterRows();
 
-    /// <summary>
-    /// Re-apply both filters to every row, rather than to new ones only, because either can change
-    /// under a list that is already built.
-    /// </summary>
+    /// <summary>Re-apply both filters to every row, and to the selection menu, because Select all ticks only the rows a filter leaves on screen.</summary>
     private void RefilterRows()
     {
-        foreach (var row in Findings)
-        {
-            row.Place = PlaceOf(row);
-        }
-
-        // The collection did not change, so the subscription above raises nothing. Without this a
-        // filter that empties the list leaves the empty state collapsed behind it.
-        _listed.Show();
-
-        // Select all ticks only the rows a filter leaves on screen.
+        _listed.Refilter(new PreviewFilter(ShowNotInstalled, ShowAlreadyClear));
         Selection.RefreshMenu();
     }
-
-    /// <summary>Where a row is drawn, unless a filter the user left on hides it. See <see cref="PreviewFilter"/>.</summary>
-    private PreviewPlace PlaceOf(FindingViewModel row) => new PreviewFilter(ShowNotInstalled, ShowAlreadyClear).Place(row.Status);
 
     /// <summary>Whether a preview exists — the only state from which cleaning is offered.</summary>
     [ObservableProperty]
@@ -456,6 +442,9 @@ public sealed partial class CleanViewModel : ObservableObject
 
     /// <summary>What the card says in place of its rows when it draws none.</summary>
     public StorageEmptyState EmptyState => _listed.Empty;
+
+    /// <summary>Which of the page's controls are drawn.</summary>
+    public StoragePageControls Controls { get; }
 
     public bool CanClean => HasPreview && !IsBusy && Selection.IsAnyTicked;
 
@@ -985,7 +974,7 @@ public sealed partial class CleanViewModel : ObservableObject
         }
 
         row.Replan(finding, memory, _keeps.Current);
-        row.Place = PlaceOf(row);
+        row.Place = _listed.PlaceOf(row);
         Sizes.Show(row);
         ScanChoice.Missing.Record(finding.Provider, row.Status);
 
@@ -1038,7 +1027,7 @@ public sealed partial class CleanViewModel : ObservableObject
 
         // Rows arrive as their providers finish, so each one is filtered as it lands rather than in a
         // pass at the end that a cancelled scan would never reach.
-        row.Place = PlaceOf(row);
+        row.Place = _listed.PlaceOf(row);
         Sizes.Show(row);
 
         // As each row lands rather than once at the end, so a scan that is cancelled part-way still
@@ -1288,6 +1277,7 @@ public sealed partial class CleanViewModel : ObservableObject
     /// </summary>
     partial void OnIsBusyChanged(bool value)
     {
+        Controls.Follow(value);
         Selection.RefreshMenu();
 
         foreach (var row in Findings)

@@ -90,12 +90,8 @@ public sealed partial class CleanPage : Page
             App.Preferences, current => current.StorageOrder, (current, _) => current with { StorageOrder = ViewModel.Order }, OrderFindings);
         ViewModel.WhenComplete.ConfirmAsync = CountDownAsync;
         ViewModel.WhenComplete.ExitRequested += (_, _) => App.CloseWhenIdle();
+        AlreadyClear = new AlreadyClearSwitch(App.Preferences);
         InitializeComponent();
-
-        var scanChoice = new ScanChoiceView(ViewModel.ScanChoice, ViewModel.PreviewChosenCommand);
-        // The scan has started from the drop-down, and the page under it is where it reports.
-        scanChoice.ScanClicked += (_, _) => ScanChoiceFlyout.Hide();
-        ScanChoiceFlyout.Content = scanChoice;
 
         // Read once, here, and never again. Re-reading it whenever the page came back on screen
         // undid a choice whose write to disk had failed: PreferenceService leaves Current at the
@@ -141,6 +137,9 @@ public sealed partial class CleanPage : Page
 
     public CleanViewModel ViewModel { get; }
 
+    /// <summary>The list's "Show items that are already clear" box, which writes the preference Settings reads.</summary>
+    public AlreadyClearSwitch AlreadyClear { get; }
+
     /// <summary>
     /// The preferences decide whether a clean that needs no answer of its own is still confirmed, and
     /// whether Tier 3 asks for typing. Deleting at these sizes has no undo (§8), so the default is to
@@ -175,17 +174,19 @@ public sealed partial class CleanPage : Page
     }
 
     /// <summary>
-    /// Which rows the list draws, and whether it follows a clean, as set on the Settings page.
+    /// Which rows the list draws, and whether it follows a clean, as set on the Settings page and, for
+    /// the already-clear rows, in the bar over the list as well.
     ///
-    /// Re-read on every visit, unlike the view and the not-installed filter above. Those two are
-    /// set from this page and applied before they are persisted, so re-reading them would undo a
-    /// choice whose write to disk had failed. These are set on a page that persists first and
-    /// applies second, so <see cref="PreferenceService.Current"/> is never anything but what took
-    /// effect.
+    /// Re-read on every visit, unlike the view and the not-installed filter. Those two are set from
+    /// this page alone and applied before they are persisted, so re-reading them would undo a choice
+    /// whose write to disk had failed. These are persisted first and applied second wherever they are
+    /// set (<see cref="AlreadyClearSwitch"/>), so <see cref="PreferenceService.Current"/> is never
+    /// anything but what took effect.
     /// </summary>
     private void ApplyListPreferences()
     {
-        ViewModel.ShowAlreadyClear = App.Preferences.Current.ShowAlreadyClear;
+        ViewModel.ShowAlreadyClear = AlreadyClear.IsOn;
+        AlreadyClear.Follow();
         _cleanedRow.IsEnabled = App.Preferences.Current.SpotlightCleanedRow;
     }
 

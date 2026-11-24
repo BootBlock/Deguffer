@@ -12,9 +12,6 @@
         <!-- The compact rows' figure column, one width down the whole list. See CompactFindingRow. -->
         <controls:WidthGroup x:Key="FigureWidths" />
 
-        <!-- Scan and the Cancel that takes its place while the page is busy. See the action bar. -->
-        <controls:WidthGroup x:Key="ScanSlotWidths" />
-
         <!--
             The compact row: the four things the user is choosing between, on one line — is it
             ticked, what is it, what class of thing is it, and how big is it.
@@ -274,47 +271,9 @@
 
     <!-- Layout roots stay transparent so the §6.5 material shows through; every surface below
          sits on a Fluent layer brush and reads correctly on a flat solid background too. -->
-    <Grid controls:ReadingColumn.Limit="{StaticResource ReadingWidth}" RowSpacing="{StaticResource RegionGap}" RowDefinitions="Auto,Auto,Auto,*,Auto" Padding="{StaticResource PagePadding}">
+    <Grid controls:ReadingColumn.Limit="{StaticResource ReadingWidth}" RowSpacing="{StaticResource RegionGap}" RowDefinitions="Auto,Auto,*" Padding="{StaticResource PagePadding}">
 
-        <controls:PageHeader controls:ReadingColumn.Fills="True" Destination="Storage">
-            <controls:PageHeader.Actions>
-                <!-- How much of each row to draw. It sits with the list it reshapes rather than in
-                     Settings, because it is a way of reading this screen and gets changed while
-                     reading it. Presentation only: every row is offered in both views, ticks the
-                     same checkbox and removes the same thing. What differs is how much of the row
-                     is on screen and how much is one click inside it. -->
-                <StackPanel Orientation="Horizontal"
-                            Spacing="16"
-                            VerticalAlignment="Center">
-                    <!-- A provider whose toolchain is absent has nothing to reclaim and nothing to
-                         tick, so by default it is not drawn: it lengthens the list without adding a
-                         decision to it. The rows still exist and are still scanned, so this only
-                         decides whether they are on screen. -->
-                    <CheckBox x:Name="NotInstalledToggle"
-                              Content="Show items not installed"
-                              MinWidth="0"
-                              VerticalAlignment="Center"
-                              Checked="OnShowNotInstalledChanged"
-                              Unchecked="OnShowNotInstalledChanged" />
-
-                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                        <!-- Raw for assistive technology: the combo box carries the same name, and
-                             without this a screen reader announces "View" twice. -->
-                        <TextBlock Text="View"
-                                   Style="{StaticResource FieldLabel}"
-                                   VerticalAlignment="Center"
-                                   AutomationProperties.AccessibilityView="Raw" />
-                        <ComboBox x:Name="ViewSelector"
-                                  MinWidth="132"
-                                  SelectionChanged="OnViewSelectionChanged"
-                                  AutomationProperties.Name="View">
-                            <ComboBoxItem Content="Standard" />
-                            <ComboBoxItem Content="Compact" />
-                        </ComboBox>
-                    </StackPanel>
-                </StackPanel>
-            </controls:PageHeader.Actions>
-        </controls:PageHeader>
+        <controls:PageHeader controls:ReadingColumn.Fills="True" Destination="Storage" />
 
         <!-- §7: free space, prominently. It is the only number the user came for. -->
         <Border Grid.Row="1" Style="{StaticResource CardStyle}">
@@ -451,248 +410,253 @@
             </Grid>
         </Border>
 
-        <Grid Grid.Row="2" ColumnSpacing="16" ColumnDefinitions="*,Auto">
-            <!-- This line carries a failed §5.6 verification — the most safety-critical string in the
-                 app. An InfoBar rather than plain text so it is distinguishable from routine progress by
-                 icon and severity, not only by reading to the end of it, and so it is announced as a
-                 problem rather than read out as one more line. The card above states the same sentence
-                 durably and in the critical colour, and colour and weight do neither of those things,
-                 which is why the failure is stated twice. A clean that verified cleanly leaves the bar
-                 to the fresh preview's totals and says so in the card alone, where it survives the next
-                 scan. It sits on its own solid surface because §6.5 forbids text that needs the blur to
-                 read. Closed while there is nothing to say, as before a scan, when the empty state
-                 below already says what to press and that nothing is removed until asked. -->
-            <InfoBar Grid.Column="0"
-                     IsOpen="{x:Bind ViewModel.HasStatus, Mode=OneWay}"
-                     IsClosable="False"
-                     Severity="{x:Bind ViewModel.StatusSeverity, Mode=OneWay}"
-                     Message="{x:Bind ViewModel.Status, Mode=OneWay}">
+        <!-- The status line, the list and the bar under it. A grid of their own rather than rows of
+             the page's, because the page's row spacing would stand above the status line and the bar
+             even while neither is drawn, as before a scan. Each gap here is a margin of the part it
+             separates, so it goes with the part. -->
+        <Grid Grid.Row="2" RowDefinitions="Auto,*,Auto">
+                <!-- This line carries a failed §5.6 verification — the most safety-critical string in the
+                     app. An InfoBar rather than plain text so it is distinguishable from routine progress by
+                     icon and severity, not only by reading to the end of it, and so it is announced as a
+                     problem rather than read out as one more line. The card above states the same sentence
+                     durably and in the critical colour, and colour and weight do neither of those things,
+                     which is why the failure is stated twice. A clean that verified cleanly leaves the bar
+                     to the fresh preview's totals and says so in the card alone, where it survives the next
+                     scan. It stands alone across the page: the controls that shape the list are on the
+                     list. It sits on its own solid surface because §6.5 forbids text that needs the blur to
+                     read. Closed while there is nothing to say, as before a scan, when the empty state
+                     below already says what to press and that nothing is removed until asked. -->
+                <InfoBar Grid.Row="0"
+                         Margin="{StaticResource RegionGapBelow}"
+                         IsOpen="{x:Bind ViewModel.HasStatus, Mode=OneWay}"
+                         IsClosable="False"
+                         Severity="{x:Bind ViewModel.StatusSeverity, Mode=OneWay}"
+                         Message="{x:Bind ViewModel.Status, Mode=OneWay}">
 
-                <!-- How far through the run, under the line naming which cause is being cleaned.
-                     Determinate because a clean knows its own extent before it starts, unlike a
-                     scan, which keeps the ring beside Scan. Shown only while that run
-                     is in flight, so nothing here is drawn against a message about anything else.
+                    <!-- How far through the run, under the line naming which cause is being cleaned.
+                         Determinate because a clean knows its own extent before it starts, unlike a
+                         scan, which keeps the ring beside Scan. Shown only while that run
+                         is in flight, so nothing here is drawn against a message about anything else.
 
-                     The percentage is written out beside it for the same reason the capacity bar
-                     above carries its figures: §6.5 forbids anything that can only be read as a
-                     graphic. -->
-                <InfoBar.Content>
-                    <Grid Margin="0,0,16,16"
-                          ColumnSpacing="12"
-                          ColumnDefinitions="*,Auto"
-                          Visibility="{x:Bind ViewModel.IsCleaning, Mode=OneWay}">
-                        <ProgressBar Grid.Column="0"
-                                     Value="{x:Bind ViewModel.CleanProgress.Percent, Mode=OneWay}"
-                                     Maximum="100"
-                                     VerticalAlignment="Center"
-                                     AutomationProperties.Name="Cleaning progress" />
-                        <TextBlock Grid.Column="1"
-                                   Text="{x:Bind ViewModel.CleanProgress.PercentLabel, Mode=OneWay}"
-                                   Style="{StaticResource SecondaryText}"
-                                   VerticalAlignment="Center"
-                                   AutomationProperties.AccessibilityView="Raw" />
+                         The percentage is written out beside it for the same reason the capacity bar
+                         above carries its figures: §6.5 forbids anything that can only be read as a
+                         graphic. -->
+                    <InfoBar.Content>
+                        <Grid Margin="0,0,16,16"
+                              ColumnSpacing="12"
+                              ColumnDefinitions="*,Auto"
+                              Visibility="{x:Bind ViewModel.IsCleaning, Mode=OneWay}">
+                            <ProgressBar Grid.Column="0"
+                                         Value="{x:Bind ViewModel.CleanProgress.Percent, Mode=OneWay}"
+                                         Maximum="100"
+                                         VerticalAlignment="Center"
+                                         AutomationProperties.Name="Cleaning progress" />
+                            <TextBlock Grid.Column="1"
+                                       Text="{x:Bind ViewModel.CleanProgress.PercentLabel, Mode=OneWay}"
+                                       Style="{StaticResource SecondaryText}"
+                                       VerticalAlignment="Center"
+                                       AutomationProperties.AccessibilityView="Raw" />
+                        </Grid>
+                    </InfoBar.Content>
+                </InfoBar>
+
+            <!-- One row per named cause (§7), in the order chosen over them, sharing a single surface.
+                 Carding every row individually produced a column of identical boxes with no sense of
+                 a list; hairline separators inside one card read as one thing to scan down. -->
+            <Border Grid.Row="1" Style="{StaticResource CardStyle}" Padding="0">
+                <Grid>
+                    <!-- Collapsed rather than removed while a row's items are listed, so the rows come
+                         back scrolled to where the reader left them. -->
+                    <Grid RowDefinitions="Auto,*" Visibility="{x:Bind ViewModel.IsShowingFindings, Mode=OneWay}">
+                        <!-- The controls that shape the list, on the list: which rows it draws, how much of
+                             each, and in what order, and the menu that ticks or clears them all. Not drawn
+                             until a scan has produced a row, because until then none of them does anything
+                             (StorageControls). Presentation only: every row is scanned, offered, ticked and
+                             removed exactly as before, whatever is chosen here. -->
+                        <StackPanel x:Name="ListControls"
+                                    Grid.Row="0"
+                                    Visibility="{x:Bind ViewModel.Controls.ListControls, Mode=OneWay}">
+                            <controls:ReflowRow ColumnSpacing="{StaticResource RegionGap}"
+                                                RowSpacing="{StaticResource ControlGap}"
+                                                Margin="{StaticResource CardRowPadding}">
+                                <controls:FlowRow ColumnSpacing="{StaticResource RegionGap}"
+                                                  RowSpacing="{StaticResource ControlGap}"
+                                                  VerticalAlignment="Center">
+                                    <!-- A provider whose toolchain is absent has nothing to reclaim and
+                                         nothing to tick, so by default it is not drawn: it lengthens the
+                                         list without adding a decision to it. -->
+                                    <CheckBox x:Name="NotInstalledToggle"
+                                              Content="Show items not installed"
+                                              MinWidth="0"
+                                              VerticalAlignment="Center"
+                                              Checked="OnShowNotInstalledChanged"
+                                              Unchecked="OnShowNotInstalledChanged" />
+
+                                    <!-- The preference Settings sets as well, read and written here
+                                         through the same one. See AlreadyClearSwitch. -->
+                                    <CheckBox x:Name="AlreadyClearToggle"
+                                              Content="Show items that are already clear"
+                                              MinWidth="0"
+                                              VerticalAlignment="Center"
+                                              IsChecked="{x:Bind AlreadyClear.IsOn, Mode=TwoWay}" />
+                                </controls:FlowRow>
+
+                                <controls:FlowRow ColumnSpacing="{StaticResource RegionGap}"
+                                                  RowSpacing="{StaticResource ControlGap}"
+                                                  VerticalAlignment="Center">
+                                    <!-- How much of each row to draw: what differs is how much of the row
+                                         is on screen and how much is one click inside it. The label is raw
+                                         for assistive technology: the combo box carries the same name,
+                                         and without this a screen reader announces "View" twice. -->
+                                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
+                                        <TextBlock Text="View"
+                                                   Style="{StaticResource FieldLabel}"
+                                                   VerticalAlignment="Center"
+                                                   AutomationProperties.AccessibilityView="Raw" />
+                                        <ComboBox x:Name="ViewSelector"
+                                                  MinWidth="132"
+                                                  SelectionChanged="OnViewSelectionChanged"
+                                                  AutomationProperties.Name="View">
+                                            <ComboBoxItem Content="Standard" />
+                                            <ComboBoxItem Content="Compact" />
+                                        </ComboBox>
+                                    </StackPanel>
+
+                                    <!-- §7 lists the rows largest first, and that stays the default. A
+                                         reader looking for one location by name, or taking the tiers one
+                                         at a time, can reorder them here. The label is raw for the reason
+                                         the View label is. -->
+                                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
+                                        <TextBlock Text="Sort by"
+                                                   Style="{StaticResource FieldLabel}"
+                                                   VerticalAlignment="Center"
+                                                   AutomationProperties.AccessibilityView="Raw" />
+                                        <ComboBox x:Name="OrderSelector"
+                                                  MinWidth="132"
+                                                  SelectionChanged="OnOrderSelectionChanged"
+                                                  AutomationProperties.Name="Sort by">
+                                            <ComboBoxItem Content="Size" />
+                                            <ComboBoxItem Content="Name" />
+                                            <ComboBoxItem Content="Safety tier" />
+                                        </ComboBox>
+                                        <views:StorageSelectionMenu Selection="{x:Bind ViewModel.Selection}" />
+                                    </StackPanel>
+                                </controls:FlowRow>
+                            </controls:ReflowRow>
+
+                            <!-- The box goes back when its write is refused, and this says why. -->
+                            <InfoBar IsOpen="{x:Bind AlreadyClear.Save.Failed, Mode=OneWay}"
+                                     IsClosable="False"
+                                     Severity="Warning"
+                                     Margin="16,0,16,12"
+                                     Title="{x:Bind vm:SettingSave.NoticeTitle}"
+                                     Message="{x:Bind vm:SettingSave.NoticeMessage}" />
+
+                            <Border Style="{StaticResource Divider}" Margin="16,0" />
+                        </StackPanel>
+
+                        <!-- Says what to do next rather than leaving a blank card that reads as a screen
+                             which has already failed. Before anything has been scanned it holds the one
+                             thing to do, under the words that say to do it. -->
+                        <controls:EmptyState Grid.Row="1"
+                                             Glyph="&#xE721;"
+                                             Title="{x:Bind ViewModel.EmptyState.Title, Mode=OneWay}"
+                                             Message="{x:Bind ViewModel.EmptyState.Message, Mode=OneWay}"
+                                             Visibility="{x:Bind ViewModel.EmptyState.IsShown, Mode=OneWay}">
+                            <controls:EmptyState.PrimaryAction>
+                                <views:StorageScanButtons x:Name="EmptyScanButtons"
+                                                          ViewModel="{x:Bind ViewModel}"
+                                                          ChoicePlacement="BottomEdgeAlignedLeft"
+                                                          Visibility="{x:Bind ViewModel.Controls.EmptyStateOffersScan, Mode=OneWay}" />
+                            </controls:EmptyState.PrimaryAction>
+                        </controls:EmptyState>
+
+                        <!-- The template is set from the stored preference in code-behind. The shipped
+                             default is named here as well, so the list is never left untemplated
+                             whatever order the framework loads and shows this page in, and so the
+                             markup does not disagree with what most windows will draw.
+
+                             A list view rather than a plain items control, for the motion every other
+                             list here has: a row arriving fades and slides in, and one leaving fades out
+                             as the rows below close up. Nothing on a row is chosen by selecting it, so
+                             selection is off, and its own controls are the tab stops rather than the
+                             row's container. The rows waiting for a source folder are folded into a
+                             group of their own at its foot. -->
+                        <ListView x:Name="FindingsList"
+                                  Grid.Row="1"
+                                  ItemsSource="{x:Bind ViewModel.Listed}"
+                                  ItemTemplate="{StaticResource StandardFinding}"
+                                  SelectionMode="None"
+                                  IsItemClickEnabled="False"
+                                  ItemContainerStyle="{StaticResource FindingRowContainer}"
+                                  TabNavigation="Local"
+                                  Padding="0,4">
+                            <ListView.Resources>
+                                <views:RowDisclosures />
+                            </ListView.Resources>
+                            <ListView.Footer>
+                                <views:AwaitingFolderGroup x:Name="AwaitingGroup" Group="{x:Bind ViewModel.AwaitingFolders}" AddCommand="{x:Bind ViewModel.AddSourceFolderCommand}" />
+                            </ListView.Footer>
+                        </ListView>
                     </Grid>
-                </InfoBar.Content>
-            </InfoBar>
 
-            <!-- §7 lists the rows largest first, and that stays the default. A reader looking for
-                 one location by name, or taking the tiers one at a time, can reorder them here,
-                 beside the line that states what the rows below add up to. Presentation only:
-                 every row is offered, ticked and removed exactly as before, wherever it stands.
-                 The label is raw for assistive technology for the reason the View label is. The
-                 selection menu that ticks or clears every row sits at the end, with the rows. -->
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                <TextBlock Text="Sort by"
-                           Style="{StaticResource FieldLabel}"
-                           VerticalAlignment="Center"
-                           AutomationProperties.AccessibilityView="Raw" />
-                <ComboBox x:Name="OrderSelector"
-                          MinWidth="132"
-                          SelectionChanged="OnOrderSelectionChanged"
-                          AutomationProperties.Name="Sort by">
-                    <ComboBoxItem Content="Size" />
-                    <ComboBoxItem Content="Name" />
-                    <ComboBoxItem Content="Safety tier" />
-                </ComboBox>
-                <views:StorageSelectionMenu Selection="{x:Bind ViewModel.Selection}" />
-            </StackPanel>
+                    <!-- One row's items, in place of the rows. Filled from code-behind with a list built
+                         for that row; see CleanPage.ShowItemsOrRows. -->
+                    <ContentControl x:Name="ItemsHost"
+                                    Visibility="{x:Bind ViewModel.IsShowingItems, Mode=OneWay}"
+                                    HorizontalContentAlignment="Stretch"
+                                    VerticalContentAlignment="Stretch"
+                                    IsTabStop="False" />
+                </Grid>
+            </Border>
+
+            <!-- §7: the bar runs in the order of the flow. Scan, the primary action, comes first, and it
+                 scans and removes nothing. Deleting is a separate, deliberate second step at the far end,
+                 with what follows it, so Scan carries the accent and Clean does not. Clean states what the
+                 ticked steps would give back, so the amount and the press that authorises it read as one.
+
+                 On a window too narrow for one line, the choice of what follows a clean and Clean move to
+                 a line of their own, right-aligned as they were (ReflowRow). Nothing the reader needs to
+                 start a scan or a clean is drawn off the edge. -->
+            <controls:ReflowRow Grid.Row="2"
+                                ColumnSpacing="{StaticResource RegionGap}"
+                                RowSpacing="{StaticResource ControlGap}"
+                                Margin="{StaticResource RegionGapAbove}"
+                                Visibility="{x:Bind ViewModel.Controls.ActionBar, Mode=OneWay}">
+
+                <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}" VerticalAlignment="Center">
+                    <!-- Drawn here once a scan has produced a row, and while the first one runs, because
+                         Cancel takes Scan's place. Until then the empty card holds them. -->
+                    <views:StorageScanButtons x:Name="BarScanButtons"
+                                              ViewModel="{x:Bind ViewModel}"
+                                              ChoicePlacement="TopEdgeAlignedLeft" />
+
+                    <!-- Last, so its space, kept while it is idle, moves nothing when it spins. -->
+                    <ProgressRing IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
+                                  Width="18" Height="18" VerticalAlignment="Center" />
+                </StackPanel>
+
+                <controls:FlowRow ColumnSpacing="{StaticResource ControlGap}" RowSpacing="{StaticResource ControlGap}" VerticalAlignment="Center">
+                    <!-- Beside Clean, because it is part of starting one: what Deguffer does once the clean
+                         it is about to start has finished. Read when the clean ends, so it can be changed
+                         while one runs. -->
+                    <TextBlock x:Name="WhenCompleteLabel"
+                               Text="When complete"
+                               Style="{StaticResource FieldLabel}"
+                               VerticalAlignment="Center" />
+                    <ComboBox MinWidth="140"
+                              VerticalAlignment="Center"
+                              ItemsSource="{x:Bind ViewModel.WhenComplete.Labels}"
+                              SelectedIndex="{x:Bind ViewModel.WhenComplete.SelectedIndex, Mode=TwoWay}"
+                              AutomationProperties.AutomationId="WhenCompleteSelector"
+                              AutomationProperties.LabeledBy="{x:Bind WhenCompleteLabel}"
+                              AutomationProperties.HelpText="{x:Bind ViewModel.WhenComplete.Explanation}"
+                              ToolTipService.ToolTip="{x:Bind ViewModel.WhenComplete.Explanation}" />
+                    <Button Content="{x:Bind ViewModel.Selection.CleanLabel, Mode=OneWay}"
+                            Command="{x:Bind ViewModel.CleanCommand}"
+                            AutomationProperties.AutomationId="CleanButton" />
+                </controls:FlowRow>
+            </controls:ReflowRow>
         </Grid>
-
-        <!-- One row per named cause (§7), in the order chosen above, sharing a single surface.
-             Carding every row individually produced a column of identical boxes with no sense of
-             a list; hairline separators inside one card read as one thing to scan down. -->
-        <Border Grid.Row="3" Style="{StaticResource CardStyle}" Padding="0">
-            <Grid>
-                <!-- Collapsed rather than removed while a row's items are listed, so the rows come
-                     back scrolled to where the reader left them. -->
-                <Grid Visibility="{x:Bind ViewModel.IsShowingFindings, Mode=OneWay}">
-                    <!-- Says what to do next rather than leaving a blank card that reads as a screen
-                         which has already failed. -->
-                    <controls:EmptyState Glyph="&#xE721;"
-                                         Title="{x:Bind ViewModel.EmptyState.Title, Mode=OneWay}"
-                                         Message="{x:Bind ViewModel.EmptyState.Message, Mode=OneWay}"
-                                         Visibility="{x:Bind ViewModel.EmptyState.IsShown, Mode=OneWay}" />
-
-                    <!-- The template is set from the stored preference in code-behind. The shipped
-                         default is named here as well, so the list is never left untemplated
-                         whatever order the framework loads and shows this page in, and so the
-                         markup does not disagree with what most windows will draw.
-
-                         A list view rather than a plain items control, for the motion every other
-                         list here has: a row arriving fades and slides in, and one leaving fades out
-                         as the rows below close up. Nothing on a row is chosen by selecting it, so
-                         selection is off, and its own controls are the tab stops rather than the
-                         row's container. The rows waiting for a source folder are folded into a
-                         group of their own at its foot. -->
-                    <ListView x:Name="FindingsList"
-                              ItemsSource="{x:Bind ViewModel.Listed}"
-                              ItemTemplate="{StaticResource StandardFinding}"
-                              SelectionMode="None"
-                              IsItemClickEnabled="False"
-                              ItemContainerStyle="{StaticResource FindingRowContainer}"
-                              TabNavigation="Local"
-                              Padding="0,4">
-                        <ListView.Resources>
-                            <views:RowDisclosures />
-                        </ListView.Resources>
-                        <ListView.Footer>
-                            <views:AwaitingFolderGroup x:Name="AwaitingGroup" Group="{x:Bind ViewModel.AwaitingFolders}" AddCommand="{x:Bind ViewModel.AddSourceFolderCommand}" />
-                        </ListView.Footer>
-                    </ListView>
-                </Grid>
-
-                <!-- One row's items, in place of the rows. Filled from code-behind with a list built
-                     for that row; see CleanPage.ShowItemsOrRows. -->
-                <ContentControl x:Name="ItemsHost"
-                                Visibility="{x:Bind ViewModel.IsShowingItems, Mode=OneWay}"
-                                HorizontalContentAlignment="Stretch"
-                                VerticalContentAlignment="Stretch"
-                                IsTabStop="False" />
-            </Grid>
-        </Border>
-
-        <!-- §7: the bar runs in the order of the flow. Scan, the primary action, comes first, and it
-             scans and removes nothing. Deleting is a separate, deliberate second step at the far end,
-             with what follows it, so Scan carries the accent and Clean does not. Clean states what the
-             ticked steps would give back, so the amount and the press that authorises it read as one.
-
-             On a window too narrow for one line, the choice of what follows a clean and Clean move to
-             a line of their own, right-aligned as they were (ReflowRow). Nothing the reader needs to
-             start a scan or a clean is drawn off the edge. -->
-        <controls:ReflowRow Grid.Row="4" ColumnSpacing="{StaticResource RegionGap}" RowSpacing="{StaticResource ControlGap}" Margin="0,4,0,0">
-
-            <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}" VerticalAlignment="Center">
-                <!-- While the page is busy, Cancel takes Scan's place rather than joining the bar beside
-                     it. The two share the wider of their widths (WidthGroup), so the swap does not move
-                     the buttons after them. -->
-                <Grid VerticalAlignment="Center">
-                    <!-- The primary action, so it keeps the accent a plain Scan button had. The button
-                         scans every location, and the drop-down scans only the ones ticked in it, for a
-                         user who knows what they came to clear and need not measure every cache to clear
-                         it. WinUI ships no accent style for a split button, so its brushes are pointed at
-                         the accent button's own. The empty HighContrast dictionary leaves that theme the
-                         SDK's values, as the Explore page's notes do. Hidden rather than disabled while
-                         the page is busy: see CleanViewModel.IsIdle. -->
-                    <SplitButton Content="Scan"
-                                 HorizontalAlignment="Stretch"
-                                 Visibility="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
-                                 Command="{x:Bind ViewModel.PreviewCommand}"
-                                 controls:WidthGroup.Group="{StaticResource ScanSlotWidths}"
-                                 AutomationProperties.AutomationId="ScanButton"
-                                 AutomationProperties.HelpText="Scan every location Deguffer recognises. Open the drop-down to choose the locations to scan on their own.">
-                        <SplitButton.Resources>
-                            <ResourceDictionary>
-                                <ResourceDictionary.ThemeDictionaries>
-                                    <ResourceDictionary x:Key="Default">
-                                        <StaticResource x:Key="SplitButtonBackground" ResourceKey="AccentButtonBackground" />
-                                        <StaticResource x:Key="SplitButtonBackgroundPointerOver" ResourceKey="AccentButtonBackgroundPointerOver" />
-                                        <StaticResource x:Key="SplitButtonBackgroundPressed" ResourceKey="AccentButtonBackgroundPressed" />
-                                        <StaticResource x:Key="SplitButtonBackgroundDisabled" ResourceKey="AccentButtonBackgroundDisabled" />
-                                        <StaticResource x:Key="SplitButtonForeground" ResourceKey="AccentButtonForeground" />
-                                        <StaticResource x:Key="SplitButtonForegroundPointerOver" ResourceKey="AccentButtonForegroundPointerOver" />
-                                        <StaticResource x:Key="SplitButtonForegroundPressed" ResourceKey="AccentButtonForegroundPressed" />
-                                        <StaticResource x:Key="SplitButtonForegroundDisabled" ResourceKey="AccentButtonForegroundDisabled" />
-                                        <StaticResource x:Key="SplitButtonForegroundSecondary" ResourceKey="AccentButtonForeground" />
-                                        <StaticResource x:Key="SplitButtonForegroundSecondaryPressed" ResourceKey="AccentButtonForegroundPressed" />
-                                        <StaticResource x:Key="SplitButtonBorderBrush" ResourceKey="AccentButtonBorderBrush" />
-                                        <StaticResource x:Key="SplitButtonBorderBrushPointerOver" ResourceKey="AccentButtonBorderBrushPointerOver" />
-                                        <StaticResource x:Key="SplitButtonBorderBrushPressed" ResourceKey="AccentButtonBorderBrushPressed" />
-                                        <StaticResource x:Key="SplitButtonBorderBrushDisabled" ResourceKey="AccentButtonBorderBrushDisabled" />
-                                        <StaticResource x:Key="SplitButtonBorderBrushDivider" ResourceKey="ControlStrokeColorOnAccentDefaultBrush" />
-                                    </ResourceDictionary>
-
-                                    <ResourceDictionary x:Key="Light">
-                                        <StaticResource x:Key="SplitButtonBackground" ResourceKey="AccentButtonBackground" />
-                                        <StaticResource x:Key="SplitButtonBackgroundPointerOver" ResourceKey="AccentButtonBackgroundPointerOver" />
-                                        <StaticResource x:Key="SplitButtonBackgroundPressed" ResourceKey="AccentButtonBackgroundPressed" />
-                                        <StaticResource x:Key="SplitButtonBackgroundDisabled" ResourceKey="AccentButtonBackgroundDisabled" />
-                                        <StaticResource x:Key="SplitButtonForeground" ResourceKey="AccentButtonForeground" />
-                                        <StaticResource x:Key="SplitButtonForegroundPointerOver" ResourceKey="AccentButtonForegroundPointerOver" />
-                                        <StaticResource x:Key="SplitButtonForegroundPressed" ResourceKey="AccentButtonForegroundPressed" />
-                                        <StaticResource x:Key="SplitButtonForegroundDisabled" ResourceKey="AccentButtonForegroundDisabled" />
-                                        <StaticResource x:Key="SplitButtonForegroundSecondary" ResourceKey="AccentButtonForeground" />
-                                        <StaticResource x:Key="SplitButtonForegroundSecondaryPressed" ResourceKey="AccentButtonForegroundPressed" />
-                                        <StaticResource x:Key="SplitButtonBorderBrush" ResourceKey="AccentButtonBorderBrush" />
-                                        <StaticResource x:Key="SplitButtonBorderBrushPointerOver" ResourceKey="AccentButtonBorderBrushPointerOver" />
-                                        <StaticResource x:Key="SplitButtonBorderBrushPressed" ResourceKey="AccentButtonBorderBrushPressed" />
-                                        <StaticResource x:Key="SplitButtonBorderBrushDisabled" ResourceKey="AccentButtonBorderBrushDisabled" />
-                                        <StaticResource x:Key="SplitButtonBorderBrushDivider" ResourceKey="ControlStrokeColorOnAccentDefaultBrush" />
-                                    </ResourceDictionary>
-
-                                    <ResourceDictionary x:Key="HighContrast" />
-                                </ResourceDictionary.ThemeDictionaries>
-                            </ResourceDictionary>
-                        </SplitButton.Resources>
-
-                        <SplitButton.Flyout>
-                            <Flyout x:Name="ScanChoiceFlyout" Placement="TopEdgeAlignedLeft" />
-                        </SplitButton.Flyout>
-                    </SplitButton>
-
-                    <Button Content="{x:Bind ViewModel.CancelLabel, Mode=OneWay}"
-                            HorizontalAlignment="Stretch"
-                            Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
-                            Command="{x:Bind ViewModel.CancelCommand}"
-                            controls:WidthGroup.Group="{StaticResource ScanSlotWidths}"
-                            AutomationProperties.AutomationId="CancelButton" />
-                </Grid>
-
-                <!-- §5.5's remedy for a slow scan, and a way to scan, so it sits with Scan. Offered
-                     from the start, so an elevated preview is not reachable only through the
-                     unelevated one it replaces, and hidden once a preview has shown that elevating
-                     would not help, so it never offers administrator rights for a problem they
-                     cannot fix. The wording follows the same state. -->
-                <Button Content="{x:Bind ViewModel.ElevateLabel, Mode=OneWay}" Style="{StaticResource ElevateButtonStyle}"
-                        Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
-                        Command="{x:Bind ViewModel.ElevateAndRescanCommand}"
-                        AutomationProperties.AutomationId="ElevateButton"
-                        AutomationProperties.HelpText="Restart Deguffer as administrator and scan, so it can read the volume's file table and carry out steps only an administrator may perform." />
-
-                <!-- Last, so its space, kept while it is idle, moves nothing when it spins. -->
-                <ProgressRing IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
-                              Width="18" Height="18" VerticalAlignment="Center" />
-            </StackPanel>
-
-            <controls:FlowRow ColumnSpacing="{StaticResource ControlGap}" RowSpacing="{StaticResource ControlGap}" VerticalAlignment="Center">
-                <!-- Beside Clean, because it is part of starting one: what Deguffer does once the clean
-                     it is about to start has finished. Read when the clean ends, so it can be changed
-                     while one runs. -->
-                <TextBlock x:Name="WhenCompleteLabel"
-                           Text="When complete"
-                           Style="{StaticResource FieldLabel}"
-                           VerticalAlignment="Center" />
-                <ComboBox MinWidth="140"
-                          VerticalAlignment="Center"
-                          ItemsSource="{x:Bind ViewModel.WhenComplete.Labels}"
-                          SelectedIndex="{x:Bind ViewModel.WhenComplete.SelectedIndex, Mode=TwoWay}"
-                          AutomationProperties.AutomationId="WhenCompleteSelector"
-                          AutomationProperties.LabeledBy="{x:Bind WhenCompleteLabel}"
-                          AutomationProperties.HelpText="{x:Bind ViewModel.WhenComplete.Explanation}"
-                          ToolTipService.ToolTip="{x:Bind ViewModel.WhenComplete.Explanation}" />
-                <Button Content="{x:Bind ViewModel.Selection.CleanLabel, Mode=OneWay}"
-                        Command="{x:Bind ViewModel.CleanCommand}"
-                        AutomationProperties.AutomationId="CleanButton" />
-            </controls:FlowRow>
-        </controls:ReflowRow>
     </Grid>
 </Page>

@@ -39,12 +39,19 @@ public sealed partial class EmptyState
         typeof(EmptyState),
         new PropertyMetadata(null));
 
+    public static readonly DependencyProperty PrimaryActionProperty = DependencyProperty.Register(
+        nameof(PrimaryAction),
+        typeof(object),
+        typeof(EmptyState),
+        new PropertyMetadata(null, (state, e) => ((EmptyState)state).PrimaryActionHost.Visibility = e.NewValue is null ? Visibility.Collapsed : Visibility.Visible));
+
     public EmptyState()
     {
         InitializeComponent();
         GlyphIcon.Visibility = Visibility.Collapsed;
         MessageText.Visibility = Visibility.Collapsed;
         ActionButton.Visibility = Visibility.Collapsed;
+        PrimaryActionHost.Visibility = Visibility.Collapsed;
     }
 
     /// <summary>
@@ -79,6 +86,18 @@ public sealed partial class EmptyState
     {
         get => (string)GetValue(ActionLabelProperty);
         set => SetValue(ActionLabelProperty, value);
+    }
+
+    /// <summary>
+    /// The page's primary action, under the sentence, where the empty state is where the page's work
+    /// starts: before a scan, the scan. Left out where it is null. Unlike the button above it, this
+    /// is the page's own control and keeps the page's accent, because while it is shown it is the one
+    /// thing on the page to press.
+    /// </summary>
+    public object? PrimaryAction
+    {
+        get => GetValue(PrimaryActionProperty);
+        set => SetValue(PrimaryActionProperty, value);
     }
 
     /// <summary>What the button does. See <see cref="ActionLabel"/>.</summary>

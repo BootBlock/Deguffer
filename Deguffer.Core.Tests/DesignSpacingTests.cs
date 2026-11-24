@@ -108,6 +108,15 @@ public sealed class DesignSpacingTests
         Assert.Equal(new double[] { 0, double.Parse(declared[gap], CultureInfo.InvariantCulture), 0, 0 }, ShellMarkup.Lengths(declared[gap + "Above"]));
     }
 
+    /// <summary>The region gap is written a third time, as a margin under a part, and it is the same gap.</summary>
+    [Fact]
+    public void TheRegionGapBelowAPartIsTheRegionGap()
+    {
+        var declared = ApplicationResources();
+
+        Assert.Equal(new double[] { 0, 0, 0, double.Parse(declared["RegionGap"], CultureInfo.InvariantCulture) }, ShellMarkup.Lengths(declared["RegionGapBelow"]));
+    }
+
     private static Dictionary<string, string> ApplicationResources() => ShellMarkup.Files
         .Single(file => file.IsApplicationResources).Elements
         .Where(IsSpacingResource)

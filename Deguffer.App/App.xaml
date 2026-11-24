@@ -90,7 +90,9 @@
                 inside one region (controls in a row, rows in a stack, the columns of a row). Region
                 gap: between the regions of a page or a card, such as a group of settings and the
                 next; RegionGapAbove is the same gap as a margin, for a heading or card that opens a
-                region inside a stack already spaced by the control gap, and the two move together.
+                region inside a stack already spaced by the control gap, and RegionGapBelow is it under
+                a part that is not always drawn, so the gap goes when the part does. All three move
+                together.
                 Card row padding is a row drawn as a card, or as the heading of one; row padding is a
                 row of a list inside a card. Card bleed cancels the card padding at each side, for a
                 list whose rows and their pointer-over highlight run to a card's inner edges, so the
@@ -109,6 +111,7 @@
             <x:Double x:Key="ControlGap">8</x:Double>
             <x:Double x:Key="RegionGap">16</x:Double>
             <Thickness x:Key="RegionGapAbove">0,16,0,0</Thickness>
+            <Thickness x:Key="RegionGapBelow">0,0,0,16</Thickness>
             <Thickness x:Key="ControlGapAbove">0,8,0,0</Thickness>
             <Thickness x:Key="CardPadding">20</Thickness>
             <Thickness x:Key="CardBleed">-20,0</Thickness>

@@ -58,17 +58,18 @@ public sealed class DesignAutomationIdTests
     /// <summary>
     /// The rule's own reading of the Storage page, so a change to how the sweep matches cannot pass
     /// every file by matching nothing: the Scan split button is matched by the end of its name, and a
-    /// row's tick is in a template.
+    /// row's tick is in a template. The page draws its Scan in two places, one at a time, through one
+    /// control, so a script reaches it by one id in either.
     /// </summary>
     [Fact]
     public void TheRuleReadsTheScanButtonAndTheRowTicks()
     {
-        var page = Assert.Single(ShellMarkup.Files, file => file.Name == "Deguffer.App/Views/CleanPage.xaml");
-        var operated = page.Elements.Where(IsOperated).ToList();
-
-        var scan = Assert.Single(operated, control => control.Name.LocalName == "SplitButton");
+        var buttons = Assert.Single(ShellMarkup.Files, file => file.Name == "Deguffer.App/Views/StorageScanButtons.xaml");
+        var scan = Assert.Single(buttons.Elements.Where(IsOperated), control => control.Name.LocalName == "SplitButton");
         Assert.Equal("ScanButton", scan.Attribute("AutomationProperties.AutomationId")?.Value);
 
+        var page = Assert.Single(ShellMarkup.Files, file => file.Name == "Deguffer.App/Views/CleanPage.xaml");
+        var operated = page.Elements.Where(IsOperated).ToList();
         var ticks = operated.Where(control => control.Name.LocalName == "CheckBox" && IsTemplated(control)).ToList();
         Assert.NotEmpty(ticks);
         Assert.All(ticks, tick => Assert.True(HasAutomationId(tick)));
