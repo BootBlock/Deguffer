@@ -50,7 +50,7 @@ public readonly record struct ExploreDisplay(
     /// </summary>
     public bool ShowsLegend =>
         Legend.Count > 0
-        && View is not (ExploreView.List or ExploreView.Files)
+        && DrawsPicture
         && Tree is not null
         && !InContrast;
 

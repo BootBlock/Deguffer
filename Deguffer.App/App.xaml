@@ -121,7 +121,8 @@
             <!--
                 Reading width: the widest a page's lists, forms and the controls round them grow
                 (Controls/ReadingColumn), so a row's name and its figures stay close enough on a wide
-                window to read as one row. Only a map drawing a picture runs past it. Form reading
+                window to read as one row. Only the page header, decoration, a scroller with a narrower
+                column of its own, and a map drawing a picture run past it. Form reading
                 width is narrower, for a column of settings rows that are each a title and a sentence.
             -->
             <x:Double x:Key="ReadingWidth">1200</x:Double>

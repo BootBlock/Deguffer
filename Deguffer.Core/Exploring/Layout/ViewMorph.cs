@@ -36,7 +36,7 @@ public static class ViewMorph
         var before = ExploreSurface.Drawn(tree, from);
         var after = ExploreSurface.Drawn(tree, to);
 
-        return before != after && Pictures(before) && Pictures(after);
+        return before != after && before.DrawsPicture() && after.DrawsPicture();
     }
 
     /// <summary>
@@ -85,8 +85,6 @@ public static class ViewMorph
                 .Select(to => new ShapeMorph(to.Node, to.Colour, from[to.Node].Outline, to.Outline, to.Edges)),
         ];
     }
-
-    private static bool Pictures(ExploreView view) => view is ExploreView.Treemap or ExploreView.Icicle or ExploreView.Sunburst;
 
     private static bool IsWhole(ExploreSurface drawing) => drawing.ShownAt.IsWhole;
 }

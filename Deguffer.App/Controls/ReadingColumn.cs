@@ -6,7 +6,8 @@ namespace Deguffer.App.Controls;
 /// <summary>
 /// A page laid out at the width a row can be read across, with only what fills the window allowed
 /// past it. Set <c>Limit</c> on the page's root <see cref="Grid"/>, and <c>Fills</c> on each child
-/// that takes the whole width: the page's header, and a map while it draws a picture.
+/// that takes the whole width: the page's header, decoration behind the page, a scroller whose
+/// content keeps to a narrower column of its own, and a map while it draws a picture.
 ///
 /// <para>Past a list's reading width, a row's name and its figures drift so far apart that the eye
 /// loses the line between them, and the controls that go with a row end up a screen away from it.
