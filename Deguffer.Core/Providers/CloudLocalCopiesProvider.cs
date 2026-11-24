@@ -66,7 +66,7 @@ public sealed class CloudLocalCopiesProvider : CleanupProviderBase
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner,
-            cloud: cloud)
+            routes: [new LocalCopyRelease(cloud)])
     {
         _cloud = cloud;
         _tuning = tuning ?? ScanTuner.Shipped;

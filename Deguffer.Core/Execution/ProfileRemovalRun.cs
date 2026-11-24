@@ -11,17 +11,30 @@ namespace Deguffer.Core.Execution;
 ///
 /// <para>Apart from the executor's own removals because Windows removes the folder, not Deguffer, for
 /// the reason <see cref="RestorePointRun"/> is.</para>
+///
+/// <para><b>Never defaulted to the machine's own</b>, for the reason <see cref="RecycleBinRun"/> is not:
+/// the real one removes the machine's profiles.</para>
 /// </summary>
-internal static class ProfileRemovalRun
+public sealed class ProfileRemovalRun : StepRoute<RemoveProfileStep>
 {
-    public static async Task<StepOutcome> RunAsync(
-        IUserProfiles profiles,
-        IUserEnvironment environment,
-        IDirectoryScanner scanner,
-        RemoveProfileStep step,
-        StepClock clock,
-        CancellationToken ct)
+    private readonly IUserProfiles _profiles;
+
+    public ProfileRemovalRun(IUserProfiles profiles)
     {
+        _profiles = profiles;
+        Proof = new ProfileRemovalProof(profiles);
+    }
+
+    /// <summary>Every other profile, and the folder they are kept in. See <see cref="ProfileRemovalProof"/>.</summary>
+    internal override StepProof Proof { get; }
+
+    private protected override async Task<StepOutcome> CarryOutAsync(StepRun run, RemoveProfileStep step, CancellationToken ct)
+    {
+        var profiles = _profiles;
+        var environment = run.Run.Environment;
+        var scanner = run.Run.Scanner;
+        var clock = run.Clock;
+
         var survey = await Task.Run(() => ProfileSurvey.Take(profiles, environment), ct).ConfigureAwait(false);
 
         if (WhyNotNow(step, survey) is { } changed)

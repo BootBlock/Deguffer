@@ -23,12 +23,17 @@ namespace Deguffer.Core.Execution;
 /// calling thread, in the step's order: a run reports the same list however the reads
 /// interleaved.</para>
 /// </summary>
-internal static class ReleasedFileProof
+/// <param name="cloud">What describes each file the step named.</param>
+public sealed class ReleasedFileProof(ICloudFiles cloud) : StepProof<ReleaseLocalCopiesStep>
 {
-    /// <param name="missing">How the verification judges a file it no longer finds, as a protected path.</param>
-    public static IEnumerable<VerificationCheck> Checks(
+    private protected override IEnumerable<VerificationCheck> Checks(
+        IReadOnlyList<ReleaseLocalCopiesStep> steps,
+        Func<ProtectedPath, VerificationCheck> missing,
+        CancellationToken ct) =>
+        steps.SelectMany(release => Checks(release, missing, ct));
+
+    private IEnumerable<VerificationCheck> Checks(
         ReleaseLocalCopiesStep release,
-        ICloudFiles cloud,
         Func<ProtectedPath, VerificationCheck> missing,
         CancellationToken ct)
     {

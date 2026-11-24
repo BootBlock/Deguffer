@@ -63,7 +63,7 @@ public sealed class OwnServicingWaitTests : IDisposable
         new FakeProcessRunner(),
         ParallelEnumerationScanner.Default,
         RefusalRecord.For(new FakeUserEnvironment(_temp.Path)),
-        handlers: _handlers,
+        routes: [new DiskCleanupRun(_handlers)],
         servicing: _servicing,
         inspector: _inspector,
         time: _time);

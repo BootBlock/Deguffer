@@ -11,15 +11,28 @@ namespace Deguffer.Core.Execution;
 ///
 /// <para>Apart from the executor's own removals because nothing here is Deguffer's removal, for the
 /// reason <see cref="DiskCleanupRun"/> is.</para>
+///
+/// <para><b>Never defaulted to the machine's own</b>, for the reason <see cref="RecycleBinRun"/> is not:
+/// the real one removes the machine's restore points.</para>
 /// </summary>
-internal static class RestorePointRun
+public sealed class RestorePointRun : StepRoute<RemoveRestorePointsStep>
 {
-    public static async Task<StepOutcome> RunAsync(
-        ISystemProtection protection,
-        RemoveRestorePointsStep step,
-        IProgress<double>? progress,
-        CancellationToken ct)
+    private readonly ISystemProtection _protection;
+
+    public RestorePointRun(ISystemProtection protection)
     {
+        _protection = protection;
+        Proof = new RestorePointProof(protection);
+    }
+
+    /// <summary>The restore point kept, the other shadow copies and the storage limits. See <see cref="RestorePointProof"/>.</summary>
+    internal override StepProof Proof { get; }
+
+    private protected override async Task<StepOutcome> CarryOutAsync(StepRun run, RemoveRestorePointsStep step, CancellationToken ct)
+    {
+        var protection = _protection;
+        var progress = run.Progress;
+
         // Asked again rather than trusted from the plan, which is as old as the preview: Windows makes a
         // restore point before an update or an installation, and something else can remove one.
         var listing = await Task.Run(protection.ListRestorePoints, ct).ConfigureAwait(false);

@@ -69,7 +69,7 @@ public sealed class RestorePointProvider : CleanupProviderBase
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner,
-            protection: protection)
+            routes: [new RestorePointRun(protection)])
     {
         _protection = protection;
     }

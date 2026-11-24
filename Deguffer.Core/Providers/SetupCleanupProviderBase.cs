@@ -63,7 +63,7 @@ public abstract class SetupCleanupProviderBase : CleanupProviderBase
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner,
-            handlers: handlers,
+            routes: [new DiskCleanupRun(handlers)],
             servicing: servicing)
     {
         _cleanups = cleanups;

@@ -90,7 +90,7 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner,
-            handlers: handlers)
+            routes: [new DiskCleanupRun(handlers)])
     {
         _handlers = handlers;
         _system = system ?? SystemDirectories.Current;

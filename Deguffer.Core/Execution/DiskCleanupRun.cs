@@ -11,18 +11,18 @@ namespace Deguffer.Core.Execution;
 /// its shape with emptying a Recycle Bin — one call Windows makes whole, then a second reading of the
 /// same paths — and not its subject, which is why it is a class of its own rather than a branch of
 /// that one.</para>
+///
+/// <para><b>Never defaulted to the real handlers</b>, for the reason <see cref="RecycleBinRun"/> is
+/// not: the real ones can delete the previous Windows installation.</para>
 /// </summary>
-internal static class DiskCleanupRun
+public sealed class DiskCleanupRun(IDiskCleanupHandlers handlers) : StepRoute<DiskCleanupStep>
 {
-    public static async Task<StepOutcome> RunAsync(
-        IDiskCleanupHandlers handlers,
-        IDirectoryScanner scanner,
-        DiskCleanupStep step,
-        MinimumAge keep,
-        StepClock clock,
-        IProgress<double>? progress,
-        CancellationToken ct)
+    private protected override async Task<StepOutcome> CarryOutAsync(StepRun run, DiskCleanupStep step, CancellationToken ct)
     {
+        var keep = run.Keep;
+        var clock = run.Clock;
+        var progress = run.Progress;
+
         // Windows measures before it purges, by walking the same directories, and only the purge
         // deletes. So the handler starts measuring now and waits for the look before its purge.
         // Measured elevated on Windows 11 over an uncached 4 GB Windows.old, the step took less time
@@ -65,7 +65,7 @@ internal static class DiskCleanupRun
         // From the disk rather than the volume snapshot, for the reason a command step's second
         // reading is: nothing invalidates that snapshot between planning and executing, so it would
         // hand back the figure it is about to be subtracted from.
-        var after = await PlanExecutor.MeasureFromDiskAsync(scanner, step.Destroys, default, ct).ConfigureAwait(false);
+        var after = await DiskReading.ReadAsync(run.Run.Scanner, step.Destroys, default, ct).ConfigureAwait(false);
 
         // The handler reports its own progress to a sink that passes nothing on, so there is only the
         // end of it to report.

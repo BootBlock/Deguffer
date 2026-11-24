@@ -47,7 +47,7 @@ public sealed class OtherAccountProfilesProvider : CleanupProviderBase
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner,
-            profiles: profiles)
+            routes: [new ProfileRemovalRun(profiles)])
     {
         _profiles = profiles;
     }

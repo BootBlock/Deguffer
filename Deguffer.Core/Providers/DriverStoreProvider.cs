@@ -71,7 +71,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner ?? HardLinkAwareScanner.Default,
-            handlers: handlers,
+            routes: [new DiskCleanupRun(handlers)],
             servicing: servicing)
     {
         _system = system ?? SystemDirectories.Current;

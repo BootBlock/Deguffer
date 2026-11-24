@@ -8,9 +8,23 @@ namespace Deguffer.Core.Execution;
 /// How <see cref="PlanExecutor"/> carries out a <see cref="ReleaseLocalCopiesStep"/>. Apart from the
 /// removals because nothing about it is a removal: it destroys nothing, measures nothing afterwards, and
 /// reports a request rather than a reclaim.
+///
+/// <para><b>Never defaulted to the machine's cloud files</b>, for the reason <see cref="RecycleBinRun"/>
+/// is not: the real one acts on the cloud accounts of whoever runs the process.</para>
 /// </summary>
-internal static class LocalCopyRelease
+public sealed class LocalCopyRelease : StepRoute<ReleaseLocalCopiesStep>
 {
+    private readonly ICloudFiles _cloud;
+
+    public LocalCopyRelease(ICloudFiles cloud)
+    {
+        _cloud = cloud;
+        Proof = new ReleasedFileProof(cloud);
+    }
+
+    /// <summary>Every file the step named must still be there. See <see cref="ReleasedFileProof"/>.</summary>
+    internal override StepProof Proof { get; }
+
     /// <summary>
     /// How many files are asked about at once, the calling thread included. Each request waits on the
     /// disk and on the cloud files filter rather than on a processor, and nothing in one depends on
@@ -33,14 +47,13 @@ internal static class LocalCopyRelease
     /// releases nothing, so the run would report a figure nothing will act on. It is asked now rather
     /// than trusted from the preview, because the app can be closed in between.</para>
     /// </summary>
-    public static async Task<StepOutcome> RunAsync(
-        ICloudFiles cloud,
-        ReleaseLocalCopiesStep step,
-        MinimumAge keep,
-        IProgress<double>? progress,
-        TimeProvider time,
-        CancellationToken ct)
+    private protected override async Task<StepOutcome> CarryOutAsync(StepRun run, ReleaseLocalCopiesStep step, CancellationToken ct)
     {
+        var cloud = _cloud;
+        var keep = run.Keep;
+        var progress = run.Progress;
+        var time = run.Run.Time;
+
         if (cloud.ProviderState(step.SyncRoot) is not SyncProviderState.Running)
         {
             return new StepOutcome(

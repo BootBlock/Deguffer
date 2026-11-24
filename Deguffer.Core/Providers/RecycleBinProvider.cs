@@ -108,7 +108,7 @@ public sealed class RecycleBinProvider : CleanupProviderBase
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner,
-            emptier,
+            [new RecycleBinRun(emptier)],
             volumes: volumes)
     {
         _emptier = emptier;
