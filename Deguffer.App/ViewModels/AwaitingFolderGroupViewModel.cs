@@ -20,10 +20,11 @@ public sealed partial class AwaitingFolderGroupViewModel : ObservableObject
 
     /// <summary>
     /// What the closed group says it holds. The count is the point: it is how a closed group tells
-    /// the reader that something is folded away, and how much.
+    /// the reader that something is folded away, and how much. It names no page, because the button
+    /// that adds the folder is beside it.
     /// </summary>
     public string Summary =>
-        $"{Counted.Of(Rows.Count, "location", "locations")} with nothing to search until you add a source folder in Settings.";
+        $"{Counted.Of(Rows.Count, "location", "locations")} with nothing to search until you add a source folder.";
 
     /// <summary>
     /// Bring <see cref="Rows"/> up to <paramref name="arriving"/> in place, so an open group keeps

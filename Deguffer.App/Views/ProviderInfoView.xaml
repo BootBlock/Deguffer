@@ -179,6 +179,16 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+
+                    <!-- The way to give what Deguffer needs, after the note that says what it is. The
+                         dialog closes first, because the folder's figures arrive on the page behind
+                         it, and because a warning about the folder is a dialog of its own. -->
+                    <Button x:Name="AddSourceFolderButton"
+                            Content="Add source folder…"
+                            Visibility="{x:Bind Finding.OffersSourceFolder, Mode=OneWay}"
+                            IsEnabled="{x:Bind CanAddSourceFolder}"
+                            Click="OnAddSourceFolderClicked"
+                            AutomationProperties.Name="Add source folder" />
                 </StackPanel>
             </ScrollViewer>
         </PivotItem>

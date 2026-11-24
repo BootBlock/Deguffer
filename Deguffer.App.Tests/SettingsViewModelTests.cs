@@ -3,6 +3,7 @@ using Deguffer.App.Shell;
 using Deguffer.App.ViewModels;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Media;
 using Deguffer.Testing;
@@ -20,6 +21,7 @@ public sealed class SettingsViewModelTests : IDisposable
     private readonly TempDirectory _temp = new();
     private readonly FakeUserEnvironment _environment;
     private readonly FakeVolumeInventory _volumes = new();
+    private readonly ScriptedSourceFolderPrompt _prompt = new();
 
     public SettingsViewModelTests() => _environment = new FakeUserEnvironment(_temp.Path);
 
@@ -30,14 +32,15 @@ public sealed class SettingsViewModelTests : IDisposable
     private (SettingsViewModel Page, PreferenceService Preferences) Page(KeepService? keeps = null, LatestSave? latest = null)
     {
         var preferences = new PreferenceService(new PreferenceStore(_environment));
+        var roots = new SourceRootService(new SourceRootStore(_environment));
 
         return (
             new SettingsViewModel(
                 preferences,
-                new SourceRootService(new SourceRootStore(_environment)),
+                roots,
                 new EmulatorFolderService(new EmulatorFolderStore(_environment)),
                 keeps ?? new KeepService(new KeepStore(_environment)),
-                _volumes,
+                new SourceFolderAddition(roots, _volumes, () => _prompt),
                 latest ?? new LatestSave()),
             preferences);
     }
@@ -197,12 +200,13 @@ public sealed class SettingsViewModelTests : IDisposable
     {
         var latest = new LatestSave();
         var preferences = new PreferenceService(new PreferenceStore(_environment));
+        var roots = new SourceRootService(new SourceRootStore(_environment));
         var page = new SettingsViewModel(
             preferences,
-            new SourceRootService(new SourceRootStore(_environment)),
+            roots,
             new EmulatorFolderService(new EmulatorFolderStore(_environment)),
             new KeepService(new KeepStore(_environment)),
-            _volumes,
+            new SourceFolderAddition(roots, _volumes, () => _prompt),
             latest);
         var section = new ScanSettingsViewModel(
             preferences, new ScanTuner(preferences, new VolumeMediaCache(new FakeStorageQueries()), _volumes), _volumes, latest);
@@ -225,7 +229,7 @@ public sealed class SettingsViewModelTests : IDisposable
     /// whichever list it was.
     /// </summary>
     [Fact]
-    public void AListThatCouldNotBeSavedSaysSoOnItsOwnRow()
+    public async Task AListThatCouldNotBeSavedSaysSoOnItsOwnRow()
     {
         var (page, _) = Page();
         Directory.CreateDirectory(Path.Combine(Settings, "emulator-folders.json"));
@@ -236,7 +240,8 @@ public sealed class SettingsViewModelTests : IDisposable
         Assert.Empty(page.EmulatorFolders);
 
         Directory.CreateDirectory(Path.Combine(Settings, "source-roots.json"));
-        page.AddSourceRoot(SourceRootApproval.For(_volumes, Path.Combine(_temp.Path, "src")));
+        _prompt.Picked = Path.Combine(_temp.Path, "src");
+        await page.AddSourceRootAsync(CancellationToken.None);
 
         Assert.Equal([nameof(SettingsViewModel.SourceRootsSave)], FailedRows.Of(page));
         Assert.Empty(page.SourceRoots);
@@ -408,8 +413,9 @@ public sealed class SettingsViewModelTests : IDisposable
     public async Task AskingAboutAFolderReadsTheDrivesAgain()
     {
         var (page, _) = Page();
+        _prompt.Picked = Path.Combine(_temp.Path, "src");
 
-        await page.ApprovalForAsync(Path.Combine(_temp.Path, "src"), CancellationToken.None);
+        await page.AddSourceRootAsync(CancellationToken.None);
 
         Assert.Equal(1, _volumes.RefreshCount);
         Assert.Equal(0, _volumes.InvalidateCount);
@@ -417,21 +423,54 @@ public sealed class SettingsViewModelTests : IDisposable
 
     /// <summary>
     /// A choice that is not a folder on a disk approves nothing, and the row says why until a folder
-    /// on a disk is chosen.
+    /// on a disk is chosen. Closing the picker is no choice, so it leaves the row as it was.
     /// </summary>
     [Fact]
     public async Task ASourceFolderThatIsNotOnADiskIsNotApprovedAndTheRowSaysSo()
     {
         var (page, _) = Page();
 
-        Assert.Null(await page.ApprovalForAsync(string.Empty, CancellationToken.None));
+        _prompt.Picked = string.Empty;
+        await page.AddSourceRootAsync(CancellationToken.None);
+
+        Assert.Empty(page.SourceRoots);
         Assert.True(page.SourceRootNotOnDisk);
         Assert.False(page.EmulatorFolderNotOnDisk);
 
-        var folder = Path.Combine(_temp.Path, "src");
+        _prompt.Picked = null;
+        await page.AddSourceRootAsync(CancellationToken.None);
 
-        Assert.Equal(folder, (await page.ApprovalForAsync(folder, CancellationToken.None))?.Path);
+        Assert.True(page.SourceRootNotOnDisk);
+
+        var folder = Path.Combine(_temp.Path, "src");
+        _prompt.Picked = folder;
+        await page.AddSourceRootAsync(CancellationToken.None);
+
+        Assert.Equal([folder], page.SourceRoots.Select(root => root.Path));
         Assert.False(page.SourceRootNotOnDisk);
+    }
+
+    /// <summary>
+    /// A folder on cloud storage is stored only once the user has read the warning and said yes, and
+    /// then carries the approval the warning asked for. Declining stores nothing.
+    /// </summary>
+    [Fact]
+    public async Task AFolderOnCloudStorageIsStoredOnlyWhenTheWarningIsAccepted()
+    {
+        _volumes.With(@"V:\", features: VolumeFeatures.RemoteStorage);
+        var (page, _) = Page();
+        _prompt.Picked = @"V:\work";
+
+        _prompt.Accepts = false;
+        await page.AddSourceRootAsync(CancellationToken.None);
+
+        Assert.Empty(page.SourceRoots);
+        Assert.Equal(SourceRootApproval.RemoteStorageWarning, Assert.Single(_prompt.Asked).Warning);
+
+        _prompt.Accepts = true;
+        await page.AddSourceRootAsync(CancellationToken.None);
+
+        Assert.True(Assert.Single(page.SourceRoots).RemoteStorageApproved);
     }
 
     /// <summary>The emulator folders answer the same choice the same way.</summary>

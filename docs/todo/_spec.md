@@ -536,8 +536,9 @@ Deliberate points, and the traps that come with them:
   second is something they can act on. A list that hides the first kind by default must never hide
   the second, because build output is usually the largest thing here and that row is the only place
   the app says so. Those rows all say the same thing, one per provider, so they are folded into one
-  group below the list, closed by default. Closed, the group still counts them and says where to
-  add a source folder, under any filter.
+  group below the list, closed by default. Closed, the group still counts them and offers to add a
+  source folder from where it stands, under any filter, and so does each such row's information.
+  One folder answers every one of those rows, so approving it plans all of them again in place.
 - **A clean is confirmed once, in one dialog.** It lists every row going, grouped by tier, each with
   its size, and totals all of them. Each Tier 2 row carries its own acknowledgement, and each Tier 3
   row its own typed box where the typed phrase is on. Every row that does not rebuild itself states

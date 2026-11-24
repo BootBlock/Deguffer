@@ -67,6 +67,7 @@ internal sealed class StoragePage : IDisposable
         Selections = new SelectionService(selectionStore?.Invoke(Environment) ?? new SelectionStore(Environment));
         Preferences = new PreferenceService(new PreferenceStore(Environment));
         Sizes = new ProviderSizeHistory(new ProviderSizeStore(Environment));
+        SourceRoots = new SourceRootService(new SourceRootStore(Environment));
 
         var planner = new CleanupPlanner(providers, time: time);
         ViewModel = new CleanViewModel(
@@ -104,7 +105,8 @@ internal sealed class StoragePage : IDisposable
                 Running),
             new ScanChoiceViewModel(planner.Providers, Preferences),
             Sizes,
-            DriveHealth);
+            DriveHealth,
+            new SourceFolderAddition(SourceRoots, Volumes, () => SourceFolderPrompt));
     }
 
     public CleanViewModel ViewModel { get; }
@@ -127,6 +129,12 @@ internal sealed class StoragePage : IDisposable
 
     /// <summary>What Health last read of each volume's drives, which a test writes as Health would.</summary>
     public HealthByVolume DriveHealth { get; } = new();
+
+    /// <summary>The approved source folders, in this test's own profile.</summary>
+    public SourceRootService SourceRoots { get; }
+
+    /// <summary>The picker and the warning a row's request for a source folder asks through.</summary>
+    public ScriptedSourceFolderPrompt SourceFolderPrompt { get; } = new();
 
     /// <summary>The stored settings, in this test's own profile.</summary>
     public PreferenceService Preferences { get; }
@@ -204,6 +212,9 @@ internal sealed class StoragePage : IDisposable
     public List<ElevationRequest> Relaunches { get; } = [];
 
     public void Clean() => UiThread.Run(() => ViewModel.CleanCommand.ExecuteAsync(null));
+
+    /// <summary>Ask for a source folder from the rows waiting for one, through <see cref="SourceFolderPrompt"/>.</summary>
+    public void AddSourceFolder() => UiThread.Run(() => ViewModel.AddSourceFolderCommand.ExecuteAsync(null));
 
     public FindingViewModel Row(string providerId) =>
         ViewModel.Findings.Single(row => row.Finding.Provider.Id == providerId);
