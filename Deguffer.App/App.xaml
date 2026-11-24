@@ -42,7 +42,7 @@
                     <SolidColorBrush x:Key="ElevateButtonBorderBrush" Color="#9A5A22" />
                     <SolidColorBrush x:Key="ElevateButtonBorderBrushPointerOver" Color="#B86C2A" />
                     <SolidColorBrush x:Key="ElevateButtonBorderBrushPressed" Color="#86501F" />
-                    <SolidColorBrush x:Key="StartupRowStartsBackground" Color="#186CCB5F" />
+                    <SolidColorBrush x:Key="StartupRowEnabledBackground" Color="#186CCB5F" />
                     <SolidColorBrush x:Key="StartupRowDisabledBackground" Color="#18FF99A4" />
                 </ResourceDictionary>
 
@@ -53,7 +53,7 @@
                     <SolidColorBrush x:Key="ElevateButtonBorderBrush" Color="#E6A066" />
                     <SolidColorBrush x:Key="ElevateButtonBorderBrushPointerOver" Color="#DA8A44" />
                     <SolidColorBrush x:Key="ElevateButtonBorderBrushPressed" Color="#C97A36" />
-                    <SolidColorBrush x:Key="StartupRowStartsBackground" Color="#140F7B0F" />
+                    <SolidColorBrush x:Key="StartupRowEnabledBackground" Color="#140F7B0F" />
                     <SolidColorBrush x:Key="StartupRowDisabledBackground" Color="#14C42B1C" />
                 </ResourceDictionary>
 
@@ -64,7 +64,7 @@
                     <StaticResource x:Key="ElevateButtonBorderBrush" ResourceKey="ButtonBorderBrush" />
                     <StaticResource x:Key="ElevateButtonBorderBrushPointerOver" ResourceKey="ButtonBorderBrushPointerOver" />
                     <StaticResource x:Key="ElevateButtonBorderBrushPressed" ResourceKey="ButtonBorderBrushPressed" />
-                    <SolidColorBrush x:Key="StartupRowStartsBackground" Color="Transparent" />
+                    <SolidColorBrush x:Key="StartupRowEnabledBackground" Color="Transparent" />
                     <SolidColorBrush x:Key="StartupRowDisabledBackground" Color="Transparent" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
@@ -260,8 +260,8 @@
             -->
             <!-- A Startup row's tint by whether the entry starts (StartupRowStyleConverter). Styles, as the
                  chips are, so each row re-resolves its brush on a light or dark switch. -->
-            <Style x:Key="StartupRowStarts" TargetType="Grid">
-                <Setter Property="Background" Value="{ThemeResource StartupRowStartsBackground}" />
+            <Style x:Key="StartupRowEnabled" TargetType="Grid">
+                <Setter Property="Background" Value="{ThemeResource StartupRowEnabledBackground}" />
             </Style>
 
             <Style x:Key="StartupRowDisabled" TargetType="Grid">

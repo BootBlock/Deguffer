@@ -50,7 +50,7 @@ public sealed class StartupRowOrderTests
 
     /// <summary>
     /// The preferences file allows numbers for an enum, so a hand-edited value no member names arrives
-    /// and is shown as the shipped order: the entries that start, then the disabled ones, then the
+    /// and is shown as the shipped order: the enabled entries, then the disabled ones, then the
     /// unknown.
     /// </summary>
     [Fact]

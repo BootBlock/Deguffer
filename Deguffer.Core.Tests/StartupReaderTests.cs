@@ -86,7 +86,7 @@ public sealed class StartupReaderTests : IDisposable
     }
 
     /// <summary>
-    /// A reading arrives in the page's shipped order, the entries that start first and then by name, so
+    /// A reading arrives in the page's shipped order, the enabled entries first and then by name, so
     /// the page shows its first reading without moving a row.
     /// </summary>
     [Fact]

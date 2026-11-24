@@ -36,9 +36,9 @@ public sealed record StartupView(StartupReading Reading, StartupMemoryReading Me
             var counts = entries.Count switch
             {
                 0 => "Nothing is set to start at sign-in.",
-                _ => $"{Counted.Of(entries.Count, "entry", "entries")}: {enabled:N0} {Counted.Form(enabled, "is", "are")} enabled "
-                    + $"and {disabled:N0} {Counted.Form(disabled, "is", "are")} disabled"
-                    + (unknown > 0 ? $", and {unknown:N0} {Counted.Form(unknown, "is", "are")} unknown." : "."),
+                _ => $"{Counted.Of(entries.Count, "entry", "entries")}: {enabled:N0} {Counted.Form(enabled, "is", "are")} {InSentence(StartupState.Enabled)} "
+                    + $"and {disabled:N0} {Counted.Form(disabled, "is", "are")} {InSentence(StartupState.Disabled)}"
+                    + (unknown > 0 ? $", and {unknown:N0} {Counted.Form(unknown, "is", "are")} {InSentence(StartupState.Unknown)}." : "."),
             };
 
             var notes = Memory.Complete ? Reading.Notes : [.. Reading.Notes, "The process table was cut short, so a program may be running that this page does not show."];
@@ -46,4 +46,7 @@ public sealed record StartupView(StartupReading Reading, StartupMemoryReading Me
             return string.Join(" ", [counts, .. notes]);
         }
     }
+
+    // The headline counts by the badge's own words, so the two never name one state differently.
+    private static string InSentence(StartupState state) => StartupWording.For(state).ToLowerInvariant();
 }
