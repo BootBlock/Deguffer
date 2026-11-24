@@ -15,9 +15,13 @@ public sealed partial class SizeHistorySettingsViewModel(ProviderSizeHistory his
 {
     /// <summary>What the row says it keeps.</summary>
     public static string Description { get; } =
-        "After each Storage scan, Deguffer keeps the size of each location it measured, on this computer "
-        + "only and with no folder named, so the next scan can show how much each one grew. One size a "
-        + $"day is kept for each location, the latest {ProviderSizeStore.KeptPerProvider}.";
+        "After each Storage scan, Deguffer keeps the size of each location it measured, so the next scan "
+        + "can show how much each one grew.";
+
+    /// <summary>The rest of what the row says, behind its disclosure.</summary>
+    public static string Details { get; } =
+        "The sizes are kept on this computer only, and name no folder. One size a day is kept for each "
+        + $"location, the latest {ProviderSizeStore.KeptPerProvider}.";
 
     /// <summary>Whether any size is kept, which is whether there is anything to remove.</summary>
     [ObservableProperty]
