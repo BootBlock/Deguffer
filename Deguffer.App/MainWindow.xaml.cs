@@ -66,12 +66,14 @@ public sealed partial class MainWindow : Window
         };
         _destinations = _items.ToDictionary(pair => pair.Value, pair => pair.Key);
 
-        // Each item's words come from the name the page's own header and the window title read, and
-        // its tooltip leads with that name before the help text the markup gives it.
+        // Each item's words come from the name the page's own header and the window title read, its
+        // help text from the purpose About summarises the page with, and its tooltip leads with the
+        // name before that purpose.
         foreach (var (destination, item) in _items)
         {
             item.Content = DestinationNames.Of(destination);
-            ToolTipService.SetToolTip(item, DestinationNames.RailTooltip(destination, AutomationProperties.GetHelpText(item)));
+            AutomationProperties.SetHelpText(item, DestinationPurposes.Of(destination));
+            ToolTipService.SetToolTip(item, DestinationNames.RailTooltip(destination));
         }
 
         ExtendsContentIntoTitleBar = true;

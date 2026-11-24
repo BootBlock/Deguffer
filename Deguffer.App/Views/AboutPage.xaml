@@ -4,7 +4,30 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Deguffer.App.Controls"
+    xmlns:shell="using:Deguffer.App.Shell"
     Background="Transparent">
+
+    <Page.Resources>
+        <!-- A page's name, then what About says of it, one sentence a line. The summary of what each
+             page is for and the account of what each can undo read the same way. -->
+        <DataTemplate x:Key="PageStatementTemplate" x:DataType="shell:PageStatement">
+            <StackPanel Spacing="{StaticResource LabelGap}">
+                <TextBlock Text="{x:Bind Name}" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                <ItemsControl ItemsSource="{x:Bind Sentences}" IsTabStop="False">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Spacing="{StaticResource LabelGap}" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="x:String">
+                            <TextBlock Text="{x:Bind}" Style="{StaticResource SecondaryText}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </DataTemplate>
+    </Page.Resources>
 
     <!-- The header is a row of its own, outside the scroller, so the starfield in the row below is
          never behind its words, and every other word on the page is on a card. -->
@@ -38,8 +61,7 @@
                             <TextBlock Text="Deguffer" Style="{StaticResource SectionHeading}" VerticalAlignment="Center" />
                         </StackPanel>
 
-                        <TextBlock Style="{StaticResource SecondaryText}"
-                                   Text="Reclaims disk space by recognising what specific locations on your disk actually are, and telling you what each one costs to lose before you agree to lose it." />
+                        <TextBlock Style="{StaticResource SecondaryText}" Text="{x:Bind Summary}" />
                     </StackPanel>
                 </Border>
 
@@ -127,69 +149,67 @@
                     </StackPanel>
                 </Border>
 
+                <!-- One line a page, in the words its rail item states, after the build's details
+                     because "which build is this" is asked first. -->
+                <Border Style="{StaticResource SolidCardStyle}">
+                    <StackPanel Spacing="{StaticResource ControlGap}">
+                        <TextBlock Text="{x:Bind PurposesHeading}" Style="{StaticResource GroupHeading}" />
+                        <ItemsControl ItemsSource="{x:Bind Purposes}" IsTabStop="False"
+                                      ItemTemplate="{StaticResource PageStatementTemplate}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Spacing="{StaticResource ControlGap}" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
                 <Border Style="{StaticResource SolidCardStyle}">
                     <StackPanel Spacing="{StaticResource RegionGap}">
                         <StackPanel Spacing="4">
                             <TextBlock Text="The safety tiers" Style="{StaticResource GroupHeading}" />
                             <TextBlock Style="{StaticResource SecondaryText}"
-                                       Text="Every finding is classified before it is offered. Sizes are easy to compute; this classification is the part that takes knowledge, and it is what the tool is for." />
+                                       Text="{x:Bind TiersIntroduction}" />
                         </StackPanel>
 
-                        <StackPanel Spacing="4">
-                            <ContentControl Content="Regenerable cache"
-                                            AutomationProperties.Name="Regenerable cache"
-                                            Style="{StaticResource TierChipRegenerableCache}"
-                                            HorizontalAlignment="Left" />
-                            <TextBlock Style="{StaticResource SecondaryText}"
-                                       Text="{x:Bind RegenerableCacheExplanation}" />
-                        </StackPanel>
-
-                        <StackPanel Spacing="4">
-                            <ContentControl Content="Regenerable, with cost"
-                                            AutomationProperties.Name="Regenerable, with cost"
-                                            Style="{StaticResource TierChipRegenerableWithCost}"
-                                            HorizontalAlignment="Left" />
-                            <TextBlock Style="{StaticResource SecondaryText}"
-                                       Text="{x:Bind RegenerableWithCostExplanation}" />
-                        </StackPanel>
-
-                        <StackPanel Spacing="4">
-                            <ContentControl Content="User data"
-                                            AutomationProperties.Name="User data"
-                                            Style="{StaticResource TierChipUserData}"
-                                            HorizontalAlignment="Left" />
-                            <TextBlock Style="{StaticResource SecondaryText}"
-                                       Text="{x:Bind UserDataExplanation}" />
-                        </StackPanel>
-
-                        <StackPanel Spacing="4">
-                            <ContentControl Content="Do not touch"
-                                            AutomationProperties.Name="Do not touch"
-                                            Style="{StaticResource TierChipDoNotTouch}"
-                                            HorizontalAlignment="Left" />
-                            <TextBlock Style="{StaticResource SecondaryText}"
-                                       Text="{x:Bind DoNotTouchExplanation}" />
-                        </StackPanel>
+                        <!-- The names are SafetyTier's own, the ones a Storage row's badge and its
+                             dialogs show, so About cannot call a tier something the rows do not. -->
+                        <ItemsControl ItemsSource="{x:Bind Tiers}" IsTabStop="False">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Spacing="{StaticResource RegionGap}" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="shell:TierStatement">
+                                    <StackPanel Spacing="{StaticResource LabelGap}">
+                                        <ContentControl Content="{x:Bind Name}"
+                                                        AutomationProperties.Name="{x:Bind Name}"
+                                                        Style="{x:Bind Tier, Converter={StaticResource TierChipStyle}}"
+                                                        HorizontalAlignment="Left" />
+                                        <TextBlock Style="{StaticResource SecondaryText}" Text="{x:Bind Explanation}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </StackPanel>
                 </Border>
 
+                <!-- Said page by page, because the pages differ: Storage removes outright, Explore and
+                     Duplicates use the Recycle Bin, Installed apps keeps a backup, Startup's Disable
+                     is undone by Enable, and the rest change nothing. -->
                 <Border Style="{StaticResource SolidCardStyle}">
                     <StackPanel Spacing="{StaticResource ControlGap}">
-                        <TextBlock Text="What it will not do" Style="{StaticResource GroupHeading}" />
-                        <TextBlock Style="{StaticResource SecondaryText}"
-                                   Text="Nothing is removed until a scan has shown you what it is, and the exact steps are inspectable on every row before you agree to them." />
-                        <TextBlock Style="{StaticResource SecondaryText}"
-                                   Text="It asks a tool to clear its own cache wherever the tool offers that, rather than deleting the folder behind its back." />
-                        <TextBlock Style="{StaticResource SecondaryText}"
-                                   Text="It never targets a tool's root directory — only the children it recognises, because configuration and credentials routinely sit beside the cache." />
-                        <TextBlock Style="{StaticResource SecondaryText}"
-                                   Text="After every run it checks that the paths it promised to protect are still there, and says so in the status line either way." />
-
-                        <!-- §8: undo is not viable at these sizes. Saying so plainly is the alternative
-                             to a UI that quietly implies it might be. -->
-                        <TextBlock Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                   TextWrapping="Wrap"
-                                   Text="There is no undo. What you agree to is removed outright rather than moved anywhere first, so it is gone." />
+                        <TextBlock Text="{x:Bind SafeguardsHeading}" Style="{StaticResource GroupHeading}" />
+                        <ItemsControl ItemsSource="{x:Bind Safeguards}" IsTabStop="False"
+                                      ItemTemplate="{StaticResource PageStatementTemplate}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Spacing="{StaticResource ControlGap}" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
                     </StackPanel>
                 </Border>
 
