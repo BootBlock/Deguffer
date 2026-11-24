@@ -35,9 +35,6 @@ public sealed partial class ReflowRow : Panel
     public static readonly DependencyProperty MiddleProperty = DependencyProperty.Register(
         nameof(Middle), typeof(WrappedMiddle), typeof(ReflowRow), new PropertyMetadata(WrappedMiddle.WithLead, OnLayoutChanged));
 
-    public static readonly DependencyProperty MiddleStaysWholeProperty = DependencyProperty.Register(
-        nameof(MiddleStaysWhole), typeof(bool), typeof(ReflowRow), new PropertyMetadata(false, OnLayoutChanged));
-
     private bool _wraps;
 
     /// <summary>The gap between parts on one line.</summary>
@@ -61,16 +58,6 @@ public sealed partial class ReflowRow : Panel
         set => SetValue(MiddleProperty, value);
     }
 
-    /// <summary>
-    /// Whether the middle child is drawn whole, as a button must be, so the row wraps rather than
-    /// squeeze it. Otherwise it may shrink to its <c>MinWidth</c>, as a status that trims may.
-    /// </summary>
-    public bool MiddleStaysWhole
-    {
-        get => (bool)GetValue(MiddleStaysWholeProperty);
-        set => SetValue(MiddleStaysWholeProperty, value);
-    }
-
     protected override Size MeasureOverride(Size availableSize)
     {
         var lead = Children[0];
@@ -83,7 +70,7 @@ public sealed partial class ReflowRow : Panel
 
         var gap = ColumnSpacing;
         var width = availableSize.Width;
-        var middle = slack is FrameworkElement part ? Narrowest(part, unbounded) : 0;
+        var middle = slack is FrameworkElement part ? Narrowest(part) : 0;
         _wraps = RowReflow.Wraps(lead.DesiredSize.Width, middle, tail.DesiredSize.Width, gap, width);
 
         var withTail = Middle == WrappedMiddle.WithTail;
@@ -163,18 +150,9 @@ public sealed partial class ReflowRow : Panel
         return finalSize;
     }
 
-    /// <summary>The narrowest <paramref name="part"/> may be drawn, measuring it whole where it has to stay whole.</summary>
-    private double Narrowest(FrameworkElement part, Size unbounded)
-    {
-        if (!MiddleStaysWhole)
-        {
-            return part.Visibility == Visibility.Visible ? part.MinWidth : 0;
-        }
-
-        part.Measure(unbounded);
-
-        return part.DesiredSize.Width;
-    }
+    /// <summary>The narrowest <paramref name="part"/> may be drawn: it shrinks to its <c>MinWidth</c>, as a status that trims may.</summary>
+    private static double Narrowest(FrameworkElement part) =>
+        part.Visibility == Visibility.Visible ? part.MinWidth : 0;
 
     /// <summary>The height of a wrapped line holding <paramref name="part"/> and, where it is on that line, the middle.</summary>
     private static double Line(UIElement part, UIElement? slack) =>

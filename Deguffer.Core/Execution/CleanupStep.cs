@@ -53,7 +53,7 @@ public abstract record CleanupStep
     /// <see cref="Reclaim"/> and nothing else, so the checkbox, the row's status and the totals beside
     /// it cannot come to disagree about what "nothing to remove" means.
     /// </summary>
-    public bool RemovesSomething => Reclaim.Reclaimable > 0 || Reclaim.Entries > 0;
+    public bool RemovesSomething => Reclaim.FreesSomething;
 
     /// <summary>
     /// When this step's subject was last written, or null where the provider cannot tell.
