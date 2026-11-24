@@ -83,7 +83,7 @@ public readonly record struct ExploreDisplay(
     /// <summary>
     /// Whether the view on screen draws a picture rather than a list, so the map is on the card.
     /// </summary>
-    public bool DrawsPicture => View is not (ExploreView.List or ExploreView.Files);
+    public bool DrawsPicture => View.DrawsPicture();
 
     /// <summary>
     /// Whether the map draws <see cref="Kept"/>, with the line over it that says what it is: only in a

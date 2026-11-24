@@ -245,9 +245,9 @@
          figures say what was found before any group is read; and what marks and removes sits in a
          bar under the list, as Clean does on Storage. Layout roots stay transparent so the §6.5
          material shows through. -->
-    <Grid Padding="{StaticResource PagePadding}" RowSpacing="12" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto">
+    <Grid controls:ReadingColumn.Limit="{StaticResource ReadingWidth}" Padding="{StaticResource PagePadding}" RowSpacing="12" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto">
 
-        <controls:PageHeader Destination="Duplicates">
+        <controls:PageHeader controls:ReadingColumn.Fills="True" Destination="Duplicates">
             <controls:PageHeader.Actions>
                 <Button Content="Reopen as administrator" Style="{StaticResource ElevateButtonStyle}"
                         Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"

@@ -203,12 +203,12 @@ public class KeptScanTreeTests
         Assert.Equal(mark, KeptScanText.Mark(summary, Then.AddDays(daysAgo).AddHours(2)));
     }
 
-    /// <summary>The maps draw a kept scan, and the two lists do not.</summary>
+    /// <summary>The maps draw a kept scan, and the lists and the tree do not.</summary>
     [Theory]
     [InlineData(ExploreView.Treemap, true)]
     [InlineData(ExploreView.Icicle, true)]
     [InlineData(ExploreView.Sunburst, true)]
-    [InlineData(ExploreView.Tree, true)]
+    [InlineData(ExploreView.Tree, false)]
     [InlineData(ExploreView.List, false)]
     [InlineData(ExploreView.Files, false)]
     public void OnlyTheViewsThatDrawAPictureDrawOne(ExploreView view, bool draws)
