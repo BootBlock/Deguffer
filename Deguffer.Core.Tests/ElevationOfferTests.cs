@@ -246,7 +246,7 @@ public sealed class ElevationOfferTests
 
     private static StartupEntry StartupEntryFrom(StartupSource source, Approval? approval) => new(
         new StartupKey(source, "Tool"), "Tool", "tool.exe", null, ProgramStanding.Unknown, null,
-        approval?.State ?? StartupState.Starts, approval);
+        approval?.State ?? StartupState.Enabled, approval);
 
     private static Finding FindingWith(FallbackReason reason, bool requiresElevation = false) =>
         new(new StubProvider(), IsPresent: true, new CleanupPlan

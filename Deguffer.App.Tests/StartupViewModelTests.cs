@@ -61,11 +61,11 @@ public sealed class StartupViewModelTests : IDisposable
         var row = Assert.Single(page.Rows);
         Assert.Equal("Tool Tray", row.Title);
         Assert.Equal("ToolTray · Contoso · Registry, this user", row.Detail);
-        Assert.Equal("Starts", row.State);
+        Assert.Equal("Enabled", row.State);
         Assert.Equal("3.0 MB", row.Memory);
         Assert.True(row.HasMemory);
         Assert.False(row.IsNotRunning);
-        Assert.StartsWith("1 entry: 1 starts at sign-in", page.Headline, StringComparison.Ordinal);
+        Assert.StartsWith("1 entry: 1 is enabled and 0 are disabled.", page.Headline, StringComparison.Ordinal);
 
         // §7.5: nothing is picked for the user, and the note says where the change comes from.
         Assert.Null(page.SelectedRow);

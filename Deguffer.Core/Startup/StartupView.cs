@@ -23,22 +23,22 @@ public sealed record StartupView(StartupReading Reading, StartupMemoryReading Me
         return new StartupView(reading, StartupMemory.Match(reading, table, images));
     }
 
-    /// <summary>The line under the page's title: how many entries there are and how many start, and what was not read.</summary>
+    /// <summary>The line under the page's title: how many entries there are and how many are enabled, and what was not read.</summary>
     public string Headline
     {
         get
         {
             var entries = Reading.Entries;
-            var starting = entries.Count(e => e.State is StartupState.Starts);
+            var enabled = entries.Count(e => e.State is StartupState.Enabled);
             var disabled = entries.Count(e => e.State is StartupState.Disabled);
-            var unknown = entries.Count - starting - disabled;
+            var unknown = entries.Count - enabled - disabled;
 
             var counts = entries.Count switch
             {
                 0 => "Nothing is set to start at sign-in.",
-                _ => $"{Counted.Of(entries.Count, "entry", "entries")}: {starting:N0} {Counted.Form(starting, "starts", "start")} at sign-in "
-                    + $"and {disabled:N0} {Counted.Form(disabled, "is", "are")} disabled"
-                    + (unknown > 0 ? $", and {unknown:N0} {Counted.Form(unknown, "is", "are")} unknown." : "."),
+                _ => $"{Counted.Of(entries.Count, "entry", "entries")}: {enabled:N0} {Counted.Form(enabled, "is", "are")} {InSentence(StartupState.Enabled)} "
+                    + $"and {disabled:N0} {Counted.Form(disabled, "is", "are")} {InSentence(StartupState.Disabled)}"
+                    + (unknown > 0 ? $", and {unknown:N0} {Counted.Form(unknown, "is", "are")} {InSentence(StartupState.Unknown)}." : "."),
             };
 
             var notes = Memory.Complete ? Reading.Notes : [.. Reading.Notes, "The process table was cut short, so a program may be running that this page does not show."];
@@ -46,4 +46,7 @@ public sealed record StartupView(StartupReading Reading, StartupMemoryReading Me
             return string.Join(" ", [counts, .. notes]);
         }
     }
+
+    // The headline counts by the badge's own words, so the two never name one state differently.
+    private static string InSentence(StartupState state) => StartupWording.For(state).ToLowerInvariant();
 }

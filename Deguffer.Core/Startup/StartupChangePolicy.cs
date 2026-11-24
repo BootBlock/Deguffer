@@ -50,7 +50,7 @@ public static class StartupChangePolicy
 
         return entry.State switch
         {
-            StartupState.Starts => new StartupVerdict(StartupChange.Disable,
+            StartupState.Enabled => new StartupVerdict(StartupChange.Disable,
                 "Disable records that this entry should not start at sign-in, as Task Manager does. The entry itself "
                 + "stays as it is, and Enable lets it start again."),
             StartupState.Disabled => new StartupVerdict(StartupChange.Enable,
