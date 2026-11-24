@@ -53,11 +53,12 @@
                 <CheckBox Grid.Column="0"
                           MinWidth="0"
                           VerticalAlignment="Center"
-                          IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
+                          IsChecked="{x:Bind SelectionState, Mode=OneWay}"
+                          Command="{x:Bind ToggleCommand}"
                           IsEnabled="{x:Bind CanBeSelected, Mode=OneWay}"
                           AutomationProperties.Name="{x:Bind Name}"
                           AutomationProperties.AutomationId="{x:Bind AutomationIds.Toggle}"
-                          AutomationProperties.HelpText="{x:Bind WhatHappensOnNextUse}" />
+                          AutomationProperties.HelpText="{x:Bind Facts.WhatHappensOnNextUse}" />
 
                 <controls:ReflowRow Grid.Column="1"
                                     ColumnSpacing="{StaticResource ControlGap}"
@@ -71,14 +72,14 @@
                                    Style="{StaticResource BodyStrongTextBlockStyle}"
                                    TextWrapping="NoWrap"
                                    VerticalAlignment="Center"
-                                   ToolTipService.ToolTip="{x:Bind WhatHappensOnNextUse}" />
+                                   ToolTipService.ToolTip="{x:Bind Facts.WhatHappensOnNextUse}" />
 
                         <!-- On the row line itself, unlike the "What is this?" link, which compact folds into
                              the disclosure. For a row whose items are chosen one by one, choosing them is
                              the decision the row is for, and a decision two levels down is one nobody
                              finds. It shows the count because that is what says whether the list is worth
                              opening. -->
-                        <HyperlinkButton Content="{x:Bind Text.ItemsLinkLabel, Mode=OneWay}"
+                        <HyperlinkButton Content="{x:Bind ItemsLinkLabel, Mode=OneWay}"
                                          Visibility="{x:Bind OffersItems, Mode=OneWay}"
                                          Padding="{StaticResource LinkPadding}"
                                          VerticalAlignment="Center"
@@ -110,17 +111,17 @@
                         <StackPanel Orientation="Horizontal"
                                     Spacing="{StaticResource ControlGap}"
                                     VerticalAlignment="Center">
-                            <ContentControl Content="{x:Bind BasisLabel}"
-                                            Visibility="{x:Bind IsResearched}"
+                            <ContentControl Content="{x:Bind Facts.BasisLabel}"
+                                            Visibility="{x:Bind Facts.IsResearched}"
                                             Style="{StaticResource BasisChip}"
-                                            ToolTipService.ToolTip="{x:Bind BasisExplanation}"
-                                            AutomationProperties.Name="{x:Bind BasisLabel}"
-                                            AutomationProperties.HelpText="{x:Bind BasisExplanation}" />
-                            <ContentControl Content="{x:Bind TierLabel}"
-                                            Style="{x:Bind Tier, Converter={StaticResource TierChipStyle}}"
-                                            ToolTipService.ToolTip="{x:Bind TierExplanation}"
-                                            AutomationProperties.Name="{x:Bind TierLabel}"
-                                            AutomationProperties.HelpText="{x:Bind TierExplanation}" />
+                                            ToolTipService.ToolTip="{x:Bind Facts.BasisExplanation}"
+                                            AutomationProperties.Name="{x:Bind Facts.BasisLabel}"
+                                            AutomationProperties.HelpText="{x:Bind Facts.BasisExplanation}" />
+                            <ContentControl Content="{x:Bind Facts.TierLabel}"
+                                            Style="{x:Bind Facts.Tier, Converter={StaticResource TierChipStyle}}"
+                                            ToolTipService.ToolTip="{x:Bind Facts.TierExplanation}"
+                                            AutomationProperties.Name="{x:Bind Facts.TierLabel}"
+                                            AutomationProperties.HelpText="{x:Bind Facts.TierExplanation}" />
                         </StackPanel>
 
                         <!-- The group is on the cell rather than the figure, so a row whose figure is
@@ -152,7 +153,8 @@
                               VerticalAlignment="Top"
                               MinWidth="0"
                               Margin="{StaticResource FirstLineOffset}"
-                              IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
+                              IsChecked="{x:Bind SelectionState, Mode=OneWay}"
+                              Command="{x:Bind ToggleCommand}"
                               IsEnabled="{x:Bind CanBeSelected, Mode=OneWay}"
                               AutomationProperties.Name="{x:Bind Name}"
                               AutomationProperties.AutomationId="{x:Bind AutomationIds.Toggle}" />
@@ -177,7 +179,7 @@
                                 <!-- Beside the name, because for a row whose items are chosen one by one,
                                      choosing them is what the row is for. It is not beside the chip, so
                                      that the chip lands in the same place whether a row has one or not. -->
-                                <HyperlinkButton Content="{x:Bind Text.ItemsLinkLabel, Mode=OneWay}"
+                                <HyperlinkButton Content="{x:Bind ItemsLinkLabel, Mode=OneWay}"
                                                  Visibility="{x:Bind OffersItems, Mode=OneWay}"
                                                  VerticalAlignment="Center"
                                                  Padding="{StaticResource InlineLinkPadding}"
@@ -202,19 +204,19 @@
                                  prose from the name down to the figures, and the link is at a fixed
                                  place on every row. -->
                             <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
-                                <ContentControl Content="{x:Bind BasisLabel}"
-                                                Visibility="{x:Bind IsResearched}"
+                                <ContentControl Content="{x:Bind Facts.BasisLabel}"
+                                                Visibility="{x:Bind Facts.IsResearched}"
                                                 Style="{StaticResource BasisChip}"
                                                 VerticalAlignment="Center"
-                                                ToolTipService.ToolTip="{x:Bind BasisExplanation}"
-                                                AutomationProperties.Name="{x:Bind BasisLabel}"
-                                                AutomationProperties.HelpText="{x:Bind BasisExplanation}" />
-                                <ContentControl Content="{x:Bind TierLabel}"
-                                                Style="{x:Bind Tier, Converter={StaticResource TierChipStyle}}"
+                                                ToolTipService.ToolTip="{x:Bind Facts.BasisExplanation}"
+                                                AutomationProperties.Name="{x:Bind Facts.BasisLabel}"
+                                                AutomationProperties.HelpText="{x:Bind Facts.BasisExplanation}" />
+                                <ContentControl Content="{x:Bind Facts.TierLabel}"
+                                                Style="{x:Bind Facts.Tier, Converter={StaticResource TierChipStyle}}"
                                                 VerticalAlignment="Center"
-                                                ToolTipService.ToolTip="{x:Bind TierExplanation}"
-                                                AutomationProperties.Name="{x:Bind TierLabel}"
-                                                AutomationProperties.HelpText="{x:Bind TierExplanation}" />
+                                                ToolTipService.ToolTip="{x:Bind Facts.TierExplanation}"
+                                                AutomationProperties.Name="{x:Bind Facts.TierLabel}"
+                                                AutomationProperties.HelpText="{x:Bind Facts.TierExplanation}" />
                                 <HyperlinkButton Content="What is this?"
                                                  VerticalAlignment="Center"
                                                  Padding="{StaticResource InlineLinkPadding}"
@@ -225,7 +227,7 @@
                             </StackPanel>
                         </controls:ReflowRow>
 
-                        <TextBlock Text="{x:Bind WhatHappensOnNextUse}"
+                        <TextBlock Text="{x:Bind Facts.WhatHappensOnNextUse}"
                                    Style="{StaticResource SecondaryText}" />
                     </StackPanel>
 
@@ -282,7 +284,7 @@
                     <!-- Indented to the name above it rather than to the card edge, so the
                          disclosure reads as belonging to its row and not to the list. -->
                     <StackPanel Spacing="{StaticResource LabelGap}" Margin="72,0,16,0">
-                        <TextBlock Text="{x:Bind WhatHappensOnNextUse}"
+                        <TextBlock Text="{x:Bind Facts.WhatHappensOnNextUse}"
                                    Style="{StaticResource SecondaryText}" />
 
                         <!-- The change since the scan before, folded away here for the reason the

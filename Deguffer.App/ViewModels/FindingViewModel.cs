@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Deguffer.Core.Choosing;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
@@ -16,9 +17,9 @@ namespace Deguffer.App.ViewModels;
 public sealed partial class FindingViewModel : ObservableObject
 {
     /// <summary>
-    /// Guards the two directions of the roll-up against each other. The row checkbox writes every
-    /// step, and any step writes the row checkbox back; without this the first write re-enters and
-    /// the second one fights it.
+    /// Guards the two directions of the roll-up against each other. A click on the row checkbox writes
+    /// every step, and any step writes the row's state back; without this the first write re-enters
+    /// and the second one fights it.
     ///
     /// It also decides who raises <see cref="SelectionChanged"/>: whoever set it is the outermost
     /// change, so the inner writes stay quiet and the event fires once per thing the user did.
@@ -54,6 +55,7 @@ public sealed partial class FindingViewModel : ObservableObject
     {
         _isElevated = isElevated;
         AutomationIds = new FindingAutomationIds(finding.Provider.Id);
+        Facts = new ProviderFacts(finding.Provider);
         Load(finding, memory, keepList);
     }
 
@@ -147,7 +149,7 @@ public sealed partial class FindingViewModel : ObservableObject
         // toolchain has gone since the choice was made. Both render with a ticked, disabled
         // checkbox that nothing can clear, and both enable Clean against nothing.
         _syncingSelection = true;
-        IsSelected = Steps.Any(s => s.IsSelected);
+        RollUp();
         _syncingSelection = false;
     }
 
@@ -159,11 +161,23 @@ public sealed partial class FindingViewModel : ObservableObject
     public event Action<FindingViewModel>? SelectionChanged;
 
     /// <summary>
-    /// §3's "Default" column decides the initial value; the rule itself lives on
-    /// <see cref="Finding"/>. Toggling the row is a shorthand for toggling every step in it.
+    /// Whether this row is in the run: whether any step in it is ticked. §3's "Default" column decides
+    /// the initial value; the rule itself lives on <see cref="Finding"/>. Rolled up from the steps, and
+    /// written by nothing else.
     /// </summary>
     [ObservableProperty]
-    public partial bool IsSelected { get; set; }
+    public partial bool IsSelected { get; private set; }
+
+    /// <summary>
+    /// What the row's checkbox shows: ticked, clear, or mixed (null) where only some of the steps it can
+    /// tick are ticked. See <see cref="ItemSelection.StateOf"/>.
+    ///
+    /// <para>Apart from <see cref="IsSelected"/>, which answers whether the row is in the run at all. A
+    /// two-state box bound to that read as full beside a row with two of its forty items ticked, and a
+    /// click on it cleared the items the user had picked by hand without a word.</para>
+    /// </summary>
+    [ObservableProperty]
+    public partial bool? SelectionState { get; private set; }
 
     /// <summary>
     /// This row's size as a proportion of the largest finding, for the bar under the row. Owned by
@@ -208,44 +222,20 @@ public sealed partial class FindingViewModel : ObservableObject
 
     public FindingAutomationIds AutomationIds { get; }
 
-    public SafetyTier Tier => Finding.Provider.Tier;
-
-    public string TierLabel => Finding.Provider.Tier.ToDisplayName();
-
-    /// <summary>
-    /// What the badge's tier means, for the reader who has never opened the About page. §3's
-    /// classification is the product, and a two-word chip states it without explaining it.
-    /// </summary>
-    public string TierExplanation => Finding.Provider.Tier.ToExplanation();
+    /// <summary>What the row says about the provider behind it. See <see cref="ProviderFacts"/>.</summary>
+    public ProviderFacts Facts { get; }
 
     /// <summary>
-    /// Whether this row's rules come from research rather than an installation anybody looked at,
-    /// which the row says on a chip of its own. See <see cref="ProviderBasis"/>.
+    /// The row's figure: what it offers, or where it is mixed, what is chosen against that. See
+    /// <see cref="ChosenOfWhole.Size"/>.
     /// </summary>
-    public bool IsResearched => !Finding.Provider.Basis.PermitsPreSelection();
-
-    public string BasisLabel => Finding.Provider.Basis.ToDisplayName();
-
-    public string BasisExplanation => Finding.Provider.Basis.ToExplanation();
-
-    public string WhatHappensOnNextUse => Finding.Provider.WhatHappensOnNextUse;
+    public string SizeLabel => Finding.IsPresent ? ChosenOfWhole.Size(SelectionState, SelectedSize, Finding.Reclaim) : "—";
 
     /// <summary>
-    /// Whose files this row is about and what they are for — the answer to the question in front of
-    /// the one <see cref="WhatHappensOnNextUse"/> answers. Handed through whole rather than
-    /// unpacked into four properties: the dialog is the only reader, and it wants all four.
+    /// What the row's link to its item list says: how many items it lists, and how many are chosen where
+    /// the row is mixed. On the row rather than in <see cref="Text"/>, because it moves with every tick.
     /// </summary>
-    public ProviderDescription Description => Finding.Provider.Description;
-
-    /// <summary>
-    /// §3's verdict on this row, worded for somebody deciding whether to tick it. Read off the tier
-    /// rather than off <see cref="Finding.IsPreSelectedByDefault"/>, which is the same decision
-    /// narrowed by whether there is anything here to reclaim — an empty cache would otherwise be
-    /// advised against on a day it happened to be empty.
-    /// </summary>
-    public string CleaningAdvice => Tier.ToCleaningAdvice();
-
-    public string SizeLabel => Finding.IsPresent ? FreeSpace.Format(Finding.Reclaim) : "—";
+    public string ItemsLinkLabel => ChosenOfWhole.Items(SelectionState, Steps.Count(s => s.IsSelected), Steps.Count);
 
     /// <summary>
     /// What this row is reporting, as the single value both its own label and the page's info bar
@@ -367,7 +357,7 @@ public sealed partial class FindingViewModel : ObservableObject
             }
         }
 
-        IsSelected = Steps.Any(s => s.IsSelected);
+        RollUp();
         _syncingSelection = false;
 
         // Everything this row states is read off the plan that just changed, so every binding on it
@@ -419,18 +409,12 @@ public sealed partial class FindingViewModel : ObservableObject
     /// </summary>
     public bool HasNoDetail => !HasDetail;
 
-    /// <summary>Ticking the row ticks everything in it; unticking it clears the lot.</summary>
-    partial void OnIsSelectedChanged(bool value)
-    {
-        if (_syncingSelection)
-        {
-            // Written by the roll-up below, or by the constructor restoring what was remembered.
-            // Whoever set the guard reports the change once it is finished.
-            return;
-        }
-
-        SetSelected(Steps, value);
-    }
+    /// <summary>
+    /// A click on the row's checkbox. A clear row ticks every step it can, and a ticked or mixed row
+    /// clears them, as a group heading in the item list does: see <see cref="ItemSelection.ValueForClick"/>.
+    /// </summary>
+    [RelayCommand]
+    private void Toggle() => SetSelected(Steps, ItemSelection.ValueForClick(SelectionState));
 
     /// <summary>
     /// Tick or clear several steps as one thing the user did: the row's own checkbox, or a checkbox in
@@ -451,10 +435,10 @@ public sealed partial class FindingViewModel : ObservableObject
         }
 
         // Rolled up rather than set to the value, which is the invariant the rest of this type holds.
-        IsSelected = Steps.Any(s => s.IsSelected);
+        RollUp();
         _syncingSelection = false;
 
-        OnPropertyChanged(nameof(SelectedSize));
+        AnnounceSelectedFigures();
         SelectionChanged?.Invoke(this);
     }
 
@@ -480,12 +464,32 @@ public sealed partial class FindingViewModel : ObservableObject
             return;
         }
 
-        OnPropertyChanged(nameof(SelectedSize));
-
         _syncingSelection = true;
-        IsSelected = Steps.Any(s => s.IsSelected);
+        RollUp();
         _syncingSelection = false;
 
+        AnnounceSelectedFigures();
         SelectionChanged?.Invoke(this);
+    }
+
+    /// <summary>
+    /// The row's two answers about its steps, always given together: whether it is in the run, and what
+    /// its checkbox shows.
+    /// </summary>
+    private void RollUp()
+    {
+        IsSelected = Steps.Any(s => s.IsSelected);
+        SelectionState = ItemSelection.StateOf(Steps.Select(s => (s.IsSelected, s.CanBeSelected)));
+    }
+
+    /// <summary>
+    /// The figures that move with every tick, including a tick that leaves the row as mixed as it was,
+    /// which changes neither <see cref="IsSelected"/> nor <see cref="SelectionState"/>.
+    /// </summary>
+    private void AnnounceSelectedFigures()
+    {
+        OnPropertyChanged(nameof(SelectedSize));
+        OnPropertyChanged(nameof(SizeLabel));
+        OnPropertyChanged(nameof(ItemsLinkLabel));
     }
 }

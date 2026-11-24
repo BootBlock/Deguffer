@@ -96,7 +96,7 @@ public class CleanViewModelCleanTests
         using var page = new StoragePage([sdk]);
         sdk.Steps = [page.Cache("sdk", 4096)];
         page.Scan();
-        page.Row("sdk").IsSelected = true;
+        page.Row("sdk").SetTicked(true);
         var mayEndWhileAsking = new List<bool>();
         page.Prompt.WhileAsking = () => mayEndWhileAsking.Add(page.Running.MayEndProcess);
 
@@ -159,7 +159,7 @@ public class CleanViewModelCleanTests
             new ProtectedPath(page.Cache("kept", 1024).Path, "On the keep list.", PathPresence.Present, Withheld: Withholding.OnKeepList),
         ];
         page.Scan();
-        page.Row("kept").IsSelected = false;
+        page.Row("kept").SetTicked(false);
 
         SynchronizationContext? window = null;
         var statuses = new List<string>();
@@ -313,7 +313,7 @@ public class CleanViewModelCleanTests
         sdk.Steps = [sdkFolder];
         cache.Steps = [page.Cache("npm", 1024)];
         page.Scan();
-        page.Row("sdk").IsSelected = true;
+        page.Row("sdk").SetTicked(true);
         page.Prompt.Agrees = false;
 
         page.Clean();
@@ -351,7 +351,7 @@ public class CleanViewModelCleanTests
         using var page = new StoragePage([sdk]);
         sdk.Steps = [page.Cache("sdk", 4096)];
         page.Scan();
-        page.Row("sdk").IsSelected = true;
+        page.Row("sdk").SetTicked(true);
         page.Prompt.Agrees = false;
 
         page.Clean();
@@ -529,7 +529,7 @@ public class CleanViewModelCleanTests
         cache.Steps = [a, b];
         other.Steps = [Rows.Folder("elsewhere", 10)];
         page.Scan();
-        page.Row("other").IsSelected = false;
+        page.Row("other").SetTicked(false);
         page.Row("cache").Steps[1].IsSelected = false;
         var row = page.Row("cache");
         cache.AfterCleaning = () => cache.Steps = [b];
@@ -567,7 +567,7 @@ public class CleanViewModelCleanTests
         var elsewhere = Rows.Folder("elsewhere", 10);
         other.Steps = [elsewhere];
         page.Scan();
-        page.Row("other").IsSelected = false;
+        page.Row("other").SetTicked(false);
         var window = Environment.CurrentManagedThreadId;
         var askedFrom = new ConcurrentQueue<int>();
         page.Volumes.Asked = path =>
@@ -778,7 +778,7 @@ public class CleanViewModelCleanTests
         cache.Steps = [page.Cache("a", 1024)];
         other.Steps = [Rows.Folder("elsewhere", 10)];
         page.Scan();
-        page.Row("other").IsSelected = false;
+        page.Row("other").SetTicked(false);
 
         page.ViewModel.ShowItems(page.Row("other"));
         page.Clean();

@@ -132,7 +132,7 @@ public sealed class WhenCompleteTests
         using var page = new StoragePage([sdk]);
         sdk.Steps = [page.Cache("sdk", 4096)];
         page.Scan();
-        page.Row("sdk").IsSelected = true;
+        page.Row("sdk").SetTicked(true);
         page.Prompt.Agrees = false;
         var countdowns = Answer(page, true);
         Choose(page, CompletionAction.ShutDown);

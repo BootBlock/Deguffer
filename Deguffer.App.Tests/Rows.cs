@@ -44,6 +44,13 @@ internal static class Rows
     public static FindingViewModel Row(Finding finding, bool isElevated = false, KeepList? keeps = null) =>
         new(finding, NothingRemembered(), keeps ?? KeepList.Empty, isElevated);
 
+    /// <summary>
+    /// Tick or clear every step the row can tick, as one change. This is what a click on the row's
+    /// checkbox does to a row that is clear or ticked; a test about the click itself drives
+    /// <see cref="FindingViewModel.ToggleCommand"/>.
+    /// </summary>
+    public static void SetTicked(this FindingViewModel row, bool ticked) => row.SetSelected(row.Steps, ticked);
+
     /// <summary>Every <see cref="FindingViewModel.SelectionChanged"/> the row raises from here on.</summary>
     public static List<FindingViewModel> SelectionEvents(this FindingViewModel row)
     {

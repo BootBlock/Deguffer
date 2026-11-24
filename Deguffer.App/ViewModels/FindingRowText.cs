@@ -4,7 +4,8 @@ namespace Deguffer.App.ViewModels;
 
 /// <summary>
 /// What one Storage row says about itself in words that stand for one plan: the names its links and its
-/// disclosure are announced by, and what its Contents tab says about its steps.
+/// disclosure are announced by, and what its Contents tab says about its steps. The words on its item
+/// list link move with every tick, so the row states those itself.
 ///
 /// <para>Apart from <see cref="FindingViewModel"/> because none of it depends on what the row holds
 /// ticked or kept. It is fixed by the provider's name, how many steps it planned and whether it is
@@ -16,9 +17,6 @@ namespace Deguffer.App.ViewModels;
 /// <param name="awaitingSourceFolders">Whether the row is waiting for a folder to be approved.</param>
 public sealed class FindingRowText(string name, int stepCount, bool awaitingSourceFolders)
 {
-    /// <summary>What the row's link to its item list says: how many items the list holds.</summary>
-    public string ItemsLinkLabel { get; } = Counted.Of(stepCount, "item", "items");
-
     /// <summary>
     /// What a screen reader calls that link. The words on screen are a count, and a count says nothing
     /// about whose items they are.
