@@ -139,6 +139,7 @@ internal sealed class RecycleBinRun(IRecycleBinEmptier emptier) : StepRoute<Empt
             Math.Max(0, reclaimed),
             Refusals.None,
             message,
-            EntriesRemoved: entriesRemoved);
+            EntriesRemoved: entriesRemoved,
+            Unreleased: succeeded && reclaimed > 0 ? remaining : 0);
     }
 }

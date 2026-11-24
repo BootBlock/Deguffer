@@ -6,9 +6,10 @@ namespace Deguffer.Core.Execution;
 /// The figures a finished clean is reported by, each kept apart from the others (§5.4).
 ///
 /// <para>What Deguffer measured itself removing, what sync apps were asked to release, what a program
-/// marked to remove the next time it starts, and how the volume's free space actually changed are
-/// four different numbers. They disagree whenever anything else writes during the run, or whenever
-/// the space goes later than the run does, and presenting them as one invites distrust.</para>
+/// marked to remove the next time it starts, and how the volume's free space actually changed
+/// (<see cref="FreeSpaceMove"/>) are four different numbers. They disagree whenever anything else
+/// writes during the run, or whenever the space goes later than the run does, and presenting them as
+/// one invites distrust.</para>
 /// </summary>
 /// <param name="Removed">
 /// What went, with the entries beside the bytes, so a clean that took only empty leftovers can say
@@ -45,11 +46,4 @@ public sealed record RunFigures(
                     .SelectMany(v => v.Unpassed),
             ]);
     }
-
-    /// <summary>
-    /// How the volume's free space moved across the run, or null where either reading is unknown. A
-    /// figure from one reading alone would be a guess dressed as a measurement.
-    /// </summary>
-    public static long? FreeSpaceChange(long? before, long? after) =>
-        before is { } was && after is { } now ? now - was : null;
 }

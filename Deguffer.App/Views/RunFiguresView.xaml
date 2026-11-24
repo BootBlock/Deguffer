@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+    The last clean's figures beside the free space it went into (§5.4). What Deguffer removed is
+    reported apart from how the free space moved, which the line under the hero states: they disagree
+    whenever anything else on the machine writes during the run, and merging them into one figure is
+    how a user stops trusting the tool.
+-->
+<UserControl
+    x:Class="Deguffer.App.Views.RunFiguresView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="False">
+
+    <StackPanel Orientation="Horizontal" Spacing="28">
+        <Border Width="1"
+                Background="{ThemeResource DividerStrokeColorDefaultBrush}"
+                VerticalAlignment="Stretch" />
+
+        <StackPanel Spacing="{StaticResource LabelGap}" VerticalAlignment="Center">
+            <TextBlock Text="Removed by Deguffer" Style="{StaticResource FieldLabel}" />
+            <TextBlock Text="{x:Bind Result.RemovedLabel, Mode=OneWay}"
+                       Style="{StaticResource Figure}" />
+        </StackPanel>
+
+        <!-- A request rather than a result: the sync app releases these after the run,
+             so the free space under the hero may not include them yet. -->
+        <StackPanel Spacing="{StaticResource LabelGap}"
+                    VerticalAlignment="Center"
+                    Visibility="{x:Bind Result.HasRequested, Mode=OneWay}"
+                    ToolTipService.ToolTip="Local copies of cloud files your sync app was asked to release. It does that in the background, so free space can keep growing after the clean.">
+            <TextBlock Text="Asked to release" Style="{StaticResource FieldLabel}" />
+            <TextBlock Text="{x:Bind Result.RequestedLabel, Mode=OneWay}"
+                       Style="{StaticResource Figure}" />
+        </StackPanel>
+
+        <!-- Nothing has gone yet: the program removes these the next time it starts,
+             so the free space under the hero does not include them. -->
+        <StackPanel Spacing="{StaticResource LabelGap}"
+                    VerticalAlignment="Center"
+                    Visibility="{x:Bind Result.HasScheduled, Mode=OneWay}"
+                    ToolTipService.ToolTip="Marked for removal by the program that owns them. It removes them the next time it starts, so free space grows then rather than now.">
+            <TextBlock Text="Removed at next start" Style="{StaticResource FieldLabel}" />
+            <TextBlock Text="{x:Bind Result.ScheduledLabel, Mode=OneWay}"
+                       Style="{StaticResource Figure}" />
+        </StackPanel>
+    </StackPanel>
+</UserControl>

@@ -46,6 +46,7 @@ public class CleanViewModelCleanTests
         Assert.Equal("Safety check passed: everything Deguffer was told to leave alone is still there.", page.ViewModel.RunResult.SafetyCheck.Outcome?.Statement);
         Assert.False(page.ViewModel.RunResult.SafetyCheck.Outcome?.VerificationFailed);
         Assert.False(page.ViewModel.RunResult.SafetyCheck.OffersDiagnosticsLink);
+        Assert.False(page.ViewModel.RunResult.IsDetailsOpen);
         Assert.Equal("1 KB", page.ViewModel.RunResult.RemovedLabel);
     }
 
@@ -260,17 +261,19 @@ public class CleanViewModelCleanTests
         page.Clean();
 
         Assert.True(page.ViewModel.RunResult.SafetyCheck.Outcome?.VerificationFailed);
+        Assert.True(page.ViewModel.RunResult.IsDetailsOpen);
         Assert.Equal(page.ViewModel.RunResult.SafetyCheck.Outcome?.Statement, page.ViewModel.Status);
         Assert.Equal(InfoBarSeverity.Error, page.ViewModel.StatusSeverity);
         Assert.False(page.ViewModel.HasPreview);
     }
 
     /// <summary>
-    /// §5.4 and §7: what the run removed and how the volume's free space moved are two figures, and the
-    /// second is read from the volume either side of the run.
+    /// §5.4 and §7: the free space either side of the run is read from the volume, not worked out from
+    /// what the run removed. The fake frees ten times what the step removed, so a line derived from the
+    /// removed figure would say "Up 1 KB".
     /// </summary>
     [Fact]
-    public void TheFreeSpaceChangeIsReadFromTheVolumeEitherSideOfTheRun()
+    public void TheFreeSpaceBeforeAndAfterIsReadFromTheVolumeEitherSideOfTheRun()
     {
         var cache = new FakeCleanupProvider("cache");
         using var page = new StoragePage([cache], freeBytes: 400_000);
@@ -280,12 +283,69 @@ public class CleanViewModelCleanTests
 
         page.Clean();
 
-        Assert.Equal(FreeSpace.Format(10_240), page.ViewModel.RunResult.FreeSpaceChangeLabel);
+        Assert.Equal(
+            $"Up {FreeSpace.Format(10_240)} from {FreeSpace.Format(400_000)} before the clean",
+            page.ViewModel.RunResult.FreeSpaceMoveText);
+        Assert.Equal(FreeSpace.Format(1024), page.ViewModel.RunResult.RemovedLabel);
         Assert.Equal(410_240, page.ViewModel.FreeSpaceNow);
         Assert.True(page.ViewModel.RunResult.HasRunResult);
     }
 
-    /// <summary>A volume that will not say is a dash, rather than a change worked out from one reading.</summary>
+    /// <summary>
+    /// The line beside the hero figure is read against whatever the hero shows, so a later reading of
+    /// the volume moves both together rather than leaving the line describing the reading before.
+    /// </summary>
+    [Fact]
+    public void ALaterReadingOfTheVolumeMovesTheLineWithTheHeroFigure()
+    {
+        var cache = new FakeCleanupProvider("cache");
+        using var page = new StoragePage([cache], freeBytes: 400_000);
+        cache.Steps = [page.Cache("a", 1024)];
+        cache.AfterCleaning = () => page.FreeSpaceBecomes(410_240);
+        page.Scan();
+        page.Clean();
+
+        page.ViewModel.FreeSpaceNow = 390_000;
+
+        Assert.Equal(
+            $"Down {FreeSpace.Format(10_000)} from {FreeSpace.Format(400_000)} before the clean",
+            page.ViewModel.RunResult.FreeSpaceMoveText);
+    }
+
+    /// <summary>
+    /// After a clean of two rows, each gets a line of its own under the verdict, and the row whose file
+    /// another program held open names that refusal on its line, never in one paragraph for the run.
+    /// </summary>
+    [Fact]
+    public void EachCleanedRowGetsALineAndTheHeldOneNamesItsRefusal()
+    {
+        var free = new FakeCleanupProvider("free") { Name = "Free cache" };
+        var held = new FakeCleanupProvider("held") { Name = "Held cache" };
+        using var page = new StoragePage([free, held]);
+        free.Steps = [page.Cache("a", 1024)];
+        held.Steps = [page.Cache("b", 4096)];
+        held.Removes = step => new StepOutcome(step.Description, Succeeded: true, 2048, Refusals.One(RefusalReason.InUse, 2048));
+        page.Scan();
+
+        page.Clean();
+
+        var rows = page.ViewModel.RunResult.Rows;
+        Assert.Equal(2, rows.Count);
+        var freed = Assert.Single(rows, row => row.Name == "Free cache");
+        var kept = Assert.Single(rows, row => row.Name == "Held cache");
+        Assert.Equal($"{FreeSpace.Format(1024)} removed", freed.Removed);
+        Assert.Empty(freed.LeftBehind);
+        Assert.Equal($"{FreeSpace.Format(2048)} removed", kept.Removed);
+        Assert.Equal([$"1 file ({FreeSpace.Format(2048)}) left in place because another program had it open."], kept.LeftBehind);
+        Assert.Empty(Assert.IsType<RunOutcome>(page.ViewModel.RunResult.SafetyCheck.Outcome).Detail);
+        Assert.Equal("What each of the 2 locations removed, and what 1 of them left behind", page.ViewModel.RunResult.RowsHeading);
+        Assert.True(page.ViewModel.RunResult.HasRowsNote);
+
+        // A refusal is routine, so the details stay folded and the list under the card keeps its room.
+        Assert.False(page.ViewModel.RunResult.IsDetailsOpen);
+    }
+
+    /// <summary>A volume that will not say leaves the move unstated, rather than worked out from one reading.</summary>
     [Fact]
     public void AVolumeThatStopsAnsweringLeavesTheChangeUnstated()
     {
@@ -297,7 +357,8 @@ public class CleanViewModelCleanTests
 
         page.Clean();
 
-        Assert.Equal("—", page.ViewModel.RunResult.FreeSpaceChangeLabel);
+        Assert.Empty(page.ViewModel.RunResult.FreeSpaceMoveText);
+        Assert.False(page.ViewModel.RunResult.HasFreeSpaceMove);
         Assert.Null(page.ViewModel.FreeSpaceNow);
     }
 

@@ -104,7 +104,7 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.True(File.Exists(target), "a file was deleted through a link");
         Assert.Equal("Left alone: it changed too recently.", step.Message);
         Assert.Equal(1, step.Kept);
-        Assert.Equal(1, result.KeptCount);
+        Assert.Equal(1, result.Steps.Sum(step => step.Kept));
     }
 
     /// <summary>
@@ -128,7 +128,7 @@ public sealed class PlanExecutorTests : IDisposable
 
         Assert.True(step.Succeeded);
         Assert.Contains(
-            $"1 file(s) ({FreeSpace.Format(2048)}) left in place because Windows would not let Deguffer remove them",
+            $"1 file ({FreeSpace.Format(2048)}) left in place because Windows would not let Deguffer remove it",
             step.Message!,
             StringComparison.Ordinal);
         Assert.DoesNotContain("in use", step.Message!, StringComparison.OrdinalIgnoreCase);
@@ -156,9 +156,9 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.True(File.Exists(archive), "an Outlook data file was deleted");
         Assert.True(step.Succeeded);
         Assert.Equal(1, step.MailStores);
-        Assert.Equal(1, result.MailStoreCount);
+        Assert.Equal(1, result.Steps.Sum(step => step.MailStores));
         Assert.Equal(1024, step.BytesReclaimed);
-        Assert.Contains("1 Outlook data file(s) left alone", step.Message!, StringComparison.Ordinal);
+        Assert.Contains("1 Outlook data file left alone", step.Message!, StringComparison.Ordinal);
         Assert.DoesNotContain("changed recently", step.Message!, StringComparison.Ordinal);
     }
 
@@ -179,7 +179,7 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.True(step.Succeeded);
         Assert.Equal(1, step.MailStores);
         Assert.StartsWith("Cleared", step.Message!, StringComparison.Ordinal);
-        Assert.Contains("1 Outlook data file(s) left alone", step.Message!, StringComparison.Ordinal);
+        Assert.Contains("1 Outlook data file left alone", step.Message!, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1230,7 +1230,7 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.True(step.Succeeded);
         Assert.Equal(1, step.Kept);
         Assert.Equal(0, step.BytesReclaimed);
-        Assert.Equal(1, result.KeptCount);
+        Assert.Equal(1, result.Steps.Sum(step => step.Kept));
         Assert.Contains("changed too recently", step.Message!, StringComparison.Ordinal);
         Assert.True(Directory.Exists(cache), "the guard kept a file and the folder around it went");
     }
@@ -1283,7 +1283,7 @@ public sealed class PlanExecutorTests : IDisposable
         var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog)
             .ExecuteAsync(plan, runReach: null, residue: null, activity: null, progress: null, underway: null, ct: CancellationToken.None);
 
-        Assert.Equal(0, result.KeptCount);
+        Assert.Equal(0, result.Steps.Sum(step => step.Kept));
         Assert.Equal(4096, result.BytesReclaimed);
         Assert.False(Directory.Exists(cache));
     }
@@ -1340,7 +1340,7 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.True(Directory.Exists(scratch), "the folder itself was removed");
         Assert.True(File.Exists(Path.Combine(live, "working.txt")), "a spared entry was emptied");
         Assert.Contains("Cleared", step.Message!, StringComparison.Ordinal);
-        Assert.Contains("something is using them", step.Message!, StringComparison.Ordinal);
+        Assert.Contains("something is using it", step.Message!, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1362,7 +1362,7 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.Equal(0, result.BytesReclaimed);
         Assert.DoesNotContain("Cleared", step.Message!, StringComparison.Ordinal);
         Assert.Contains("Nothing was cleared", step.Message!, StringComparison.Ordinal);
-        Assert.Contains("something is using them", step.Message!, StringComparison.Ordinal);
+        Assert.Contains("something is using it", step.Message!, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1545,7 +1545,7 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.Equal(new FolderRefusals(InUse: 1, Denied: 0), step.RefusedFolders);
         Assert.Equal(new FolderRefusals(InUse: 1, Denied: 0), result.RefusedFolders);
         Assert.Equal(
-            "Cleared, 1 folder(s) left in place because another program was using them.",
+            "Cleared, 1 folder left in place because another program was using it.",
             step.Message);
     }
 
@@ -1575,11 +1575,11 @@ public sealed class PlanExecutorTests : IDisposable
         var clear = Assert.Single(cleared.Steps);
 
         Assert.False(delete.Succeeded);
-        Assert.Equal("Nothing was removed: another program was using 1 folder(s).", delete.Message);
+        Assert.Equal("Nothing was removed: another program was using 1 folder.", delete.Message);
         Assert.True(Directory.Exists(cache));
 
         Assert.False(clear.Succeeded);
-        Assert.Equal("Nothing was removed: another program was using 1 folder(s).", clear.Message);
+        Assert.Equal("Nothing was removed: another program was using 1 folder.", clear.Message);
     }
 
     /// <summary>An empty folder is cleared, and says so rather than claiming a reclaim.</summary>

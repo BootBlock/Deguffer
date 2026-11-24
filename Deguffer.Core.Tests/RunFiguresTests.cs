@@ -74,13 +74,4 @@ public sealed class RunFiguresTests
             [@"C:\Users\testuser\failed", @"C:\Users\testuser\emptied", @"C:\Users\testuser\outside", @"C:\Users\testuser\unverified"],
             figures.Checks.Select(c => c.Subject));
     }
-
-    [Fact]
-    public void TheFreeSpaceChangeIsSignedAndNeedsBothReadings()
-    {
-        Assert.Equal(-500, RunFigures.FreeSpaceChange(before: 1_000, after: 500));
-        Assert.Equal(250, RunFigures.FreeSpaceChange(before: 1_000, after: 1_250));
-        Assert.Null(RunFigures.FreeSpaceChange(before: null, after: 500));
-        Assert.Null(RunFigures.FreeSpaceChange(before: 1_000, after: null));
-    }
 }
