@@ -3,110 +3,252 @@ using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Execution;
 
-/// <summary>One line of a <see cref="CleanConfirmation"/>: a named subject and what it frees.</summary>
-/// <param name="ProviderName">The named cause, as the preview row calls it (§2).</param>
-/// <param name="SizeLabel">
-/// What removing it is estimated to reclaim, already qualified where the figure is a forecast
-/// rather than a measurement.
-/// </param>
-public sealed record CleanConfirmationItem(string ProviderName, string SizeLabel);
-
-/// <summary>A listed subject that does not rebuild itself, and what deleting it costs.</summary>
-/// <param name="ProviderName">The named cause, as the line listing it calls it.</param>
-/// <param name="Consequence">
-/// From <see cref="ConfirmationRequirement.ConsequenceOf"/>, so this is the same sentence the
-/// subject's own dialog would have carried rather than a second one written for this list.
-/// </param>
-public sealed record CleanConfirmationLoss(string ProviderName, string Consequence);
-
 /// <summary>
-/// What the shell's blanket "are you sure" is about: the selected plans §7 will not put a question
-/// of its own to the user about, per <see cref="ConfirmationRequirement.NotPromptedFor{T}"/>.
+/// The one confirmation a clean asks (§7): every selected row that has something to remove, grouped by
+/// tier with its size, what each row needs before it may go, the total, and what follows the clean.
 ///
-/// It is a Core type for the same reason <see cref="ConfirmationRequirement"/> is — what the user
-/// is told before a deletion is a decision, not a layout. The shell arranges these parts and
-/// supplies the sentences that hold for every subject; it does not get to choose what the parts
-/// claim. Keeping the subjects and the total apart is also what lets the dialog list one line per
-/// subject rather than run them together into a single sentence nobody can check at a glance.
+/// <para><b>One question per clean.</b> A series of near-identical modals, each with a Cancel whose
+/// meaning changes, is the gate §7 warns users learn to get past without reading. So every row is on
+/// one screen, the total is the total of everything going, Cancel stops the whole clean, and a row the
+/// user no longer wants is unticked rather than skipped.</para>
+///
+/// <para><b>A Core type</b> because what the user is told before a deletion, and what their answers
+/// authorise, are decisions rather than layout. The shell arranges these parts and collects the
+/// <see cref="CleanConfirmationReply"/>s. It does not decide whether they suffice. The planner still
+/// re-derives every requirement and refuses a plan whose answer is missing, so this is the first of two
+/// checks, not the only one.</para>
 /// </summary>
 public sealed record CleanConfirmation
 {
     /// <remarks>
-    /// Private so <see cref="For"/> is the only way to make one, which is what keeps
-    /// <see cref="TotalLabel"/> a fact about <see cref="Items"/> rather than a claim a caller
-    /// supplies. It also keeps the type out of the XAML type-info generator's activator table,
-    /// which emits <c>new CleanConfirmation()</c> for any bound type that offers a public
-    /// parameterless constructor, and does not compile when the members it would leave unset are
-    /// required.
+    /// Private so <see cref="For"/> is the only way to make one, which keeps every figure a fact about
+    /// <see cref="Items"/> rather than a claim a caller supplies. It also keeps the type out of the XAML
+    /// type-info generator's activator table, which emits <c>new CleanConfirmation()</c> for any bound
+    /// type that offers a public parameterless constructor.
     /// </remarks>
-    private CleanConfirmation(
-        IReadOnlyList<CleanConfirmationItem> items,
-        IReadOnlyList<CleanConfirmationLoss> permanentLosses,
-        string totalLabel)
+    private CleanConfirmation(IReadOnlyList<CleanConfirmationItem> items, int refused, string? then)
     {
         Items = items;
-        PermanentLosses = permanentLosses;
-        TotalLabel = totalLabel;
+        Refused = refused;
+        Then = then;
+        Groups =
+        [
+            .. items
+                .GroupBy(item => item.Tier)
+                .OrderBy(group => group.Key)
+                .Select(group => new CleanConfirmationGroup(group.Key, [.. group])),
+        ];
+        Opening = [.. items.Select(item => new CleanConfirmationReply(item.ProviderId, Included: true))];
     }
 
-    /// <summary>One per subject, in the order they were selected.</summary>
+    /// <summary>Every row with something to remove, in the order selected.</summary>
     public IReadOnlyList<CleanConfirmationItem> Items { get; }
 
+    /// <summary><see cref="Items"/> by tier, from the least to the most serious loss.</summary>
+    public IReadOnlyList<CleanConfirmationGroup> Groups { get; }
+
     /// <summary>
-    /// Of <see cref="Items"/>, those that do not rebuild themselves, and what each one loses.
+    /// How many selected rows §3 excludes (Tier 4). No answer authorises one, so none is listed or asked
+    /// about. <see cref="Authorise"/> counts them as declined, so a run can tell a refusal from a
+    /// selection with nothing to remove.
+    /// </summary>
+    internal int Refused { get; }
+
+    /// <summary>
+    /// What follows the clean, where the user chose anything but doing nothing. The choice is stored and
+    /// can be days old, so the question that starts the clean says what will happen when it ends.
+    /// </summary>
+    public string? Then { get; }
+
+    /// <summary>
+    /// The answers the dialog opens with: every row ticked, nothing acknowledged and nothing typed. Also
+    /// what a clean that asks nothing authorises, which is every row, since none of them needs an answer.
+    /// </summary>
+    public IReadOnlyList<CleanConfirmationReply> Opening { get; }
+
+    /// <summary>
+    /// Whether any row removes files rather than only releasing local copies, and so whether the dialog
+    /// may say that what goes cannot be undone.
+    /// </summary>
+    public bool RemovesFiles => Items.Any(item => item.Requirement.Verb != ConfirmationVerb.Release);
+
+    /// <summary>The last sentence before the buttons, where <see cref="RemovesFiles"/> holds.</summary>
+    public static string ClosingLine => "What a clean removes goes straight away. This cannot be undone.";
+
+    /// <summary>
+    /// Whether the question is put to the user at all.
     ///
-    /// Ordinarily empty, because §7 leaves only Tier 1 to this dialog. It stops being empty where
-    /// the user has switched the typed phrase off: Tier 3 then asks nothing of its own and arrives
-    /// here instead, and "everything listed rebuilds itself" is false of those rows. §7 leaves how
-    /// hard the confirmation is to give to the user; it never left saying what is unrecoverable to
-    /// anybody.
-    ///
-    /// Keyed on "not Tier 1" rather than on Tier 3, so a tier that reaches this dialog without
-    /// anyone deciding it should stands the reassurance down rather than inheriting it. That is
-    /// §5.2's direction: an unrecognised thing must not come out treated as safe.
+    /// <para>Always where a row needs an answer of its own: §7 makes Tier 2's acknowledgement and, with
+    /// the preference on, Tier 3's typed phrase conditions of deleting, not preferences about asking.
+    /// Otherwise only where the user wants to confirm before cleaning, which they can switch off. A
+    /// selection with nothing to remove asks nothing.</para>
     /// </summary>
-    public IReadOnlyList<CleanConfirmationLoss> PermanentLosses { get; }
+    public bool MustAsk(bool confirmBeforeCleaning) =>
+        Items.Count > 0
+        && (confirmBeforeCleaning || Items.Any(item => item.Requirement.Level != ConfirmationLevel.None));
 
     /// <summary>
-    /// Whether every listed subject rebuilds itself, and so whether the shell may say so. False the
-    /// moment <see cref="PermanentLosses"/> is not empty.
+    /// Whether <paramref name="replies"/> let the clean start: at least one row is still ticked, every
+    /// ticked Tier 2 row is acknowledged, and every ticked typed box holds its phrase. An unticked row
+    /// needs nothing, because it is not going.
     /// </summary>
-    public bool AllRegenerable => PermanentLosses.Count == 0;
-
-    /// <summary>
-    /// The question. "Caches" holds only while everything listed rebuilds itself. A user who switches
-    /// the typed phrase off sends Tier 3 here as well, and a Recycle Bin called a cache in the title of
-    /// the dialog that authorises deleting it permanently is the same understatement the body already
-    /// refuses to make.
-    /// </summary>
-    public string Title => AllRegenerable ? "Clean these caches?" : "Delete these items?";
-
-    /// <summary>The button that confirms.</summary>
-    public string ConfirmLabel => "Clean";
-
-    /// <summary>
-    /// The sum of <see cref="Items"/> and of nothing else, with space two of them share counted once
-    /// (see <see cref="ReclaimPool"/>).
-    ///
-    /// Derived rather than taken from the caller, which is most of the point of the type: in a
-    /// mixed selection the screen's own total includes the rows §7 asks about separately, and a
-    /// dialog quoting a figure larger than the deletions it authorises is describing something the
-    /// user is not being asked to approve.
-    /// </summary>
-    public string TotalLabel { get; }
-
-    public static CleanConfirmation For(IReadOnlyList<CleanupPlan> plans)
+    public bool IsSatisfiedBy(IReadOnlyList<CleanConfirmationReply> replies)
     {
-        ArgumentNullException.ThrowIfNull(plans);
+        ArgumentNullException.ThrowIfNull(replies);
 
-        return new CleanConfirmation(
-            [.. plans.Select(p => new CleanConfirmationItem(p.ProviderName, FreeSpace.Format(p.Reclaim)))],
-            [
-                .. plans
-                    .Where(p => p.Tier != SafetyTier.RegenerableCache)
-                    .Select(p => new CleanConfirmationLoss(
-                        p.ProviderName, ConfirmationRequirement.ConsequenceOf(p))),
-            ],
-            FreeSpace.Format(ReclaimPool.Total(plans.SelectMany(p => p.Steps))));
+        var anyIncluded = false;
+
+        foreach (var item in Items)
+        {
+            if (Included(item, replies) is not { } reply)
+            {
+                continue;
+            }
+
+            if (!item.IsSatisfiedBy(reply))
+            {
+                return false;
+            }
+
+            anyIncluded = true;
+        }
+
+        return anyIncluded;
     }
+
+    /// <summary>
+    /// What the ticked rows free together, with space two of them share counted once (see
+    /// <see cref="ReclaimPool"/>). The rows the user unticked are not in it: the figure is what the
+    /// button authorises.
+    /// </summary>
+    public string TotalOf(IReadOnlyList<CleanConfirmationReply> replies)
+    {
+        ArgumentNullException.ThrowIfNull(replies);
+
+        return FreeSpace.Format(
+            ReclaimPool.Total(Items.Where(item => Included(item, replies) is not null).SelectMany(item => item.Plan.Steps)));
+    }
+
+    /// <summary>
+    /// The word for the ticked rows together: <see cref="ConfirmationVerb.Delete"/> where any of them is
+    /// a permanent loss, <see cref="ConfirmationVerb.Release"/> where every one only releases, and
+    /// <see cref="ConfirmationVerb.Clean"/> otherwise.
+    /// </summary>
+    internal ConfirmationVerb VerbOf(IReadOnlyList<CleanConfirmationReply> replies)
+    {
+        ArgumentNullException.ThrowIfNull(replies);
+
+        ConfirmationVerb[] verbs = [.. Items.Where(item => Included(item, replies) is not null).Select(item => item.Requirement.Verb)];
+
+        if (verbs.Contains(ConfirmationVerb.Delete))
+        {
+            return ConfirmationVerb.Delete;
+        }
+
+        return verbs.Length > 0 && verbs.All(verb => verb == ConfirmationVerb.Release)
+            ? ConfirmationVerb.Release
+            : ConfirmationVerb.Clean;
+    }
+
+    /// <summary>The question, which opens on the verb its button repeats.</summary>
+    public string TitleOf(IReadOnlyList<CleanConfirmationReply> replies) => VerbOf(replies) switch
+    {
+        ConfirmationVerb.Delete => "Delete these items?",
+        ConfirmationVerb.Release => "Release these local copies?",
+        _ => "Clean these locations?",
+    };
+
+    /// <summary>The button that starts the clean: the verb and the figure it authorises, such as "Delete 32.1 GB".</summary>
+    public string ConfirmLabelOf(IReadOnlyList<CleanConfirmationReply> replies) =>
+        $"{VerbOf(replies).ToWord()} {TotalOf(replies)}";
+
+    /// <summary>
+    /// What <paramref name="replies"/> let through: the ticked rows, in the order selected, and the
+    /// answers that authorise them.
+    /// </summary>
+    /// <exception cref="ConfirmationRequiredException">
+    /// A ticked row whose requirement the replies do not satisfy. The shell enables its button only on
+    /// <see cref="IsSatisfiedBy"/>, so reaching this is a bug, and failing closed is the half of it that
+    /// keeps the user's data.
+    /// </exception>
+    public Authorisation Authorise(IReadOnlyList<CleanConfirmationReply> replies)
+    {
+        ArgumentNullException.ThrowIfNull(replies);
+
+        List<Finding> authorised = [];
+        List<Confirmation> confirmations = [];
+        var declined = Refused;
+
+        foreach (var item in Items)
+        {
+            if (Included(item, replies) is not { } reply)
+            {
+                declined++;
+                continue;
+            }
+
+            if (!item.IsSatisfiedBy(reply))
+            {
+                throw new ConfirmationRequiredException(item.Requirement);
+            }
+
+            authorised.Add(item.Finding);
+
+            if (item.AnswerOf(reply) is { } answer)
+            {
+                confirmations.Add(answer);
+            }
+        }
+
+        return new Authorisation(authorised, confirmations, declined);
+    }
+
+    /// <summary>
+    /// The confirmation for <paramref name="selected"/>.
+    ///
+    /// <list type="bullet">
+    /// <item>A row with no plan, or an empty one, destroys nothing, and is neither listed nor run.</item>
+    /// <item>Tier 4 is counted in <see cref="Refused"/> and never listed. No answer authorises it, so
+    /// listing it would offer a tick whose every value means no.</item>
+    /// <item>Every other row is listed with what §7 asks of it.</item>
+    /// </list>
+    /// </summary>
+    /// <param name="requireTypedPhrase">The user's preference about §7's typed phrase. See <see cref="ConfirmationRequirement.For"/>.</param>
+    /// <param name="then">What the user chose to follow a clean.</param>
+    public static CleanConfirmation For(IReadOnlyList<Finding> selected, bool requireTypedPhrase, CompletionAction then)
+    {
+        ArgumentNullException.ThrowIfNull(selected);
+
+        List<CleanConfirmationItem> items = [];
+        var refused = 0;
+
+        foreach (var finding in selected)
+        {
+            if (finding.Plan is not { IsEmpty: false } plan)
+            {
+                continue;
+            }
+
+            var requirement = ConfirmationRequirement.For(plan, requireTypedPhrase);
+
+            if (requirement.Level == ConfirmationLevel.Refused)
+            {
+                refused++;
+                continue;
+            }
+
+            items.Add(new CleanConfirmationItem(finding, plan, requirement));
+        }
+
+        return new CleanConfirmation(items, refused, WhenCleanComplete.Then(then));
+    }
+
+    /// <summary>
+    /// The reply that keeps <paramref name="item"/> in the clean, or null where it is unticked or has no
+    /// reply. A missing reply leaves the row out, so a shell that forgets a row fails closed.
+    /// </summary>
+    private static CleanConfirmationReply? Included(CleanConfirmationItem item, IReadOnlyList<CleanConfirmationReply> replies) =>
+        replies.FirstOrDefault(reply => string.Equals(reply.ProviderId, item.ProviderId, StringComparison.Ordinal)) is { Included: true } reply
+            ? reply
+            : null;
 }

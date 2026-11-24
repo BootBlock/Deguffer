@@ -3,42 +3,89 @@
     x:Class="Deguffer.App.Views.CleanConfirmationView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:execution="using:Deguffer.Core.Execution">
+    xmlns:viewModels="using:Deguffer.App.ViewModels">
 
-    <StackPanel Spacing="16">
+    <StackPanel Spacing="{StaticResource RegionGap}">
 
         <!--
-            One line per subject, its size in a column of its own. The title above already asks the
-            question, so the list needs no sentence introducing it — and a size the user can read
-            off a row is a size they can check against the row they ticked.
+            Every row going, grouped by tier, each with its size in a column of its own and its own
+            tick. The title above already asks the question, so the list needs no sentence introducing
+            it, and a size the user can read off a row is a size they can check against the row they
+            ticked. A row the user no longer wants is unticked here: Cancel stops the whole clean.
 
-            It scrolls inside a bounded height rather than growing without limit, because the
-            dialog's own content sits in a ScrollViewer of its own: a long selection would otherwise
-            push the total and the two sentences below the fold, leaving the Clean button reachable
-            with "This cannot be undone." still unread.
+            It scrolls inside a bounded height rather than growing without limit, because the dialog's
+            own content sits in a ScrollViewer of its own: a long selection would otherwise push the
+            total and the sentences below the fold, leaving the button reachable with "This cannot be
+            undone." still unread.
         -->
-        <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto">
-            <ItemsControl ItemsSource="{x:Bind Confirmation.Items}">
+        <ScrollViewer MaxHeight="320" VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{x:Bind Model.Groups}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Spacing="{StaticResource RegionGap}" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="execution:CleanConfirmationItem">
-                        <Grid ColumnSpacing="12" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,8">
-                            <!--
-                                Decoration, and the only element on the row with nothing to say: it is
-                                hidden from assistive technology, as ShareBar is, so a reader hears the
-                                subject and its size rather than an empty node in front of each.
-                            -->
-                            <TextBlock Grid.Column="0"
-                                       Text="&#x2022;"
-                                       AutomationProperties.AccessibilityView="Raw"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            <TextBlock Grid.Column="1"
-                                       Text="{x:Bind ProviderName}"
-                                       Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                       TextWrapping="Wrap" />
-                            <TextBlock Grid.Column="2"
-                                       Text="{x:Bind SizeLabel}"
+                    <DataTemplate x:DataType="viewModels:ConfirmationGroupViewModel">
+                        <StackPanel Spacing="{StaticResource ControlGap}">
+                            <TextBlock Text="{x:Bind Heading}" Style="{StaticResource GroupHeading}" />
+                            <TextBlock Text="{x:Bind Note}"
+                                       Visibility="{x:Bind HasNote}"
                                        Style="{StaticResource SecondaryText}" />
-                        </Grid>
+
+                            <ItemsControl ItemsSource="{x:Bind Rows}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Spacing="{StaticResource ControlGap}" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="viewModels:ConfirmationRowViewModel">
+                                        <StackPanel Spacing="{StaticResource LabelGap}">
+                                            <Grid ColumnSpacing="12" ColumnDefinitions="*,Auto">
+                                                <CheckBox Grid.Column="0"
+                                                          IsChecked="{x:Bind IsIncluded, Mode=TwoWay}"
+                                                          AutomationProperties.AutomationId="{x:Bind IncludeAutomationId}"
+                                                          AutomationProperties.Name="{x:Bind Item.IncludeName}">
+                                                    <TextBlock Text="{x:Bind Item.ProviderName}" TextWrapping="Wrap" />
+                                                </CheckBox>
+                                                <TextBlock Grid.Column="1"
+                                                           VerticalAlignment="Center"
+                                                           Text="{x:Bind Item.SizeLabel}"
+                                                           Style="{StaticResource RowFigure}" />
+                                            </Grid>
+
+                                            <!--
+                                                What the row costs, and what §7 asks before it goes, under the
+                                                row's own name and indented to it, so each answer is plainly about
+                                                this location. Shown only while the row is ticked: a row left out
+                                                needs no answer and costs nothing.
+                                            -->
+                                            <StackPanel Margin="{StaticResource NestedRowIndent}"
+                                                        Spacing="{StaticResource ControlGap}">
+                                                <TextBlock Text="{x:Bind Consequence}"
+                                                           Visibility="{x:Bind StatesConsequence, Mode=OneWay}"
+                                                           Style="{StaticResource SecondaryText}" />
+                                                <CheckBox IsChecked="{x:Bind IsAcknowledged, Mode=TwoWay}"
+                                                          AutomationProperties.AutomationId="{x:Bind AcknowledgementAutomationId}"
+                                                          Visibility="{x:Bind AsksAcknowledgement, Mode=OneWay}"
+                                                          AutomationProperties.Name="{x:Bind Acknowledgement}">
+                                                    <TextBlock Text="{x:Bind Acknowledgement}" TextWrapping="Wrap" />
+                                                </CheckBox>
+                                                <StackPanel Spacing="{StaticResource LabelGap}"
+                                                            Visibility="{x:Bind AsksTyping, Mode=OneWay}">
+                                                    <TextBlock Text="{x:Bind Instruction}" TextWrapping="Wrap" />
+                                                    <TextBox Text="{x:Bind TypedPhrase, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                             PlaceholderText="{x:Bind Phrase}"
+                                                             AutomationProperties.AutomationId="{x:Bind PhraseAutomationId}"
+                                                             AutomationProperties.Name="{x:Bind BoxName}" />
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
@@ -46,48 +93,25 @@
 
         <Border Style="{StaticResource Divider}" />
 
-        <!-- The figure the user is authorising, on a line of its own rather than inside a sentence. -->
+        <!-- The figure the button authorises, on a line of its own rather than inside a sentence. It
+             follows the ticks, so a row left out is out of the figure too. -->
         <Grid ColumnSpacing="12" ColumnDefinitions="*,Auto">
-            <TextBlock Grid.Column="0" Text="Total" FontWeight="SemiBold" />
-            <TextBlock Grid.Column="1" Text="{x:Bind Confirmation.TotalLabel}" FontWeight="SemiBold" />
+            <TextBlock Grid.Column="0" Text="Total" Style="{StaticResource BodyStrongTextBlockStyle}" />
+            <TextBlock Grid.Column="1"
+                       Text="{x:Bind Model.TotalLabel, Mode=OneWay}"
+                       Style="{StaticResource BodyStrongTextBlockStyle}" />
         </Grid>
 
-        <!--
-            Shown only while it is true of every line above. §7 ordinarily leaves this dialog Tier 1
-            alone, but a user who switches the typed phrase off sends Tier 3 here as well, and
-            telling somebody their Recycle Bin rebuilds itself is the worst sentence this app could
-            put in front of an irreversible deletion. Core decides whether it holds; the shell only
-            decides where it sits.
-        -->
-        <TextBlock Style="{StaticResource SecondaryText}"
-                   Visibility="{x:Bind Confirmation.AllRegenerable}"
-                   Text="Each of these is rebuilt the next time the tool that owns it runs, so nothing is lost. That first run may be slower." />
-
-        <!--
-            And what stands in its place: one paragraph per subject that does not rebuild itself,
-            naming it and quoting the consequence its own dialog would have carried. §7 leaves how
-            hard the confirmation is to give to the user, and never left saying what is unrecoverable
-            to anybody.
-        -->
-        <ItemsControl ItemsSource="{x:Bind Confirmation.PermanentLosses}">
-            <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="execution:CleanConfirmationLoss">
-                    <StackPanel Margin="0,0,0,12">
-                        <TextBlock Text="{x:Bind ProviderName}"
-                                   FontWeight="SemiBold"
-                                   TextWrapping="Wrap"
-                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                        <TextBlock Text="{x:Bind Consequence}"
-                                   TextWrapping="Wrap"
-                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                    </StackPanel>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
-
-        <TextBlock FontWeight="SemiBold"
+        <!-- The stored "When complete" choice can be days old, so the question that starts the clean
+             says what will follow it. -->
+        <TextBlock Text="{x:Bind Model.Then}"
+                   Visibility="{x:Bind Model.HasThen}"
                    TextWrapping="Wrap"
-                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                   Text="Clean removes the files straight away. This cannot be undone." />
+                   Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+
+        <TextBlock Text="{x:Bind Model.ClosingLine}"
+                   Visibility="{x:Bind Model.HasClosingLine}"
+                   Style="{StaticResource BodyStrongTextBlockStyle}"
+                   TextWrapping="Wrap" />
     </StackPanel>
 </UserControl>

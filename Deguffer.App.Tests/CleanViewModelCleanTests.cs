@@ -363,11 +363,92 @@ public class CleanViewModelCleanTests
     }
 
     /// <summary>
-    /// Declining one row's confirmation drops that row and runs the rest. The dialog is built once, and
-    /// only because something needed asking.
+    /// A clean of every tier asks one question, which lists every row, and the dialog is built once,
+    /// rather than once more for each row §7 asks something of.
     /// </summary>
     [Fact]
-    public void ADeclinedRowIsDroppedAndTheRestRun()
+    public void AMixedCleanAsksOnceAboutEveryRow()
+    {
+        var cache = new FakeCleanupProvider("cache");
+        var sdk = new FakeCleanupProvider("sdk", SafetyTier.RegenerableWithCost);
+        var logs = new FakeCleanupProvider("logs", SafetyTier.UserData);
+        using var page = new StoragePage([cache, sdk, logs]);
+        cache.Steps = [page.Cache("npm", 1024)];
+        sdk.Steps = [page.Cache("sdk", 4096)];
+        logs.Steps = [page.Cache("logs", 2048)];
+        page.Scan();
+        page.Row("sdk").IsSelected = true;
+        page.Row("logs").IsSelected = true;
+
+        page.Clean();
+
+        var asked = Assert.Single(page.Prompt.Asked);
+        Assert.Equal(["cache", "logs", "sdk"], asked.Items.Select(i => i.ProviderId).Order());
+        Assert.Equal(1, page.PromptsBuilt);
+        Assert.Single(cache.Executed);
+        Assert.Single(sdk.Executed);
+        Assert.Single(logs.Executed);
+    }
+
+    /// <summary>
+    /// Cancel stops the whole clean: no row of any tier runs, and every selected folder and the tool's
+    /// root are still standing (§5.6). A Cancel that skipped only the rows needing an answer would let
+    /// the Tier 1 row go.
+    /// </summary>
+    [Fact]
+    public void CancellingTheConfirmationRemovesNothing()
+    {
+        var cache = new FakeCleanupProvider("cache");
+        var sdk = new FakeCleanupProvider("sdk", SafetyTier.RegenerableWithCost);
+        var logs = new FakeCleanupProvider("logs", SafetyTier.UserData);
+        using var page = new StoragePage([cache, sdk, logs]);
+        DeleteDirectoryStep[] folders = [page.Cache("npm", 1024), page.Cache("sdk", 4096), page.Cache("logs", 2048)];
+        cache.Steps = [folders[0]];
+        sdk.Steps = [folders[1]];
+        logs.Steps = [folders[2]];
+        page.Scan();
+        page.Row("sdk").IsSelected = true;
+        page.Row("logs").IsSelected = true;
+        page.Prompt.Agrees = false;
+
+        page.Clean();
+
+        Assert.Single(page.Prompt.Asked);
+        Assert.Empty(cache.Executed);
+        Assert.Empty(sdk.Executed);
+        Assert.Empty(logs.Executed);
+        Assert.All(folders, folder => Assert.True(Directory.Exists(folder.Path), folder.Path));
+        Assert.True(Directory.Exists(page.ToolRoot));
+    }
+
+    /// <summary>
+    /// A clean cancelled while its confirmation is open says so, as a warning, and removes nothing.
+    /// </summary>
+    [Fact]
+    public void ACleanCancelledWhileItsConfirmationIsOpenSaysNothingWasRemoved()
+    {
+        var cache = new FakeCleanupProvider("cache");
+        using var page = new StoragePage([cache]);
+        var folder = page.Cache("npm", 1024);
+        cache.Steps = [folder];
+        page.Scan();
+        page.Prompt.Cancels = true;
+
+        page.Clean();
+
+        Assert.Empty(cache.Executed);
+        Assert.True(Directory.Exists(folder.Path));
+        Assert.Equal("Clean cancelled. Nothing was removed.", page.ViewModel.Status);
+        Assert.Equal(InfoBarSeverity.Warning, page.ViewModel.StatusSeverity);
+        Assert.False(page.ViewModel.IsBusy);
+    }
+
+    /// <summary>
+    /// A row the user unticks in the dialog is left out and the rest run, and the unticked row needs
+    /// no answer. That is how a row is dropped, since Cancel stops everything.
+    /// </summary>
+    [Fact]
+    public void ARowUntickedInTheConfirmationIsLeftOutAndTheRestRun()
     {
         var sdk = new FakeCleanupProvider("sdk", SafetyTier.RegenerableWithCost);
         var cache = new FakeCleanupProvider("cache");
@@ -377,18 +458,19 @@ public class CleanViewModelCleanTests
         cache.Steps = [page.Cache("npm", 1024)];
         page.Scan();
         page.Row("sdk").IsSelected = true;
-        page.Prompt.Agrees = false;
+        page.Prompt.Unticks.Add("sdk");
 
         page.Clean();
 
         Assert.Empty(sdk.Executed);
         Assert.Single(cache.Executed);
         Assert.True(Directory.Exists(sdkFolder.Path));
-        Assert.Equal(1, page.PromptsBuilt);
-        Assert.Equal(["sdk"], page.Prompt.Asked.Select(r => r.ProviderId));
     }
 
-    /// <summary>A run of Tier 1 alone asks nothing, so it never builds a dialog.</summary>
+    /// <summary>
+    /// A run of Tier 1 alone, with the user's confirmation switched off, asks nothing, so it never builds
+    /// a dialog.
+    /// </summary>
     [Fact]
     public void ARunNeedingNoConfirmationBuildsNoDialog()
     {
@@ -396,6 +478,7 @@ public class CleanViewModelCleanTests
         using var page = new StoragePage([cache]);
         cache.Steps = [page.Cache("a", 1024)];
         page.Scan();
+        page.ViewModel.ConfirmBeforeCleaning = false;
 
         page.Clean();
 
@@ -404,18 +487,18 @@ public class CleanViewModelCleanTests
     }
 
     /// <summary>
-    /// A run the user stopped says so, as a warning, and says it was their refusal rather than an
-    /// empty selection.
+    /// A clean whose every row was left out says so, as a warning, and says it was the user's choice
+    /// rather than an empty selection. The dialog's button refuses this, so the page is the second line.
     /// </summary>
     [Fact]
-    public void DecliningEveryRowSaysNothingWasConfirmed()
+    public void LeavingEveryRowOutSaysNothingWasConfirmed()
     {
         var sdk = new FakeCleanupProvider("sdk", SafetyTier.RegenerableWithCost);
         using var page = new StoragePage([sdk]);
         sdk.Steps = [page.Cache("sdk", 4096)];
         page.Scan();
         page.Row("sdk").IsSelected = true;
-        page.Prompt.Agrees = false;
+        page.Prompt.Unticks.Add("sdk");
 
         page.Clean();
 
@@ -441,29 +524,24 @@ public class CleanViewModelCleanTests
     }
 
     /// <summary>
-    /// Declining the blanket confirmation leaves the screen exactly as it was: nothing runs, the page is
-    /// idle while the dialog is open and afterwards, and the status is not replaced.
+    /// Cancelling the confirmation leaves the screen exactly as it was: nothing runs, the page is idle
+    /// while the dialog is open and afterwards, and the status is not replaced.
     /// </summary>
     [Fact]
-    public void DecliningTheBlanketConfirmationLeavesTheScreenAsItWas()
+    public void CancellingTheConfirmationLeavesTheScreenAsItWas()
     {
         var cache = new FakeCleanupProvider("cache");
         using var page = new StoragePage([cache]);
         cache.Steps = [page.Cache("a", 1024)];
         page.Scan();
         var status = page.ViewModel.Status;
-        var asked = new List<CleanConfirmation>();
         var busyWhileAsked = new List<bool>();
-        page.ViewModel.ConfirmCleanAsync = confirmation =>
-        {
-            asked.Add(confirmation);
-            busyWhileAsked.Add(page.ViewModel.IsBusy);
-            return Task.FromResult(false);
-        };
+        page.Prompt.Agrees = false;
+        page.Prompt.WhileAsking = () => busyWhileAsked.Add(page.ViewModel.IsBusy);
 
         page.Clean();
 
-        Assert.Single(asked);
+        Assert.Single(page.Prompt.Asked);
         Assert.Equal([false], busyWhileAsked);
         Assert.Empty(cache.Executed);
         Assert.Equal(status, page.ViewModel.Status);
@@ -496,13 +574,7 @@ public class CleanViewModelCleanTests
         page.Row("cache").Steps[1].IsSelected = false;
         var whole = page.Row("cache").Finding.Plan!;
         var confirmedOn = new List<int>();
-        var asked = new List<CleanConfirmation>();
-        page.ViewModel.ConfirmCleanAsync = confirmation =>
-        {
-            confirmedOn.Add(Environment.CurrentManagedThreadId);
-            asked.Add(confirmation);
-            return Task.FromResult(true);
-        };
+        page.Prompt.WhileAsking = () => confirmedOn.Add(Environment.CurrentManagedThreadId);
 
         page.Clean();
 
@@ -513,8 +585,9 @@ public class CleanViewModelCleanTests
 
         // The dialog states what the narrowed plan reclaims, never the whole row's figure.
         var ran = Assert.Single(cache.Executed);
-        Assert.Equal(CleanConfirmation.For([ran]).TotalLabel, Assert.Single(asked).TotalLabel);
-        Assert.NotEqual(CleanConfirmation.For([whole]).TotalLabel, asked[0].TotalLabel);
+        var asked = Assert.Single(page.Prompt.Asked);
+        Assert.Equal(FreeSpace.Format(ReclaimPool.Total(ran.Steps)), asked.TotalOf(asked.Opening));
+        Assert.NotEqual(FreeSpace.Format(ReclaimPool.Total(whole.Steps)), asked.TotalOf(asked.Opening));
 
         var declined = Assert.Single(ran.ProtectedPaths, path => path.Path == unticked.Path);
         Assert.Equal(PathPresence.Present, declined.PresenceBefore);
