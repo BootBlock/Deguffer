@@ -22,24 +22,24 @@ public sealed class EmulatorFolderService
 
     public IReadOnlyList<string> Current => _folders;
 
-    public bool Add(string folder) =>
-        _folders.Contains(folder, StringComparer.OrdinalIgnoreCase) || Write([.. _folders, folder]);
+    public SaveOutcome Add(string folder) =>
+        _folders.Contains(folder, StringComparer.OrdinalIgnoreCase) ? SaveOutcome.NotWritten : Write([.. _folders, folder]);
 
-    public bool Remove(string folder) =>
+    public SaveOutcome Remove(string folder) =>
         Write([.. _folders.Where(existing => !existing.Equals(folder, StringComparison.OrdinalIgnoreCase))]);
 
-    private bool Write(List<string> updated)
+    private SaveOutcome Write(List<string> updated)
     {
         // Adopt what the store kept rather than what was asked for, so Settings never lists a folder
         // that is not in the file and will not be looked in.
         if (!_store.Save(updated, out var stored))
         {
-            return false;
+            return SaveOutcome.Refused;
         }
 
         _folders.Clear();
         _folders.AddRange(stored);
 
-        return true;
+        return SaveOutcome.Saved;
     }
 }

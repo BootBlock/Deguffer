@@ -3,14 +3,16 @@ using Deguffer.App.Shell;
 using Deguffer.App.ViewModels;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Scanning;
+using Deguffer.Core.Scanning.Media;
 using Deguffer.Testing;
 
 namespace Deguffer.App.Tests;
 
 /// <summary>
 /// How the Settings page holds the stored settings and the controls together: a typed number goes
-/// through the rule that stores it, a failed write says so and puts every control back, and the keep
-/// list is shown in full and in order. What a typed number becomes is Core's, and proven in
+/// through the rule that stores it, a failed write says so on the row that made it and puts every
+/// control back, and the keep list is shown in full and in order. What a typed number becomes is Core's, and proven in
 /// <c>EnteredSettingTests</c>.
 /// </summary>
 public sealed class SettingsViewModelTests : IDisposable
@@ -25,7 +27,7 @@ public sealed class SettingsViewModelTests : IDisposable
 
     private string Settings => Path.Combine(_environment.LocalAppData, "Deguffer");
 
-    private (SettingsViewModel Page, PreferenceService Preferences) Page(KeepService? keeps = null)
+    private (SettingsViewModel Page, PreferenceService Preferences) Page(KeepService? keeps = null, LatestSave? latest = null)
     {
         var preferences = new PreferenceService(new PreferenceStore(_environment));
 
@@ -35,7 +37,8 @@ public sealed class SettingsViewModelTests : IDisposable
                 new SourceRootService(new SourceRootStore(_environment)),
                 new EmulatorFolderService(new EmulatorFolderStore(_environment)),
                 keeps ?? new KeepService(new KeepStore(_environment)),
-                _volumes),
+                _volumes,
+                latest ?? new LatestSave()),
             preferences);
     }
 
@@ -59,7 +62,7 @@ public sealed class SettingsViewModelTests : IDisposable
         Assert.Equal(1, preferences.Current.MinimumTemporaryFileAgeDays);
         Assert.Equal(1, preferences.Current.KeepFilesChangedWithinHours);
         Assert.Equal(AppPreferences.Default.FileHistoryRetentionDays, preferences.Current.FileHistoryRetentionDays);
-        Assert.False(page.SaveFailed);
+        Assert.Empty(FailedRows.Of(page));
     }
 
     /// <summary>The box's own maximum is the rule's, so the box and the value it produces cannot disagree.</summary>
@@ -107,9 +110,136 @@ public sealed class SettingsViewModelTests : IDisposable
 
         page.BackdropEnabled = false;
 
-        Assert.True(page.SaveFailed);
+        Assert.Equal([nameof(SettingsViewModel.BackdropEnabledSave)], FailedRows.Of(page));
         Assert.True(page.BackdropEnabled);
         Assert.Contains(string.Empty, raised);
+    }
+
+    /// <summary>
+    /// The failure is stated on the row that made the change, so it is read where the value went back:
+    /// a box several screens down the page, such as the File History retention, says so itself rather
+    /// than through a notice scrolled out of view at the top of the page.
+    /// </summary>
+    [Fact]
+    public void AWriteThatFailsIsStatedOnTheRowThatMadeItAndNoOther()
+    {
+        var (page, preferences) = Page();
+        Directory.CreateDirectory(Path.Combine(Settings, "preferences.json"));
+
+        page.FileHistoryRetentionDays = 30;
+
+        Assert.Equal([nameof(SettingsViewModel.FileHistoryRetentionDaysSave)], FailedRows.Of(page));
+        Assert.Equal(AppPreferences.Default.FileHistoryRetentionDays, preferences.Current.FileHistoryRetentionDays);
+    }
+
+    /// <summary>
+    /// A box put back after a refused write sends the value it was put back to, which is the one
+    /// already stored. That asks for nothing new and says nothing about the folder, so the row goes on
+    /// saying the change was not saved, rather than closing the notice the moment it opened.
+    /// </summary>
+    [Fact]
+    public void ABoxPutBackAfterARefusedWriteLeavesItsNoticeStanding()
+    {
+        var (page, _) = Page();
+        Directory.CreateDirectory(Path.Combine(Settings, "preferences.json"));
+
+        page.FileHistoryRetentionDays = 30;
+        page.FileHistoryRetentionDays = page.FileHistoryRetentionDays;
+
+        Assert.Equal([nameof(SettingsViewModel.FileHistoryRetentionDaysSave)], FailedRows.Of(page));
+    }
+
+    /// <summary>
+    /// One failure is stated once: a later change that fails moves the notice to its own row, and a
+    /// change that saves clears it, because the folder it tells the reader to check took a write.
+    /// </summary>
+    [Fact]
+    public void TheNoticeFollowsTheLatestChangeAndASaveClearsIt()
+    {
+        var (page, _) = Page();
+        var refused = Directory.CreateDirectory(Path.Combine(Settings, "preferences.json"));
+
+        page.BackdropEnabled = false;
+        page.KeepFilesChangedWithinHours = 4;
+
+        Assert.Equal([nameof(SettingsViewModel.KeepFilesChangedWithinHoursSave)], FailedRows.Of(page));
+
+        refused.Delete();
+        page.ThemeIndex = 2;
+
+        Assert.Empty(FailedRows.Of(page));
+    }
+
+    /// <summary>
+    /// Adding a folder already listed writes nothing, so it says nothing about the folder Deguffer
+    /// stores its settings in, and the notice of a refused write on another row stays.
+    /// </summary>
+    [Fact]
+    public void AddingAFolderAlreadyListedLeavesAnotherRowsNoticeStanding()
+    {
+        var (page, _) = Page();
+        var folder = Path.Combine(_temp.Path, "Cemu");
+        page.AddEmulatorFolder(folder);
+        Directory.CreateDirectory(Path.Combine(Settings, "preferences.json"));
+
+        page.BackdropEnabled = false;
+        page.AddEmulatorFolder(folder);
+
+        Assert.Equal([nameof(SettingsViewModel.BackdropEnabledSave)], FailedRows.Of(page));
+    }
+
+    /// <summary>
+    /// The scanning section and the rest of the page report to one notice: a refused write in the
+    /// section moves it there, and a save elsewhere on the page clears it, as the folder took a write.
+    /// </summary>
+    [Fact]
+    public void TheScanningSectionAndTheRestOfThePageShareOneNotice()
+    {
+        var latest = new LatestSave();
+        var preferences = new PreferenceService(new PreferenceStore(_environment));
+        var page = new SettingsViewModel(
+            preferences,
+            new SourceRootService(new SourceRootStore(_environment)),
+            new EmulatorFolderService(new EmulatorFolderStore(_environment)),
+            new KeepService(new KeepStore(_environment)),
+            _volumes,
+            latest);
+        var section = new ScanSettingsViewModel(
+            preferences, new ScanTuner(preferences, new VolumeMediaCache(new FakeStorageQueries()), _volumes), _volumes, latest);
+        var refused = Directory.CreateDirectory(Path.Combine(Settings, "preferences.json"));
+
+        page.BackdropEnabled = false;
+        section.WalkThreads = 4;
+
+        Assert.Empty(FailedRows.Of(page));
+        Assert.Equal([nameof(ScanSettingsViewModel.WalkThreadsSave)], FailedRows.Of(section));
+
+        refused.Delete();
+        page.ThemeIndex = 2;
+
+        Assert.Empty(FailedRows.Of(section));
+    }
+
+    /// <summary>
+    /// A list's add and remove buttons are on its row, so a list that could not be saved says so there,
+    /// whichever list it was.
+    /// </summary>
+    [Fact]
+    public void AListThatCouldNotBeSavedSaysSoOnItsOwnRow()
+    {
+        var (page, _) = Page();
+        Directory.CreateDirectory(Path.Combine(Settings, "emulator-folders.json"));
+
+        page.AddEmulatorFolder(Path.Combine(_temp.Path, "Cemu"));
+
+        Assert.Equal([nameof(SettingsViewModel.EmulatorFoldersSave)], FailedRows.Of(page));
+        Assert.Empty(page.EmulatorFolders);
+
+        Directory.CreateDirectory(Path.Combine(Settings, "source-roots.json"));
+        page.AddSourceRoot(SourceRootApproval.For(_volumes, Path.Combine(_temp.Path, "src")));
+
+        Assert.Equal([nameof(SettingsViewModel.SourceRootsSave)], FailedRows.Of(page));
+        Assert.Empty(page.SourceRoots);
     }
 
     /// <summary>
@@ -130,11 +260,7 @@ public sealed class SettingsViewModelTests : IDisposable
         Assert.Equal(1, page.KeepFilesChangedWithinHours);
     }
 
-    /// <summary>
-    /// A write that succeeds is read back by the control that made it, and by no other. The page's
-    /// restore is the one other thing told, as a write can be what takes the last setting off its
-    /// default or puts it back on.
-    /// </summary>
+    /// <summary>A write that succeeds is read back by the control that made it, and by no other.</summary>
     [Fact]
     public void AWriteThatSucceedsLeavesTheOtherControlsAlone()
     {
@@ -144,10 +270,9 @@ public sealed class SettingsViewModelTests : IDisposable
 
         page.BackdropEnabled = false;
 
-        Assert.False(page.SaveFailed);
+        Assert.Empty(FailedRows.Of(page));
         Assert.False(preferences.Current.BackdropEnabled);
-        Assert.Equal([nameof(SettingsViewModel.BackdropEnabled), nameof(SettingsViewModel.CanRestoreDefaults)], raised);
-        Assert.True(page.CanRestoreDefaults);
+        Assert.Equal([nameof(SettingsViewModel.BackdropEnabled)], raised);
     }
 
     /// <summary>
@@ -196,7 +321,6 @@ public sealed class SettingsViewModelTests : IDisposable
 
     /// <summary>
     /// The page hears of its own write as well, as the write lands, and the box reads the spacing once.
-    /// The page's restore is told too, as the write takes the first setting off its default.
     /// </summary>
     [Fact]
     public void ASpacingChosenOnThePageIsAnnouncedOnce()
@@ -208,7 +332,7 @@ public sealed class SettingsViewModelTests : IDisposable
 
         page.TreemapSpacingIndex = (int)ExploreSpacing.Spacious;
 
-        Assert.Equal([nameof(SettingsViewModel.TreemapSpacingIndex), nameof(SettingsViewModel.CanRestoreDefaults)], raised);
+        Assert.Equal([nameof(SettingsViewModel.TreemapSpacingIndex)], raised);
         Assert.Equal(ExploreSpacing.Spacious, preferences.Current.TreemapSpacing);
     }
 
@@ -254,7 +378,7 @@ public sealed class SettingsViewModelTests : IDisposable
         page.ReleaseKeptItem(item);
 
         Assert.True(page.KeepListUnreadable);
-        Assert.False(page.SaveFailed);
+        Assert.Empty(FailedRows.Of(page));
         Assert.Equal([NotifyCollectionChangedAction.Remove], told);
     }
 
@@ -271,7 +395,7 @@ public sealed class SettingsViewModelTests : IDisposable
 
         page.ReleaseKeptItem(item);
 
-        Assert.True(page.SaveFailed);
+        Assert.Equal([nameof(SettingsViewModel.KeptItemsSave)], FailedRows.Of(page));
         Assert.Single(page.KeptItems);
     }
 
@@ -340,21 +464,21 @@ public sealed class SettingsViewModelTests : IDisposable
         page.KeepFilesChangedWithinHours = 8;
         page.MinimumTemporaryFileAge = 3;
 
-        Assert.True(page.KeepFilesChangedWithinHoursDefault.CanReset);
+        Assert.True(page.Defaults.KeepFilesChangedWithinHours.CanReset);
 
-        page.KeepFilesChangedWithinHoursDefault.Reset();
+        page.Defaults.KeepFilesChangedWithinHours.Reset();
 
         Assert.Equal(AppPreferences.Default.KeepFilesChangedWithinHours, preferences.Current.KeepFilesChangedWithinHours);
         Assert.Equal(3, preferences.Current.MinimumTemporaryFileAgeDays);
-        Assert.False(page.KeepFilesChangedWithinHoursDefault.CanReset);
-        Assert.True(page.MinimumTemporaryFileAgeDefault.CanReset);
-        Assert.Equal("Default: 0 hours", page.KeepFilesChangedWithinHoursDefault.Statement);
-        Assert.False(page.SaveFailed);
+        Assert.False(page.Defaults.KeepFilesChangedWithinHours.CanReset);
+        Assert.True(page.Defaults.MinimumTemporaryFileAge.CanReset);
+        Assert.Equal("Default: 0 hours", page.Defaults.KeepFilesChangedWithinHours.Statement);
+        Assert.False(page.KeepFilesChangedWithinHoursSave.Failed);
     }
 
     /// <summary>
     /// A reset does not know which property its row's control is bound to, so every control reads back
-    /// what was stored, and the row's own default reads again so its reset is withdrawn.
+    /// what was stored, and the row is told that its reset is withdrawn, and nothing else.
     /// </summary>
     [Fact]
     public void AResetHasEveryControlAndTheRowReadBack()
@@ -364,33 +488,31 @@ public sealed class SettingsViewModelTests : IDisposable
         var raised = new List<string?>();
         var row = new List<string?>();
         page.PropertyChanged += (_, changed) => raised.Add(changed.PropertyName);
-        page.BackdropEnabledDefault.PropertyChanged += (_, changed) => row.Add(changed.PropertyName);
+        page.Defaults.BackdropEnabled.PropertyChanged += (_, changed) => row.Add(changed.PropertyName);
 
-        page.BackdropEnabledDefault.Reset();
+        page.Defaults.BackdropEnabled.Reset();
 
         Assert.True(page.BackdropEnabled);
         Assert.Contains(string.Empty, raised);
         Assert.Equal([nameof(SettingReset.CanReset)], row);
-        Assert.False(page.BackdropEnabledDefault.CanReset);
+        Assert.False(page.Defaults.BackdropEnabled.CanReset);
     }
 
-    /// <summary>
-    /// The restore button is told when the answer turns over and not on every write: a second setting
-    /// moved off its default leaves it offered, and says nothing.
-    /// </summary>
+    /// <summary>A reset that could not be written is stated on its own row, as a change made there would be.</summary>
     [Fact]
-    public void TheRestoreIsAnnouncedOnlyWhenItsAnswerChanges()
+    public void AResetThatFailsIsStatedOnItsOwnRow()
     {
-        var (page, _) = Page();
-        var raised = new List<string?>();
-        page.PropertyChanged += (_, changed) => raised.Add(changed.PropertyName);
+        var (page, preferences) = Page();
+        page.FileHistoryRetentionDays = 30;
+        File.Delete(Path.Combine(Settings, "preferences.json"));
+        Directory.CreateDirectory(Path.Combine(Settings, "preferences.json"));
 
-        page.BackdropEnabled = false;
-        page.ConfirmBeforeCleaning = false;
-        page.FollowStoredDefaults();
+        page.Defaults.FileHistoryRetentionDays.Reset();
 
-        Assert.Single(raised, name => name == nameof(SettingsViewModel.CanRestoreDefaults));
-        Assert.True(page.CanRestoreDefaults);
+        Assert.True(page.FileHistoryRetentionDaysSave.Failed);
+        Assert.False(page.ThemeSave.Failed);
+        Assert.Equal(30, preferences.Current.FileHistoryRetentionDays);
+        Assert.True(page.Defaults.FileHistoryRetentionDays.CanReset);
     }
 
     /// <summary>Each row's reset is the setting its name says, so no row puts back another's value.</summary>
@@ -399,65 +521,12 @@ public sealed class SettingsViewModelTests : IDisposable
     {
         var (page, _) = Page();
 
-        foreach (var property in typeof(SettingsViewModel).GetProperties().Where(property => property.PropertyType == typeof(SettingReset)))
+        foreach (var property in typeof(SettingsFormDefaults).GetProperties().Where(property => property.PropertyType == typeof(SettingReset)))
         {
-            var name = property.Name[..^"Default".Length];
-            var expected = typeof(ShippedSettings).GetField(name)?.GetValue(null);
+            var expected = typeof(ShippedSettings).GetField(property.Name)?.GetValue(null);
 
             Assert.True(expected is not null, $"{property.Name} names no setting the page restores.");
-            Assert.Same(expected, ((SettingReset)property.GetValue(page)!).Setting);
+            Assert.Same(expected, ((SettingReset)property.GetValue(page.Defaults)!).Setting);
         }
-    }
-
-    /// <summary>
-    /// Restoring every setting writes each one's default and leaves the lists the reader built, the keep
-    /// list, the source folders and the emulator folders, as they were, on the page and in their stores.
-    /// </summary>
-    [Fact]
-    public async Task RestoringAllLeavesTheKeepListAndTheFoldersUntouched()
-    {
-        var keeps = new KeepService(new KeepStore(_environment));
-        keeps.Keep(Kept("npm", "alpha"));
-        var (page, preferences) = Page(keeps);
-        var source = Path.Combine(_temp.Path, "src");
-        var emulator = Path.Combine(_temp.Path, "Cemu");
-        page.AddSourceRoot((await page.ApprovalForAsync(source, CancellationToken.None))!);
-        page.AddEmulatorFolder(emulator);
-        page.ThemeIndex = (int)AppTheme.Dark;
-        page.FileHistoryRetentionDays = 30;
-        page.ConfirmBeforeCleaning = false;
-
-        Assert.True(page.CanRestoreDefaults);
-        Assert.Equal(3, page.RestorePrompt()?.Items.Count);
-
-        page.RestoreDefaults();
-
-        Assert.Empty(ShippedSettings.Changed(preferences.Current));
-        Assert.False(page.CanRestoreDefaults);
-        Assert.Null(page.RestorePrompt());
-        Assert.False(page.SaveFailed);
-        Assert.Equal([source], page.SourceRoots.Select(root => root.Path));
-        Assert.Equal([emulator], page.EmulatorFolders);
-        Assert.Equal(["alpha"], page.KeptItems.Select(kept => kept.Item.Name));
-        Assert.Equal([source], new SourceRootService(new SourceRootStore(_environment)).Current.Select(root => root.Path));
-        Assert.Equal([emulator], new EmulatorFolderService(new EmulatorFolderStore(_environment)).Current);
-        Assert.Single(new KeepService(new KeepStore(_environment)).Current.Items);
-    }
-
-    /// <summary>A restore that could not be written says so, and every control reads what still holds.</summary>
-    [Fact]
-    public void ARestoreThatFailsSaysSoAndChangesNothing()
-    {
-        var (page, preferences) = Page();
-        page.KeepFilesChangedWithinHours = 8;
-        File.Delete(Path.Combine(Settings, "preferences.json"));
-        Directory.CreateDirectory(Path.Combine(Settings, "preferences.json"));
-
-        page.RestoreDefaults();
-
-        Assert.True(page.SaveFailed);
-        Assert.Equal(8, preferences.Current.KeepFilesChangedWithinHours);
-        Assert.Equal(8, page.KeepFilesChangedWithinHours);
-        Assert.True(page.CanRestoreDefaults);
     }
 }

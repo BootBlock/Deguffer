@@ -46,6 +46,6 @@ internal sealed class DrawnSetting<T>
     {
         _show(value);
 
-        return _preferences.Update(current => _write(current, value));
+        return _preferences.Update(current => _write(current, value)) is not SaveOutcome.Refused;
     }
 }

@@ -14,9 +14,10 @@ namespace Deguffer.Core.Tests;
 /// with no row would be changed by a restore the reader could not see, and a row whose reset belonged to
 /// another setting would put back the wrong one.
 ///
-/// <para>A row is matched to its setting by name: its default is bound to <c>&lt;Name&gt;Default</c>,
-/// its control to <c>&lt;Name&gt;</c> (or <c>&lt;Name&gt;Index</c> for a picker), and the setting is
-/// <see cref="ShippedSettings"/>' or <see cref="KindSettingDefaults"/>' member of that name.</para>
+/// <para>A row is matched to its setting by name: its control is bound to <c>&lt;form&gt;.&lt;Name&gt;</c>
+/// (or <c>&lt;Name&gt;Index</c> for a picker), its default to <c>&lt;form&gt;.Defaults.&lt;Name&gt;</c>,
+/// and the setting is <see cref="ShippedSettings"/>' or <see cref="KindSettingDefaults"/>' member of
+/// that name.</para>
 /// </summary>
 public sealed partial class ShippedSettingsMarkupTests
 {
@@ -58,15 +59,18 @@ public sealed partial class ShippedSettingsMarkupTests
             var stated = Bound(row.Attribute("Default")!.Value);
             var control = ValueControl(row);
 
-            Assert.True(stated is not null && stated.Value.Member.EndsWith("Default", StringComparison.Ordinal), $"'{Title(row)}' binds its default as {row.Attribute("Default")!.Value}.");
+            Assert.True(stated is { Source: var source } && source.EndsWith(".Defaults", StringComparison.Ordinal), $"'{Title(row)}' binds its default as {row.Attribute("Default")!.Value}.");
             Assert.True(control is not null, $"'{Title(row)}' states a default but holds no value control.");
 
-            var name = stated.Value.Member[..^"Default".Length];
-            var set = Bound(control!.Attribute(ValueControls[control.Name.LocalName])!.Value);
+            var name = stated.Value.Member;
+            var value = control!.Attribute(ValueControls[control.Name.LocalName])!.Value;
+            var set = Bound(value);
 
             Assert.True(
-                set is not null && set.Value.Source == stated.Value.Source && (set.Value.Member == name || set.Value.Member == name + "Index"),
-                $"'{Title(row)}' states the default of {name}, but its control is bound to {control.Attribute(ValueControls[control.Name.LocalName])!.Value}.");
+                set is not null
+                    && set.Value.Source + ".Defaults" == stated.Value.Source
+                    && (set.Value.Member == name || set.Value.Member == name + "Index"),
+                $"'{Title(row)}' states the default of {name}, but its control is bound to {value}.");
 
             var setting = Setting(name);
 
@@ -86,8 +90,7 @@ public sealed partial class ShippedSettingsMarkupTests
         var stated = Rows()
             .Select(row => row.Attribute("Default")?.Value)
             .OfType<string>()
-            .Select(Bound)
-            .Select(binding => binding!.Value.Member[..^"Default".Length])
+            .Select(attribute => Bound(attribute)?.Member)
             .Order(StringComparer.Ordinal);
 
         var restored = typeof(ShippedSettings).GetFields(BindingFlags.Public | BindingFlags.Static)
@@ -112,7 +115,7 @@ public sealed partial class ShippedSettingsMarkupTests
     private static bool PicksTheKindOfDrive(XElement row) =>
         row.Descendants().Any(element => element.Attribute("SelectedIndex")?.Value.Contains("Scanning.KindIndex", StringComparison.Ordinal) == true);
 
-    /// <summary>The source and member an <c>x:Bind</c> names, such as <c>ViewModel</c> and <c>ThemeIndex</c>.</summary>
+    /// <summary>The path and the last member an <c>x:Bind</c> names, such as <c>ViewModel.Defaults</c> and <c>Theme</c>.</summary>
     private static (string Source, string Member)? Bound(string attribute) =>
         BindingPattern().Match(attribute) is { Success: true } match ? (match.Groups["source"].Value, match.Groups["member"].Value) : null;
 
@@ -123,6 +126,6 @@ public sealed partial class ShippedSettingsMarkupTests
     private static IEnumerable<PropertyInfo> KindProperties() =>
         typeof(KindSettingDefaults).GetProperties().Where(property => property.PropertyType == typeof(SettingDefault));
 
-    [GeneratedRegex(@"^\{x:Bind (?<source>\w+)\.(?<member>\w+)(,.*)?\}$")]
+    [GeneratedRegex(@"^\{x:Bind (?<source>[\w.]+)\.(?<member>\w+)(,.*)?\}$")]
     private static partial Regex BindingPattern();
 }

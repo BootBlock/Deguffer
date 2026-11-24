@@ -11,8 +11,13 @@ public sealed partial class SettingsPage : Page
 {
     public SettingsPage()
     {
+        // One notice of a failed save for the whole page, so the scanning section and the rest of the
+        // page never state one failure twice, and a save in either clears it.
+        var latest = new LatestSave();
         ViewModel = new SettingsViewModel(
-            App.Preferences, App.SourceRoots, App.EmulatorFolders, App.Keeps, VolumeInventory.Current);
+            App.Preferences, App.SourceRoots, App.EmulatorFolders, App.Keeps, VolumeInventory.Current, latest);
+        Scanning = new ScanSettingsViewModel(App.Preferences, App.ScanTuning, VolumeInventory.Current, latest);
+        Restore = new SettingsRestore(App.Preferences, latest);
         History = new ScanHistorySettingsViewModel(App.ScanHistory);
         Sizes = new SizeHistorySettingsViewModel(App.ProviderSizes);
         InitializeComponent();
@@ -40,10 +45,11 @@ public sealed partial class SettingsPage : Page
         ViewModel.FollowStoredSpacing();
         ShowSpacing();
 
-        // The page's restore and each row's reset follow every write, the scanning section's included,
-        // which the page's view-model does not make.
-        ViewModel.FollowStoredDefaults();
-        ScanningSection.Scanning.FollowStoredDefaults();
+        // Each row's default and the page's restore follow every write, made by either form or by the
+        // restore, as no one of them sees the others'.
+        ViewModel.Defaults.Follow();
+        Scanning.Defaults.Follow();
+        Restore.Follow();
     }
 
     /// <summary>
@@ -52,7 +58,7 @@ public sealed partial class SettingsPage : Page
     /// </summary>
     private async void OnRestoreDefaults(object sender, RoutedEventArgs e)
     {
-        if (ViewModel.RestorePrompt() is not { } prompt)
+        if (Restore.Prompt() is not { } prompt)
         {
             return;
         }
@@ -64,8 +70,9 @@ public sealed partial class SettingsPage : Page
             return;
         }
 
-        ViewModel.RestoreDefaults();
-        ScanningSection.Scanning.ShowStored();
+        Restore.Restore();
+        ViewModel.ShowStored();
+        Scanning.ShowStored();
     }
 
     private void ShowSpacing() => SpacingPreview.Show(MapLook.From(App.Preferences.Current), ExploreView.Treemap);
@@ -97,6 +104,10 @@ public sealed partial class SettingsPage : Page
     }
 
     public SettingsViewModel ViewModel { get; }
+
+    public ScanSettingsViewModel Scanning { get; }
+
+    public SettingsRestore Restore { get; }
 
     public ScanHistorySettingsViewModel History { get; }
 

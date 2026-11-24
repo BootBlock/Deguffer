@@ -9,7 +9,7 @@ namespace Deguffer.App.Tests;
 
 /// <summary>
 /// How the Scanning section holds the stored scan settings and the controls together: each box sets
-/// the kind of drive the picker names, an emptied box is Auto, a failed write says so, and the drives
+/// the kind of drive the picker names, an emptied box is Auto, a failed write says so on its row, and the drives
 /// present are described as their scans will run. What Auto means and what a typed number becomes
 /// are Core's, and proven in <c>ScanTuningTests</c>.
 /// </summary>
@@ -25,7 +25,7 @@ public sealed class ScanSettingsViewModelTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
-    private (ScanSettingsViewModel Section, PreferenceService Preferences, FakeStorageQueries Queries) Section()
+    private (ScanSettingsViewModel Section, PreferenceService Preferences, FakeStorageQueries Queries) Section(LatestSave? latest = null)
     {
         var preferences = new PreferenceService(new PreferenceStore(_environment));
         var queries = new FakeStorageQueries()
@@ -33,7 +33,7 @@ public sealed class ScanSettingsViewModelTests : IDisposable
             .Volume(@"D:\", 0).Disk(0, Sata, seekPenalty: true);
         var tuner = new ScanTuner(preferences, new VolumeMediaCache(queries), _volumes);
 
-        return (new ScanSettingsViewModel(preferences, tuner, _volumes), preferences, queries);
+        return (new ScanSettingsViewModel(preferences, tuner, _volumes, latest ?? new LatestSave()), preferences, queries);
     }
 
     private readonly FakeVolumeInventory _volumes = new FakeVolumeInventory().With(@"C:\").With(@"D:\");
@@ -68,7 +68,7 @@ public sealed class ScanSettingsViewModelTests : IDisposable
 
         Assert.Equal(new MediaScanPreferences(2, 64, 512, 6, 12), preferences.Current.Scanning.Rotational);
         Assert.Equal(MediaScanPreferences.Auto, preferences.Current.Scanning.Nvme);
-        Assert.False(section.SaveFailed);
+        Assert.Empty(FailedRows.Of(section));
     }
 
     /// <summary>Emptying a box is how a person goes back to Auto, and an Auto box reads back empty.</summary>
@@ -199,9 +199,25 @@ public sealed class ScanSettingsViewModelTests : IDisposable
 
         section.WalkThreads = 4;
 
-        Assert.True(section.SaveFailed);
+        Assert.Equal([nameof(ScanSettingsViewModel.WalkThreadsSave)], FailedRows.Of(section));
         Assert.True(double.IsNaN(section.WalkThreads));
         Assert.Contains(string.Empty, raised);
+    }
+
+    /// <summary>
+    /// The box put back to Auto sends Auto, which is what holds, so its row goes on saying the change
+    /// was not saved.
+    /// </summary>
+    [Fact]
+    public void ABoxPutBackAfterARefusedWriteLeavesItsNoticeStanding()
+    {
+        var (section, _, _) = Section();
+        Directory.CreateDirectory(Path.Combine(_environment.LocalAppData, "Deguffer", "preferences.json"));
+
+        section.WalkThreads = 4;
+        section.WalkThreads = section.WalkThreads;
+
+        Assert.Equal([nameof(ScanSettingsViewModel.WalkThreadsSave)], FailedRows.Of(section));
     }
 
     /// <summary>
@@ -243,19 +259,19 @@ public sealed class ScanSettingsViewModelTests : IDisposable
         section.KindIndex = KindIndex(section, StorageMedia.SolidState);
         section.ListingBufferKiB = 32;
 
-        Assert.True(section.ListingBufferKiBDefault.CanReset);
+        Assert.True(section.Defaults.ListingBufferKiB.CanReset);
 
-        section.ListingBufferKiBDefault.Reset();
+        section.Defaults.ListingBufferKiB.Reset();
 
         Assert.Null(preferences.Current.Scanning.SolidState.ListingBufferKiB);
         Assert.Equal(64, preferences.Current.Scanning.Rotational.ListingBufferKiB);
-        Assert.False(section.ListingBufferKiBDefault.CanReset);
+        Assert.False(section.Defaults.ListingBufferKiB.CanReset);
         Assert.True(double.IsNaN(section.ListingBufferKiB));
 
         section.KindIndex = KindIndex(section, StorageMedia.Rotational);
 
-        Assert.True(section.ListingBufferKiBDefault.CanReset);
-        Assert.Equal("Default: Auto", section.ListingBufferKiBDefault.Statement);
+        Assert.True(section.Defaults.ListingBufferKiB.CanReset);
+        Assert.Equal("Default: Auto", section.Defaults.ListingBufferKiB.Statement);
     }
 
     /// <summary>After the page restores every setting, the section reads back each value, its summary and its drives.</summary>
@@ -274,7 +290,7 @@ public sealed class ScanSettingsViewModelTests : IDisposable
 
         Assert.Contains(string.Empty, raised);
         Assert.Equal(ScanTuningText.Summary(ScanPreferences.Default), section.Summary);
-        Assert.False(section.RouteDefault.CanReset);
+        Assert.False(section.Defaults.Route.CanReset);
         Assert.All(section.Drives, drive => Assert.DoesNotContain("3 threads,", drive.Text, StringComparison.Ordinal));
     }
 
@@ -286,7 +302,7 @@ public sealed class ScanSettingsViewModelTests : IDisposable
     public void EachRowsResetIsTheSettingItIsNamedForOnEveryKind()
     {
         var (section, _, _) = Section();
-        var rows = typeof(ScanSettingsViewModel).GetProperties().Where(property => property.PropertyType == typeof(SettingReset)).ToList();
+        var rows = typeof(ScanSettingsDefaults).GetProperties().Where(property => property.PropertyType == typeof(SettingReset)).ToList();
 
         foreach (var media in ScanTuningText.Kinds)
         {
@@ -294,12 +310,11 @@ public sealed class ScanSettingsViewModelTests : IDisposable
 
             foreach (var property in rows)
             {
-                var name = property.Name[..^"Default".Length];
-                var expected = typeof(ShippedSettings).GetField(name)?.GetValue(null)
-                    ?? typeof(KindSettingDefaults).GetProperty(name)?.GetValue(ShippedSettings.ForKind(media));
+                var expected = typeof(ShippedSettings).GetField(property.Name)?.GetValue(null)
+                    ?? typeof(KindSettingDefaults).GetProperty(property.Name)?.GetValue(ShippedSettings.ForKind(media));
 
                 Assert.True(expected is not null, $"{property.Name} names no setting the page restores.");
-                Assert.Same(expected, ((SettingReset)property.GetValue(section)!).Setting);
+                Assert.Same(expected, ((SettingReset)property.GetValue(section.Defaults)!).Setting);
             }
         }
     }

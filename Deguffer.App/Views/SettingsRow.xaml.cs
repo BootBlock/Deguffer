@@ -1,4 +1,6 @@
 using Deguffer.App.ViewModels;
+using Deguffer.App.Shell;
+using Deguffer.Core.Viewing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -41,6 +43,9 @@ public sealed partial class SettingsRow : UserControl
 
     public static readonly DependencyProperty ControlProperty =
         DependencyProperty.Register(nameof(Control), typeof(object), typeof(SettingsRow), new PropertyMetadata(null));
+
+    public static readonly DependencyProperty SaveFailedProperty =
+        DependencyProperty.Register(nameof(SaveFailed), typeof(bool), typeof(SettingsRow), new PropertyMetadata(false, OnSaveFailedChanged));
 
     public SettingsRow() => InitializeComponent();
 
@@ -116,6 +121,38 @@ public sealed partial class SettingsRow : UserControl
         string.Concat(ResetName(title).Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(word => char.ToUpperInvariant(word[0]) + word[1..]));
 
     private void OnResetClicked(object sender, RoutedEventArgs e) => Default?.Reset();
+
+    /// <summary>
+    /// Whether the last change made through this row could not be written to disk. The row says so
+    /// under its words, and the page scrolls to the notice, so it is read where the value went back.
+    /// </summary>
+    public bool SaveFailed
+    {
+        get => (bool)GetValue(SaveFailedProperty);
+        set => SetValue(SaveFailedProperty, value);
+    }
+
+    private static void OnSaveFailedChanged(DependencyObject sender, DependencyPropertyChangedEventArgs change) =>
+        ((SettingsRow)sender).ShowSaveNotice((bool)change.NewValue);
+
+    private void ShowSaveNotice(bool failed)
+    {
+        SaveNotice.IsOpen = failed;
+
+        if (!failed)
+        {
+            return;
+        }
+
+        // Laid out first: while it was closed the notice took no room, so the scroller would be asked
+        // to show where it was rather than where it now is, and could stop short of its last line.
+        UpdateLayout();
+
+        SaveNotice.StartBringIntoView(new BringIntoViewOptions
+        {
+            AnimationDesired = SystemMotion.Current.For(MotionToken.List).Travels,
+        });
+    }
 
     /// <summary>Whether a part of the row with words in it, its details or its unit, is drawn.</summary>
     public static Visibility IsShown(string words) =>

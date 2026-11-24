@@ -1303,7 +1303,7 @@ public sealed partial class CleanViewModel : ObservableObject
 
         var saved = keeping
             ? _keeps.Keep(new KeptItem(providerId, row.Name, identity))
-            : _keeps.Release(providerId, identity.Key);
+            : _keeps.Release(providerId, identity.Key) is SaveOutcome.Saved;
 
         ApplyKeepList();
 

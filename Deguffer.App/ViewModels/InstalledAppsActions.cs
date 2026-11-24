@@ -83,7 +83,7 @@ public sealed partial class InstalledAppsActions : ObservableObject
         get => _preferences.Current.BackUpInstalledAppEntries;
         set
         {
-            if (!_preferences.Update(p => p with { BackUpInstalledAppEntries = value }))
+            if (_preferences.Update(p => p with { BackUpInstalledAppEntries = value }) is SaveOutcome.Refused)
             {
                 Show("Deguffer could not save the backup setting, so it is unchanged.", InfoBarSeverity.Warning);
             }

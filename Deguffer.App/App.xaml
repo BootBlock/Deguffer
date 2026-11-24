@@ -107,6 +107,7 @@
             <x:Double x:Key="ControlGap">8</x:Double>
             <x:Double x:Key="RegionGap">16</x:Double>
             <Thickness x:Key="RegionGapAbove">0,16,0,0</Thickness>
+            <Thickness x:Key="ControlGapAbove">0,8,0,0</Thickness>
             <Thickness x:Key="CardPadding">20</Thickness>
             <Thickness x:Key="CardBleed">-20,0</Thickness>
             <Thickness x:Key="CardRowPadding">16,12</Thickness>

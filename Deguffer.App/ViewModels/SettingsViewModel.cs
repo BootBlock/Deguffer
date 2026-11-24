@@ -11,8 +11,8 @@ namespace Deguffer.App.ViewModels;
 
 /// <summary>
 /// The Settings page's bindable surface. It maps preferences to and from what the controls
-/// actually expose — a combo box has a selected index, not an <see cref="AppTheme"/> — and says so
-/// when a change could not be written to disk.
+/// actually expose — a combo box has a selected index, not an <see cref="AppTheme"/> — and says, on
+/// the row that made it, when a change could not be written to disk.
 ///
 /// The values themselves live in <see cref="PreferenceService"/>; this holds none of them.
 /// </summary>
@@ -23,118 +23,55 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly EmulatorFolderService _emulatorFolders;
     private readonly KeepService _keeps;
     private readonly IVolumeInventory _volumes;
+    private readonly LatestSave _latest;
 
     /// <param name="volumes">
     /// The machine's volumes, so that approving a folder can say what the folder is stored on.
     /// Required rather than defaulted, as <see cref="ExploreViewModel"/> takes it: the page passes
     /// the machine's own and a test passes a fake, and neither is the one to fall back to.
     /// </param>
+    /// <param name="latest">The page's one notice of a failed save, shared with every form on the page.</param>
     public SettingsViewModel(
         PreferenceService preferences,
         SourceRootService sourceRoots,
         EmulatorFolderService emulatorFolders,
         KeepService keeps,
-        IVolumeInventory volumes)
+        IVolumeInventory volumes,
+        LatestSave latest)
     {
         _preferences = preferences;
         _sourceRoots = sourceRoots;
         _emulatorFolders = emulatorFolders;
         _keeps = keeps;
         _volumes = volumes;
+        _latest = latest;
 
         _announcedSpacing = preferences.Current.TreemapSpacing;
         SourceRoots = [.. sourceRoots.Current];
         EmulatorFolders = [.. emulatorFolders.Current];
         KeptItems = [.. InDisplayOrder(keeps.Current)];
 
-        _defaults =
-        [
-            ThemeDefault = Row(ShippedSettings.Theme),
-            BackdropEnabledDefault = Row(ShippedSettings.BackdropEnabled),
-            TreemapSpacingDefault = Row(ShippedSettings.TreemapSpacing),
-            ShowAlreadyClearDefault = Row(ShippedSettings.ShowAlreadyClear),
-            SpotlightCleanedRowDefault = Row(ShippedSettings.SpotlightCleanedRow),
-            ConfirmBeforeCleaningDefault = Row(ShippedSettings.ConfirmBeforeCleaning),
-            RequireTypedConfirmationDefault = Row(ShippedSettings.RequireTypedConfirmation),
-            KeepFilesChangedWithinHoursDefault = Row(ShippedSettings.KeepFilesChangedWithinHours),
-            MinimumTemporaryFileAgeDefault = Row(ShippedSettings.MinimumTemporaryFileAge),
-            FileHistoryRetentionDaysDefault = Row(ShippedSettings.FileHistoryRetentionDays),
-            EmptyRecycleBinsDirectlyDefault = Row(ShippedSettings.EmptyRecycleBinsDirectly),
-        ];
-
-        CanRestoreDefaults = ShippedSettings.AnyChanged(preferences.Current);
+        Defaults = new SettingsFormDefaults(preferences, this, Reset);
     }
 
-    /// <summary>Every row's default, refreshed together after any write.</summary>
-    private readonly SettingReset[] _defaults;
-
-    public SettingReset ThemeDefault { get; }
-
-    public SettingReset BackdropEnabledDefault { get; }
-
-    public SettingReset TreemapSpacingDefault { get; }
-
-    public SettingReset ShowAlreadyClearDefault { get; }
-
-    public SettingReset SpotlightCleanedRowDefault { get; }
-
-    public SettingReset ConfirmBeforeCleaningDefault { get; }
-
-    public SettingReset RequireTypedConfirmationDefault { get; }
-
-    public SettingReset KeepFilesChangedWithinHoursDefault { get; }
-
-    public SettingReset MinimumTemporaryFileAgeDefault { get; }
-
-    public SettingReset FileHistoryRetentionDaysDefault { get; }
-
-    public SettingReset EmptyRecycleBinsDirectlyDefault { get; }
-
-    private SettingReset Row(SettingDefault setting) => new(_preferences, () => setting, Reset);
+    /// <summary>Each row's default, and the way back to it.</summary>
+    public SettingsFormDefaults Defaults { get; }
 
     /// <summary>
     /// Put one setting back to its default. Every control reads the stored settings again, because the
     /// row that asked does not say which property its control is bound to.
     /// </summary>
-    private void Reset(SettingDefault setting) => Apply(setting.Reset, string.Empty);
+    private void Reset(SettingSave row, SettingDefault setting) => Apply(row, setting.Reset, string.Empty);
 
     /// <summary>
-    /// Whether any setting on the page is off its default, the scanning values included, which is when
-    /// the page offers to restore them. Held rather than read each time, so the button is told only when
-    /// the answer turns over.
+    /// Read every control, the spacing box's record and every row's default again, after the page put
+    /// back every setting at once.
     /// </summary>
-    public bool CanRestoreDefaults { get; private set; }
-
-    /// <summary>What the reader is asked before every setting goes back, or null where none is off its default.</summary>
-    public RestoreDefaultsPrompt? RestorePrompt() => RestoreDefaultsPrompt.For(_preferences.Current);
-
-    /// <summary>
-    /// Put every setting on the page back to its default, and leave the keep list, the source folders and
-    /// the emulator folders as they are: those are lists the reader built, kept by services of their own,
-    /// and this writes only the preferences. The scanning section reads its own values again, as the page
-    /// tells it to.
-    /// </summary>
-    public void RestoreDefaults() => Apply(ShippedSettings.RestoreAll, string.Empty);
-
-    /// <summary>
-    /// Read every row's default and the restore again. This view-model does so after each of its own
-    /// writes, and the page after every write, the scanning section's included; each part is announced
-    /// only where its answer changed, so the second reading of one write tells nobody anything.
-    /// </summary>
-    public void FollowStoredDefaults()
+    public void ShowStored()
     {
-        foreach (var row in _defaults)
-        {
-            row.Refresh();
-        }
-
-        var canRestore = ShippedSettings.AnyChanged(_preferences.Current);
-
-        if (canRestore != CanRestoreDefaults)
-        {
-            CanRestoreDefaults = canRestore;
-            OnPropertyChanged(nameof(CanRestoreDefaults));
-        }
+        _announcedSpacing = _preferences.Current.TreemapSpacing;
+        OnPropertyChanged(string.Empty);
+        Defaults.Follow();
     }
 
     /// <summary>
@@ -159,8 +96,8 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// <summary>Stop keeping <paramref name="item"/>, and re-read the list from the service.</summary>
     public void ReleaseKeptItem(KeptItem item)
     {
-        // An unreadable stored list is already stated on the page, and is not a write that failed.
-        SaveFailed = !_keeps.Release(item.ProviderId, item.Item.Key) && !_keeps.StoredListUnreadable;
+        // An unreadable stored list is already stated on the page, and the release writes nothing to it.
+        _latest.Report(KeptItemsSave, _keeps.Release(item.ProviderId, item.Item.Key));
 
         // Brought up to date rather than emptied and filled: releasing one item costs the list one
         // removal, and the reader's place in the rest of it is where they left it.
@@ -245,9 +182,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// mirroring the requested value here would let this list drift from the folders Deguffer will
     /// really search — the one place that drift is invisible to the user.
     /// </summary>
-    private void Apply(Func<bool> change)
+    private void Apply(Func<SaveOutcome> change)
     {
-        SaveFailed = !change();
+        _latest.Report(SourceRootsSave, change());
 
         LiveList.Show(SourceRoots, (SourceRoot[])[.. _sourceRoots.Current], root => root.Path);
 
@@ -283,10 +220,10 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public void RemoveEmulatorFolder(string folder) => ApplyEmulatorFolders(() => _emulatorFolders.Remove(folder));
 
-    /// <summary>Run a change and re-read the list from the service, for the reason <see cref="Apply(Func{bool})"/> does.</summary>
-    private void ApplyEmulatorFolders(Func<bool> change)
+    /// <summary>Run a change and re-read the list from the service, for the reason <see cref="Apply(Func{SaveOutcome})"/> does.</summary>
+    private void ApplyEmulatorFolders(Func<SaveOutcome> change)
     {
-        SaveFailed = !change();
+        _latest.Report(EmulatorFoldersSave, change());
 
         LiveList.Show(EmulatorFolders, (string[])[.. _emulatorFolders.Current], folder => folder);
 
@@ -297,7 +234,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     public int ThemeIndex
     {
         get => (int)_preferences.Current.Theme;
-        set => Apply(current => current with { Theme = (AppTheme)value });
+        set => Apply(ThemeSave, current => current with { Theme = (AppTheme)value });
     }
 
     /// <summary>
@@ -312,7 +249,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             // Recorded before the write, because the write calls FollowStoredSpacing as it lands and
             // Apply announces the box anyway. Read back after it, as a refused write stores nothing.
             _announcedSpacing = (ExploreSpacing)value;
-            Apply(current => current with { TreemapSpacing = (ExploreSpacing)value });
+            Apply(TreemapSpacingSave, current => current with { TreemapSpacing = (ExploreSpacing)value });
             _announcedSpacing = _preferences.Current.TreemapSpacing;
         }
     }
@@ -344,7 +281,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     public bool BackdropEnabled
     {
         get => _preferences.Current.BackdropEnabled;
-        set => Apply(current => current with { BackdropEnabled = value });
+        set => Apply(BackdropEnabledSave, current => current with { BackdropEnabled = value });
     }
 
     /// <summary>
@@ -355,7 +292,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     public bool ShowAlreadyClear
     {
         get => _preferences.Current.ShowAlreadyClear;
-        set => Apply(current => current with { ShowAlreadyClear = value });
+        set => Apply(ShowAlreadyClearSave, current => current with { ShowAlreadyClear = value });
     }
 
     /// <summary>
@@ -365,19 +302,19 @@ public sealed partial class SettingsViewModel : ObservableObject
     public bool SpotlightCleanedRow
     {
         get => _preferences.Current.SpotlightCleanedRow;
-        set => Apply(current => current with { SpotlightCleanedRow = value });
+        set => Apply(SpotlightCleanedRowSave, current => current with { SpotlightCleanedRow = value });
     }
 
     public bool ConfirmBeforeCleaning
     {
         get => _preferences.Current.ConfirmBeforeCleaning;
-        set => Apply(current => current with { ConfirmBeforeCleaning = value });
+        set => Apply(ConfirmBeforeCleaningSave, current => current with { ConfirmBeforeCleaning = value });
     }
 
     public bool RequireTypedConfirmation
     {
         get => _preferences.Current.RequireTypedConfirmation;
-        set => Apply(current => current with { RequireTypedConfirmation = value });
+        set => Apply(RequireTypedConfirmationSave, current => current with { RequireTypedConfirmation = value });
     }
 
     /// <summary>
@@ -391,7 +328,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     public bool EmptyRecycleBinsDirectly
     {
         get => _preferences.Current.EmptyRecycleBinsDirectly;
-        set => Apply(current => current with { EmptyRecycleBinsDirectly = value });
+        set => Apply(EmptyRecycleBinsDirectlySave, current => current with { EmptyRecycleBinsDirectly = value });
     }
 
     /// <summary>
@@ -409,7 +346,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     public double KeepFilesChangedWithinHours
     {
         get => _preferences.Current.KeepFilesChangedWithinHours;
-        set => Apply(current => current with { KeepFilesChangedWithinHours = EnteredSetting.KeepHours(value) });
+        set => Apply(KeepFilesChangedWithinHoursSave, current => current with { KeepFilesChangedWithinHours = EnteredSetting.KeepHours(value) });
     }
 
     /// <summary>
@@ -432,7 +369,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     public double FileHistoryRetentionDays
     {
         get => _preferences.Current.FileHistoryRetentionDays;
-        set => Apply(current => current with { FileHistoryRetentionDays = EnteredSetting.FileHistoryRetentionDays(value) });
+        set => Apply(FileHistoryRetentionDaysSave, current => current with { FileHistoryRetentionDays = EnteredSetting.FileHistoryRetentionDays(value) });
     }
 
     /// <summary>
@@ -451,20 +388,43 @@ public sealed partial class SettingsViewModel : ObservableObject
     public double MinimumTemporaryFileAge
     {
         get => _preferences.Current.MinimumTemporaryFileAgeDays;
-        set => Apply(current => current with { MinimumTemporaryFileAgeDays = EnteredSetting.TemporaryFileAgeDays(value) });
+        set => Apply(MinimumTemporaryFileAgeSave, current => current with { MinimumTemporaryFileAgeDays = EnteredSetting.TemporaryFileAgeDays(value) });
     }
 
-    /// <summary>
-    /// Shown only when a write failed. A settings page that silently discards a choice is worse
-    /// than one that never offered it — the user has no way to tell it did not take.
-    /// </summary>
-    [ObservableProperty]
-    public partial bool SaveFailed { get; set; }
+    /// <summary>Whether the last change made through each row could not be saved, for that row to say so.</summary>
+    public SettingSave ThemeSave { get; } = new();
 
+    public SettingSave TreemapSpacingSave { get; } = new();
+
+    public SettingSave BackdropEnabledSave { get; } = new();
+
+    public SettingSave ShowAlreadyClearSave { get; } = new();
+
+    public SettingSave SpotlightCleanedRowSave { get; } = new();
+
+    public SettingSave ConfirmBeforeCleaningSave { get; } = new();
+
+    public SettingSave RequireTypedConfirmationSave { get; } = new();
+
+    public SettingSave KeepFilesChangedWithinHoursSave { get; } = new();
+
+    public SettingSave MinimumTemporaryFileAgeSave { get; } = new();
+
+    public SettingSave FileHistoryRetentionDaysSave { get; } = new();
+
+    public SettingSave SourceRootsSave { get; } = new();
+
+    public SettingSave EmulatorFoldersSave { get; } = new();
+
+    public SettingSave KeptItemsSave { get; } = new();
+
+    public SettingSave EmptyRecycleBinsDirectlySave { get; } = new();
+
+    /// <param name="row">The row whose control made the change, which says so if it was not saved.</param>
     /// <param name="setting">The property whose control made the change, which is the setter calling this.</param>
-    private void Apply(Func<AppPreferences, AppPreferences> change, [CallerMemberName] string setting = "")
+    private void Apply(SettingSave row, Func<AppPreferences, AppPreferences> change, [CallerMemberName] string setting = "")
     {
-        SaveFailed = !_preferences.Update(change);
+        var outcome = _latest.Report(row, _preferences.Update(change));
 
         // A rejected write changes nothing, so the control is now showing a value that is not in
         // effect. Re-reading every bound property puts it back to what actually holds, rather than
@@ -473,7 +433,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         // A write that succeeds can store something other than what was typed, because a number goes
         // through EnteredSetting first: half an hour is stored as one. The control that made the
         // change reads it back, or it goes on showing a value that is not in effect.
-        var announced = SaveFailed ? string.Empty : setting;
+        var announced = outcome is SaveOutcome.Refused ? string.Empty : setting;
 
         if (announced.Length == 0)
         {
@@ -483,6 +443,6 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
 
         OnPropertyChanged(announced);
-        FollowStoredDefaults();
+        Defaults.Follow();
     }
 }

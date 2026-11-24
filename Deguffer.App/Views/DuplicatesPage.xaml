@@ -431,7 +431,7 @@
 
                             <TextBlock Text="Your choices could not be saved, so they will not be remembered next time."
                                        Foreground="{ThemeResource SystemFillColorCautionBrush}" TextWrapping="Wrap"
-                                       Visibility="{x:Bind ViewModel.Filters.SaveFailed, Mode=OneWay}" />
+                                       Visibility="{x:Bind ViewModel.Filters.Save.Failed, Mode=OneWay}" />
                         </StackPanel>
                     </controls:SplitColumns>
                 </StackPanel>

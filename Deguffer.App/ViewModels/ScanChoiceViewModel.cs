@@ -101,7 +101,7 @@ public sealed partial class ScanChoiceViewModel : ObservableObject
             return;
         }
 
-        SaveFailed = !_preferences.Update(current => current with { ChosenToScan = changed });
+        SaveFailed = _preferences.Update(current => current with { ChosenToScan = changed }) is SaveOutcome.Refused;
 
         if (SaveFailed)
         {

@@ -51,7 +51,7 @@ public sealed class DrawnSettingTests : IDisposable
     [Fact]
     public void OnlyTheSettingChosenIsWritten()
     {
-        Assert.True(_preferences.Update(current => current with { ExploreOverviewHidden = true }));
+        Assert.Equal(SaveOutcome.Saved, _preferences.Update(current => current with { ExploreOverviewHidden = true }));
         var setting = Setting(_ => { });
 
         setting.Choose(true);
@@ -68,7 +68,7 @@ public sealed class DrawnSettingTests : IDisposable
 
         Assert.False(setting.Stored);
 
-        Assert.True(_preferences.Update(current => current with { ExploreNotesDismissed = true }));
+        Assert.Equal(SaveOutcome.Saved, _preferences.Update(current => current with { ExploreNotesDismissed = true }));
 
         Assert.True(setting.Stored);
     }

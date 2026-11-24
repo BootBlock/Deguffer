@@ -389,7 +389,7 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
 
         Raise();
 
-        return _preferences.Update(write);
+        return _preferences.Update(write) is not SaveOutcome.Refused;
     }
 
     /// <summary>
