@@ -726,8 +726,8 @@ public class CleanViewModelCleanTests
     /// <summary>
     /// A row the run emptied says "Already clear" once it is planned again, and the filter that hides
     /// such rows takes it out of the drawn rows on its own, so the list can show it leaving, with the
-    /// empty state saying why the list is empty. The row stays in the findings, ready for the filter
-    /// to be switched off.
+    /// empty state saying there is nothing left to clean. The row stays in the findings, ready for the
+    /// filter to be switched off.
     /// </summary>
     [Fact]
     public void ARowTheRunEmptiedIsFilteredAgainWhenItIsPlannedAgain()
@@ -749,7 +749,66 @@ public class CleanViewModelCleanTests
         Assert.Equal([NotifyCollectionChangedAction.Remove], changes);
         Assert.DoesNotContain(row, page.ViewModel.Listed);
         Assert.Same(row, page.Row("cache"));
-        Assert.Equal("Every row is hidden", page.ViewModel.EmptyState.Title);
+        Assert.Equal("Nothing left to clean", page.ViewModel.EmptyState.Title);
+    }
+
+    /// <summary>
+    /// A clean that empties every row is the best result the page can show, so the empty state says
+    /// so: nothing left to clean, how far the free space moved, and a button to list the clear
+    /// locations. A tool this machine lacks, hidden beside them, does not turn it back into a filter
+    /// to undo.
+    /// </summary>
+    [Fact]
+    public void ACleanThatEmptiesEveryRowSaysThereIsNothingLeftToClean()
+    {
+        var cache = new FakeCleanupProvider("cache");
+        var absent = new FakeCleanupProvider("absent") { IsPresent = false };
+        using var page = new StoragePage([cache, absent], freeBytes: 400_000);
+        cache.Steps = [page.Cache("a", 1024)];
+        cache.AfterCleaning = () =>
+        {
+            cache.Steps = [];
+            page.FreeSpaceBecomes(410_240);
+        };
+        page.Scan();
+        var empty = page.ViewModel.EmptyState;
+        Assert.False(empty.IsShown);
+
+        page.Clean();
+
+        Assert.Equal(FindingStatus.ToolchainMissing, page.Row("absent").Status);
+        Assert.True(empty.IsShown);
+        Assert.Equal("Nothing left to clean", empty.Title);
+        Assert.Equal(
+            $"Free space is up {FreeSpace.Format(10_240)} from {FreeSpace.Format(400_000)} before the clean. "
+            + "Nothing the scan found has anything left to remove.",
+            empty.Message);
+        Assert.Equal("Show items that are already clear", empty.Remedy);
+        Assert.Equal("\uE73E", empty.Glyph);
+    }
+
+    /// <summary>The sentence follows a later reading of the volume, as the line beside the hero figure does.</summary>
+    [Fact]
+    public void TheEmptyStateFollowsALaterReadingOfTheFreeSpace()
+    {
+        var cache = new FakeCleanupProvider("cache");
+        using var page = new StoragePage([cache], freeBytes: 400_000);
+        cache.Steps = [page.Cache("a", 1024)];
+        cache.AfterCleaning = () =>
+        {
+            cache.Steps = [];
+            page.FreeSpaceBecomes(410_240);
+        };
+        page.Scan();
+        page.Clean();
+        var raised = page.ViewModel.EmptyState.Notifications();
+
+        page.ViewModel.FreeSpaceNow = 420_480;
+
+        Assert.Contains(nameof(StorageEmptyState.Message), raised);
+        Assert.StartsWith(
+            $"Free space is up {FreeSpace.Format(20_480)} from {FreeSpace.Format(400_000)} before the clean.",
+            page.ViewModel.EmptyState.Message);
     }
 
     /// <summary>

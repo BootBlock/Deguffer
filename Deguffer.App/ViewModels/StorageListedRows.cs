@@ -29,10 +29,11 @@ internal sealed class StorageListedRows
     private PreviewFilter _filter;
 
     /// <param name="findings">Every row of the scan, in the order the list shows them.</param>
-    public StorageListedRows(ObservableCollection<FindingViewModel> findings)
+    /// <param name="page">The page these rows are on, whose scan and last clean <see cref="Empty"/> describes.</param>
+    public StorageListedRows(ObservableCollection<FindingViewModel> findings, CleanViewModel page)
     {
         _findings = findings;
-        Empty = new StorageEmptyState(findings, this);
+        Empty = new StorageEmptyState(findings, this, page);
 
         findings.CollectionChanged += (_, changed) =>
         {

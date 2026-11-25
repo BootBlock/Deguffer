@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
 
@@ -37,6 +38,13 @@ public sealed partial class AlreadyClearSwitch : ObservableObject
             OnPropertyChanged();
         }
     }
+
+    /// <summary>
+    /// Switch the filter off, so the clear locations are listed. Pressed from the empty state a clean
+    /// leaves when it empties the list, which offers the same thing as ticking the box.
+    /// </summary>
+    [RelayCommand]
+    private void Show() => IsOn = true;
 
     /// <summary>Whether the last change could not be written, which the page states beside the box.</summary>
     public SettingSave Save { get; } = new();

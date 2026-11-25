@@ -28,6 +28,17 @@ public sealed record FreeSpaceMove(long Before, long After)
     };
 
     /// <summary>
+    /// The move as a sentence that stands on its own, away from the free space it describes, such as
+    /// under a list the clean emptied. Says whose space it is, because nothing beside it does.
+    /// </summary>
+    public string Sentence => Change switch
+    {
+        > 0 => $"Free space is up {FreeSpace.Format(Change)} from {FreeSpace.Format(Before)} before the clean.",
+        < 0 => $"Free space is down {FreeSpace.Format(-Change)} from {FreeSpace.Format(Before)} before the clean.",
+        _ => $"Free space is unchanged at {FreeSpace.Format(Before)}.",
+    };
+
+    /// <summary>
     /// The move between two readings, or null where either is unknown. A figure from one reading alone
     /// would be a guess dressed as a measurement.
     /// </summary>
