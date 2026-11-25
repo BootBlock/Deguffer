@@ -16,7 +16,7 @@ public sealed partial class StorageEmptyState : ObservableObject
 
     private readonly StorageListedRows _listed;
 
-    private readonly CleanRunResultViewModel _runResult;
+    private readonly CleanViewModel _page;
 
     /// <summary>
     /// Why nothing is drawn, decided once per update rather than once per property the page reads. Left
@@ -26,13 +26,18 @@ public sealed partial class StorageEmptyState : ObservableObject
 
     /// <param name="findings">Every row of the scan, drawn or not.</param>
     /// <param name="listed">What the card draws of them.</param>
-    /// <param name="runResult">The last clean's result, whose free-space move the card states once that clean has emptied the list.</param>
-    internal StorageEmptyState(ObservableCollection<FindingViewModel> findings, StorageListedRows listed, CleanRunResultViewModel runResult)
+    /// <param name="page">
+    /// The page, whose <see cref="CleanViewModel.HasPreview"/> says whether the rows are the whole scan,
+    /// and whose last clean's free-space move the card states once that clean has emptied the list.
+    /// Its <see cref="CleanViewModel.RunResult"/> is set before this is built.
+    /// </param>
+    internal StorageEmptyState(ObservableCollection<FindingViewModel> findings, StorageListedRows listed, CleanViewModel page)
     {
         _findings = findings;
         _listed = listed;
-        _runResult = runResult;
-        runResult.PropertyChanged += OnRunResultChanged;
+        _page = page;
+        page.PropertyChanged += OnPageChanged;
+        page.RunResult.PropertyChanged += OnRunResultChanged;
     }
 
     /// <summary>
@@ -47,11 +52,12 @@ public sealed partial class StorageEmptyState : ObservableObject
     public bool IsShown => _listed.Rows.Count == 0 && !_listed.AwaitingFolders.HasRows;
 
     /// <summary>A tick for a result, and the search glyph over a list still to fill or to unfilter.</summary>
-    public string Glyph => _reason == EmptyPreview.NothingLeftToClean ? "\uE73E" : "\uE721";
+    public string Glyph => _reason is EmptyPreview.NothingLeftToClean or EmptyPreview.NothingToCleanSoFar ? "\uE73E" : "\uE721";
 
     public string Title => _reason switch
     {
         EmptyPreview.NothingLeftToClean => "Nothing left to clean",
+        EmptyPreview.NothingToCleanSoFar => "Nothing to clean so far",
         EmptyPreview.HiddenByFilters => "Every row is hidden",
         _ => "Nothing scanned yet",
     };
@@ -63,9 +69,11 @@ public sealed partial class StorageEmptyState : ObservableObject
     /// </summary>
     public string Message => _reason switch
     {
-        EmptyPreview.NothingLeftToClean when _runResult.Move is { } move =>
+        EmptyPreview.NothingLeftToClean when _page.RunResult.Move is { } move =>
             $"{move.Sentence} Nothing the scan found has anything left to remove.",
         EmptyPreview.NothingLeftToClean => "Nothing the scan found has anything left to remove.",
+        EmptyPreview.NothingToCleanSoFar =>
+            "Nothing the scan has reached has anything to remove. The locations it has not reached may still hold something.",
         EmptyPreview.HiddenByFilters =>
             "The scan found only locations whose tools are not installed, and the filter above the list "
             + "hides them. Tick “Show items not installed” to list them.",
@@ -77,7 +85,7 @@ public sealed partial class StorageEmptyState : ObservableObject
     /// The words of the button that lists the clear locations, empty where there are none to list.
     /// The button ticks the same box as the bar over the list (<see cref="AlreadyClearSwitch.ShowCommand"/>).
     /// </summary>
-    public string Remedy => _reason == EmptyPreview.NothingLeftToClean ? "Show items that are already clear" : string.Empty;
+    public string Remedy => _reason is EmptyPreview.NothingLeftToClean or EmptyPreview.NothingToCleanSoFar ? "Show items that are already clear" : string.Empty;
 
     /// <summary>
     /// Decide again why nothing is drawn, and tell the page to read everything again. Called by
@@ -86,12 +94,23 @@ public sealed partial class StorageEmptyState : ObservableObject
     /// </summary>
     internal void Changed()
     {
-        _reason = IsShown ? EmptyPreviewReason.Of(_findings.Select(static row => row.Status)) : EmptyPreview.NothingScanned;
+        _reason = IsShown
+            ? EmptyPreviewReason.Of(_findings.Select(static row => row.Status), _page.HasPreview ? PreviewExtent.Whole : PreviewExtent.Partial)
+            : EmptyPreview.NothingScanned;
         OnPropertyChanged(nameof(IsShown));
         OnPropertyChanged(nameof(Glyph));
         OnPropertyChanged(nameof(Title));
         OnPropertyChanged(nameof(Message));
         OnPropertyChanged(nameof(Remedy));
+    }
+
+    /// <summary>A scan that finishes turns "so far" into a verdict, and one that starts turns it back.</summary>
+    private void OnPageChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(CleanViewModel.HasPreview))
+        {
+            Changed();
+        }
     }
 
     /// <summary>The free space is read again after the run ends, and the sentence follows each reading.</summary>

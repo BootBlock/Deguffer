@@ -17,10 +17,27 @@ public enum EmptyPreview
     NothingLeftToClean,
 
     /// <summary>
+    /// As <see cref="NothingLeftToClean"/>, of a scan still running, or one that stopped before it
+    /// finished. The locations it has not reached may hold anything, so it claims only what it has
+    /// seen.
+    /// </summary>
+    NothingToCleanSoFar,
+
+    /// <summary>
     /// The scan found locations, and every one belongs to a tool this machine does not have, which
     /// the not-installed filter hides.
     /// </summary>
     HiddenByFilters,
+}
+
+/// <summary>How much of the scan the rows describe.</summary>
+public enum PreviewExtent
+{
+    /// <summary>A scan still running, or one cancelled or failed part-way.</summary>
+    Partial,
+
+    /// <summary>A scan that reached every location it set out to.</summary>
+    Whole,
 }
 
 /// <summary>The rule that names an <see cref="EmptyPreview"/>.</summary>
@@ -35,9 +52,13 @@ public static class EmptyPreviewReason
     /// there is nothing left to clean. Only a scan whose every location is not installed is the
     /// filter's doing alone, because "nothing left" would describe a machine that never had
     /// anything.</para>
+    ///
+    /// <para>"Nothing left" is a verdict on the whole scan, so a partial one says "so far": the
+    /// providers that finish first are often the ones with nothing to report.</para>
     /// </summary>
     /// <param name="found">The status of every row the scan produced, drawn or not.</param>
-    public static EmptyPreview Of(IEnumerable<FindingStatus> found)
+    /// <param name="extent">Whether those rows are the whole scan.</param>
+    public static EmptyPreview Of(IEnumerable<FindingStatus> found, PreviewExtent extent)
     {
         var any = false;
 
@@ -45,7 +66,7 @@ public static class EmptyPreviewReason
         {
             if (status == FindingStatus.AlreadyClear)
             {
-                return EmptyPreview.NothingLeftToClean;
+                return extent == PreviewExtent.Whole ? EmptyPreview.NothingLeftToClean : EmptyPreview.NothingToCleanSoFar;
             }
 
             any = true;

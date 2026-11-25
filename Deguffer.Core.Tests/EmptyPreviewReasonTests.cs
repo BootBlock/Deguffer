@@ -11,7 +11,7 @@ public sealed class EmptyPreviewReasonTests
 {
     [Fact]
     public void NoRowIsNothingScanned() =>
-        Assert.Equal(EmptyPreview.NothingScanned, EmptyPreviewReason.Of([]));
+        Assert.Equal(EmptyPreview.NothingScanned, EmptyPreviewReason.Of([], PreviewExtent.Whole));
 
     /// <summary>
     /// The state a clean that emptied everything leaves: each location it cleaned is clear, and the
@@ -22,8 +22,23 @@ public sealed class EmptyPreviewReasonTests
     {
         Assert.Equal(
             EmptyPreview.NothingLeftToClean,
-            EmptyPreviewReason.Of([FindingStatus.ToolchainMissing, FindingStatus.AlreadyClear, FindingStatus.ToolchainMissing]));
-        Assert.Equal(EmptyPreview.NothingLeftToClean, EmptyPreviewReason.Of([FindingStatus.AlreadyClear]));
+            EmptyPreviewReason.Of([FindingStatus.ToolchainMissing, FindingStatus.AlreadyClear, FindingStatus.ToolchainMissing], PreviewExtent.Whole));
+        Assert.Equal(EmptyPreview.NothingLeftToClean, EmptyPreviewReason.Of([FindingStatus.AlreadyClear], PreviewExtent.Whole));
+    }
+
+    /// <summary>
+    /// A scan still running, or stopped part-way, has not reached every location, and the next to land
+    /// may hold gigabytes, so it claims only what it has seen.
+    /// </summary>
+    [Fact]
+    public void APartialScanIsNothingToCleanSoFar()
+    {
+        Assert.Equal(
+            EmptyPreview.NothingToCleanSoFar,
+            EmptyPreviewReason.Of([FindingStatus.ToolchainMissing, FindingStatus.AlreadyClear], PreviewExtent.Partial));
+        Assert.Equal(
+            EmptyPreview.HiddenByFilters,
+            EmptyPreviewReason.Of([FindingStatus.ToolchainMissing], PreviewExtent.Partial));
     }
 
     /// <summary>A machine with none of the tools never had anything to clean, so saying nothing is left would be untrue.</summary>
@@ -31,5 +46,5 @@ public sealed class EmptyPreviewReasonTests
     public void EveryToolNotInstalledIsTheFiltersDoing() =>
         Assert.Equal(
             EmptyPreview.HiddenByFilters,
-            EmptyPreviewReason.Of([FindingStatus.ToolchainMissing, FindingStatus.ToolchainMissing]));
+            EmptyPreviewReason.Of([FindingStatus.ToolchainMissing, FindingStatus.ToolchainMissing], PreviewExtent.Whole));
 }

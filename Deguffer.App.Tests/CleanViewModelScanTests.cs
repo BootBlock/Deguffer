@@ -304,6 +304,39 @@ public class CleanViewModelScanTests
     }
 
     /// <summary>
+    /// While a scan runs, the locations that finish first can all be clear while one still to finish
+    /// holds something to remove, so the empty state claims only what the scan has reached, and says
+    /// nothing is left only once the scan is whole.
+    /// </summary>
+    [Fact]
+    public void APartScannedListSaysNothingToCleanOnlySoFar()
+    {
+        var clear = new FakeCleanupProvider("clear");
+        var full = new FakeCleanupProvider("full");
+        using var page = new StoragePage([clear, full]);
+        full.Steps = [page.Cache("a", 1024)];
+        page.FinishIn(clear, full);
+        string? titleWhileScanning = null;
+        page.ViewModel.Findings.CollectionChanged += (_, e) =>
+        {
+            if (e.Action == NotifyCollectionChangedAction.Add)
+            {
+                titleWhileScanning ??= page.ViewModel.EmptyState.Title;
+            }
+        };
+
+        page.Scan();
+
+        Assert.Equal("Nothing to clean so far", titleWhileScanning);
+        Assert.False(page.ViewModel.EmptyState.IsShown);
+
+        full.Steps = [];
+        page.Scan();
+
+        Assert.Equal("Nothing left to clean", page.ViewModel.EmptyState.Title);
+    }
+
+    /// <summary>
     /// A scan whose every location belongs to a tool this machine lacks has nothing left to clean only
     /// because it never had anything, so the empty state says the filter hides them, and offers no
     /// button to list clear locations there are none of.
