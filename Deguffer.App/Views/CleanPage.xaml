@@ -64,13 +64,13 @@
                                     ColumnSpacing="{StaticResource ControlGap}"
                                     RowSpacing="{StaticResource LabelGap}"
                                     VerticalAlignment="Center">
-                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
+                    <controls:FlowRow ColumnSpacing="{StaticResource ControlGap}" RowSpacing="{StaticResource LabelGap}">
                         <!-- The same sentence for a pointer. The row has no line to write it on, so it is
                              here, on the checkbox above, and in the disclosure below — §7 asks that it be
                              reachable from the row by whatever the reader is using. -->
                         <TextBlock Text="{x:Bind Name}"
                                    Style="{StaticResource BodyStrongTextBlockStyle}"
-                                   TextWrapping="NoWrap"
+                                   TextWrapping="Wrap"
                                    VerticalAlignment="Center"
                                    ToolTipService.ToolTip="{x:Bind Facts.WhatHappensOnNextUse}" />
 
@@ -87,7 +87,7 @@
                                          Click="OnItemsLinkClicked"
                                          AutomationProperties.Name="{x:Bind Text.ItemsLinkName}"
                                          AutomationProperties.AutomationId="{x:Bind AutomationIds.ItemsLink}" />
-                    </StackPanel>
+                    </controls:FlowRow>
 
                     <TextBlock Text="{x:Bind StatusLabel, Mode=OneWay}"
                                Visibility="{x:Bind CannotBeSelected, Mode=OneWay}"
@@ -97,7 +97,7 @@
                                TextAlignment="Right"
                                VerticalAlignment="Center" />
 
-                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
+                    <controls:FlowRow ColumnSpacing="{StaticResource ControlGap}" RowSpacing="{StaticResource LabelGap}">
                         <controls:ProviderChips Facts="{x:Bind Facts}" />
 
                         <!-- The group is on the cell rather than the figure, so a row whose figure is
@@ -112,7 +112,7 @@
                                        TextAlignment="Right"
                                        VerticalAlignment="Center" />
                         </Border>
-                    </StackPanel>
+                    </controls:FlowRow>
                 </controls:ReflowRow>
             </Grid>
         </DataTemplate>
@@ -137,19 +137,18 @@
 
                     <StackPanel Grid.Column="1" Spacing="{StaticResource ControlGap}">
 
-                        <!-- The name, the chips and the links on one line where they fit. Where
-                             they do not, the chips and the "What is this?" link move to a line of
-                             their own under the name (ReflowRow), rather than any of them giving
-                             up letters: the name is what says which row this is, a half-drawn
-                             link reads as a defect, and a trimmed chip can lose the word that names its tier.
-                             Right-aligned on either line, so the chips form one column down the
-                             list with the rows that did not wrap. -->
+                        <!-- The name, the chips and the links on one line where they fit. Where they do not, the
+                             chips and the "What is this?" link move under the name (ReflowRow), right-aligned so
+                             the chips stay in one column, and in a column narrower than a part, as with the rail
+                             open on the narrowest window, each part wraps (FlowRow) and the name wraps its words.
+                             None gives up letters: the name says which row this is, a half-drawn link reads as a
+                             defect, and a trimmed chip can lose the word that names its tier. -->
                         <controls:ReflowRow ColumnSpacing="{StaticResource ControlGap}"
                                             RowSpacing="{StaticResource LabelGap}">
-                            <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
+                            <controls:FlowRow ColumnSpacing="{StaticResource ControlGap}" RowSpacing="{StaticResource LabelGap}">
                                 <TextBlock Text="{x:Bind Name}"
                                            Style="{StaticResource BodyStrongTextBlockStyle}"
-                                           TextWrapping="NoWrap"
+                                           TextWrapping="Wrap"
                                            VerticalAlignment="Center" />
 
                                 <!-- Beside the name, because for a row whose items are chosen one by one,
@@ -163,7 +162,7 @@
                                                  Click="OnItemsLinkClicked"
                                                  AutomationProperties.Name="{x:Bind Text.ItemsLinkName}"
                                                  AutomationProperties.AutomationId="{x:Bind AutomationIds.ItemsLink}" />
-                            </StackPanel>
+                            </controls:FlowRow>
 
                             <!-- "What is this?" opens whose folder this is, what it is for, and the
                                  plan that says what would happen to it. One dialog holds both,
@@ -173,7 +172,7 @@
                                  It ends the name line rather than the sentence, so the row reads as
                                  prose from the name down to the figures, and the link is at a fixed
                                  place on every row. -->
-                            <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
+                            <controls:FlowRow ColumnSpacing="{StaticResource ControlGap}" RowSpacing="{StaticResource LabelGap}">
                                 <controls:ProviderChips Facts="{x:Bind Facts}" />
                                 <HyperlinkButton Content="What is this?"
                                                  VerticalAlignment="Center"
@@ -182,7 +181,7 @@
                                                  Click="OnWhatIsThisClicked"
                                                  AutomationProperties.Name="{x:Bind Text.InformationLinkName}"
                                                  AutomationProperties.AutomationId="{x:Bind AutomationIds.InformationLink}" />
-                            </StackPanel>
+                            </controls:FlowRow>
                         </controls:ReflowRow>
 
                         <TextBlock Text="{x:Bind Facts.WhatHappensOnNextUse}"
