@@ -70,7 +70,7 @@ public static class SafetyTierExtensions
     public static string ToExplanation(this SafetyTier tier) => tier switch
     {
         SafetyTier.RegenerableCache =>
-            "Whatever made it re-creates it on demand. Deleting costs a slower next use and " +
+            "Whatever made it re-creates it on demand. Removing it costs a slower next use and " +
             "nothing else, so these are selected for you by default, unless the row is marked " +
             "Researched.",
         SafetyTier.RegenerableWithCost =>
@@ -86,12 +86,16 @@ public static class SafetyTierExtensions
         _ => tier.ToString(),
     };
 
-    /// <summary>Short label for the UI.</summary>
+    /// <summary>
+    /// Short label for the UI, in everyday words that keep the tier's meaning (§7): what removing the
+    /// row costs, read at a glance. "Permanent" names the one tier whose clean is confirmed with
+    /// "Delete" (<see cref="Deguffer.Core.Execution.ConfirmationVerb"/>), so the label and the verb agree.
+    /// </summary>
     public static string ToDisplayName(this SafetyTier tier) => tier switch
     {
-        SafetyTier.RegenerableCache => "Regenerable cache",
-        SafetyTier.RegenerableWithCost => "Regenerable, with cost",
-        SafetyTier.UserData => "User data",
+        SafetyTier.RegenerableCache => "Rebuilds itself",
+        SafetyTier.RegenerableWithCost => "Costly to rebuild",
+        SafetyTier.UserData => "Permanent",
         SafetyTier.DoNotTouch => "Do not touch",
         _ => tier.ToString(),
     };

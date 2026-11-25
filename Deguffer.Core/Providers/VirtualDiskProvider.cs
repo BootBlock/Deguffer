@@ -58,7 +58,7 @@ public sealed class VirtualDiskProvider : VirtualDiskReportProvider
             + "its images, containers and volumes in another. These files grow as Linux writes and never shrink by "
             + "themselves, so deleting files inside Linux frees space inside the disk and none on the drive.",
         Recommendation = "Deguffer reports each disk's size on the drive and, where Docker Desktop is running, how "
-            + "much Docker says is reclaimable inside, and names the vendor's commands in the order to use them. It "
+            + "much Docker says it could free inside, and names the vendor's commands in the order to use them. It "
             + "never compacts or deletes a disk, because compacting one in use, or a sparse one, can damage "
             + "everything in it.",
     };

@@ -209,7 +209,7 @@ public sealed record ConfirmationRequirement
                 $"This is permanent: what it removes is removed outright and cannot be undone. " +
                 $"{plan.WhatHappensOnNextUse}",
 
-            _ => $"'{plan.ProviderName}' is {plan.Tier.ToDisplayName()} and is never offered for deletion.",
+            _ => $"'{plan.ProviderName}' is in the tier \"{plan.Tier.ToDisplayName()}\" and is never offered to clean.",
         };
     }
 

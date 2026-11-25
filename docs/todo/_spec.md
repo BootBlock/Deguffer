@@ -131,9 +131,9 @@ sizes are easy to compute, the classification is the part that takes knowledge.
 
 | Tier | Meaning | Deletion consequence | Default |
 | --- | --- | --- | --- |
-| **1 — Regenerable cache** | Content that whatever produced it re-creates on demand, byte-for-byte or equivalently. | A slower next use. Nothing is lost. | Offered, pre-selected |
-| **2 — Regenerable, with cost** | Re-created, but only by re-downloading gigabytes or re-indexing for minutes. | Time and bandwidth. | Offered, not pre-selected |
-| **3 — User data** | Logs, histories, saved sessions. Looks like cache, *is not*. Also anything else whose loss is permanent, such as the means to uninstall updates. | **Gone permanently.** | Shown, never pre-selected, explicit warning |
+| **1 — Rebuilds itself** | Content that whatever produced it re-creates on demand, byte-for-byte or equivalently. | A slower next use. Nothing is lost. | Offered, pre-selected |
+| **2 — Costly to rebuild** | Re-created, but only by re-downloading gigabytes or re-indexing for minutes. | Time and bandwidth. | Offered, not pre-selected |
+| **3 — Permanent** | User data: logs, histories, saved sessions. Looks like cache, *is not*. Also anything else whose loss is permanent, such as the means to uninstall updates. | **Gone permanently.** | Shown, never pre-selected, explicit warning |
 | **4 — Do not touch** | Config, credentials, live application state, anything the tool cannot prove is idle. | Breakage. | Excluded from the UI entirely |
 
 **Each provider also declares what its rules rest on** (`ProviderBasis`). *Observed* means its
@@ -600,6 +600,18 @@ Deliberate points, and the traps that come with them:
   ended. Work that ends while the user is in another program flashes the button, and work that
   failed then, including a §5.6 verification, leaves the bar red until the window is next activated.
   A failure in front of the user is the page's to show, so it turns nothing red.
+- **A clean is called one thing, and "Delete" is kept for a permanent loss.** Every sentence about
+  the Storage page's action calls it *clean*, and what a clean does to files *remove*. Deguffer
+  never says "reclaim" for it: a first-time reader takes four verbs for four strengths of action,
+  in a tool whose risk is deletion. *Delete* is said only where the loss is permanent (Tier 3), so
+  the word carries weight where it appears. The only "reclaim" left is in the tools' own words that
+  Deguffer matches when it reads their output. In the same way, the user is told *scan* where
+  the code says *preview*, because the code names the plan, which is still a preview of a clean
+  that has not happened. The tiers (§3) are named in everyday words for what removing a row costs:
+  *Rebuilds itself*, *Costly to rebuild*, *Permanent* and *Do not touch*. The code keeps
+  `RegenerableCache`, `RegenerableWithCost`, `UserData` and `DoNotTouch`. A Storage row, its
+  dialogs and the About page all read the name from one place. Settled in
+  [#880](https://github.com/BootBlock/Deguffer/issues/880).
 - **Age is a first-class column** for per-workspace and per-project data — "last touched 5 months
   ago" drives the decision more than size does.
 - **The Acrylic backdrop (§6.5) is decoration, never information.** Tier, risk and selection state

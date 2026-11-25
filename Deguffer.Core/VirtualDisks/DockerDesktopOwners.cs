@@ -54,5 +54,5 @@ public sealed record DockerDesktopSystem : DiskOwner
         "Docker Desktop makes this distribution itself and keeps it small, so there is nothing in it to prune.";
 
     public override string RouteInOneSentence(VirtualDisk disk) =>
-        "Docker Desktop needs it to run and makes it itself, so there is nothing here to reclaim.";
+        "Docker Desktop needs it to run and makes it itself, so there is nothing here to remove.";
 }

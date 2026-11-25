@@ -19,7 +19,7 @@ internal readonly record struct DiskReading(ScanSize Size, string? Unreached)
 {
     /// <summary>The sentence for a reading that did not reach <see cref="Unreached"/>.</summary>
     public string WhyNothingIsCounted =>
-        $"Windows would not let Deguffer read '{Unreached}' afterwards, so nothing is counted as reclaimed";
+        $"Windows would not let Deguffer read '{Unreached}' afterwards, so nothing is counted as freed";
 
     /// <summary>
     /// What <paramref name="paths"/> hold now, read from the disk rather than the volume snapshot:

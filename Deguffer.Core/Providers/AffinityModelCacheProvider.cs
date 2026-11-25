@@ -169,7 +169,7 @@ public sealed class AffinityModelCacheProvider : CleanupProviderBase
             + "them.",
         Recommendation = "Affinity has its own control for this, and it is the one to prefer: "
             + "Settings → Machine Learning lists each model and lets you uninstall and reinstall it "
-            + "from inside the application. Removing the folder reclaims the same space, and the "
+            + "from inside the application. Removing the folder frees the same space, and the "
             + "models are downloaded again when a feature next needs them. Deguffer removes only the "
             + "'modelcache' folder — your asset library, brushes, licences and settings sit directly "
             + "beside it and are left alone. Serif publishes nothing about clearing this folder; what "

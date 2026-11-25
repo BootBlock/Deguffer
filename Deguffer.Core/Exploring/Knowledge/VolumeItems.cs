@@ -105,7 +105,7 @@ internal static class VolumeItems
             + "files end up if a migration goes wrong. It is an entire Windows installation, so tens "
             + "of gigabytes is normal, and Windows deletes it by itself ten days after the upgrade.",
 
-            "It is usually the largest thing worth reclaiming on a recently upgraded machine, and "
+            "It is usually the largest thing worth removing on a recently upgraded machine, and "
             + "Settings' 'Previous version of Windows' under Storage removes it properly — after "
             + "which going back is no longer possible."),
 

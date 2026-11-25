@@ -6,13 +6,13 @@ Deguffer knows 137 locations. Each one is a *provider*: a single class that name
 log or leftover, the tool that writes it, and the children it recognises. Anything a provider
 does not recognise is left alone.
 
-The tiers say what deleting costs you:
+The tiers say what removing costs you:
 
 | Tier | Meaning |
 | --- | --- |
-| 1 | Regenerable cache: Generally safe to clean. |
-| 2 | Regenerable, with cost: Clean it when you need the space. |
-| 3 | User data: Clean it only once you are sure you no longer need what is in it. |
+| 1 | Rebuilds itself: Generally safe to clean. |
+| 2 | Costly to rebuild: Clean it when you need the space. |
+| 3 | Permanent: Clean it only once you are sure you no longer need what is in it. |
 
 A **Researched** provider was written from the publisher's documentation and reports from users,
 not from a real installation. It keeps every safety rule, but it is never pre-selected.

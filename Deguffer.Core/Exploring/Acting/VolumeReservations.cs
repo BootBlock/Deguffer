@@ -32,7 +32,7 @@ internal static class VolumeReservations
     {
         ["System Volume Information"] =
             "Windows keeps this drive's restore points, indexing data and change journal here. "
-            + "It belongs to the operating system, and Windows is what should reclaim it.",
+            + "It belongs to the operating system, and only Windows should free its space.",
 
         ["pagefile.sys"] = Managed("the paging file"),
         ["swapfile.sys"] = Managed("the swap file"),

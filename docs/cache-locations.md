@@ -17,9 +17,9 @@ four questions worth asking before deleting anything:
 
 | Tier | Meaning | Deguffer's behaviour |
 | --- | --- | --- |
-| **1 — Regenerable cache** | The tool re-creates it automatically on demand. You lose time, never data. | Offered and pre-selected. |
-| **2 — Regenerable, with cost** | Re-created only by a large re-download, a long rebuild, or an explicit command you must run yourself. | Offered, **not pre-selected**, and needs an extra acknowledgement on every run. A tick you gave it before is remembered. |
-| **3 — User data in a cache costume** | Logs, histories, saved sessions, and anything else whose loss is permanent, such as the means to uninstall updates. Deleting loses it permanently. | Offered, **never pre-selected**, and the confirmation says plainly that the loss is permanent. How hard that confirmation is to give is yours to set: up to typing the item's name out, down to none at all. |
+| **1 — Rebuilds itself** | The tool re-creates it automatically on demand. You lose time, never data. | Offered and pre-selected. |
+| **2 — Costly to rebuild** | Re-created only by a large re-download, a long rebuild, or an explicit command you must run yourself. | Offered, **not pre-selected**, and needs an extra acknowledgement on every run. A tick you gave it before is remembered. |
+| **3 — Permanent** | User data in a cache costume: logs, histories, saved sessions, and anything else whose loss is permanent, such as the means to uninstall updates. Deleting loses it permanently. | Offered, **never pre-selected**, and the confirmation says plainly that the loss is permanent. How hard that confirmation is to give is yours to set: up to typing the item's name out, down to none at all. |
 | **4 — Do not touch** | Config, credentials, live state, or anything Deguffer cannot positively identify. | Excluded entirely — not even shown as an option. |
 
 **Tier 4 is the default, not the exception.** Every provider names the children it recognises;
@@ -52,7 +52,7 @@ Two rules from the spec explain nearly every design decision below:
 
 ## NuGet package cache
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — rebuilds itself.** Pre-selected.
 
 | | |
 | --- | --- |
@@ -133,7 +133,7 @@ is a property of the feed rather than of the cache.
 
 ## pip package cache
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — rebuilds itself.** Pre-selected.
 
 | | |
 | --- | --- |
@@ -197,7 +197,7 @@ about compilation rather than promising a uniformly cheap refill — but the cos
 
 ## Poetry package cache
 
-**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+**Tier 1 — rebuilds itself, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -285,7 +285,7 @@ never removed.
 
 ## pipenv package cache
 
-**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+**Tier 1 — rebuilds itself, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -346,7 +346,7 @@ source distribution, with no input from you.
 
 ## uv package cache
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — rebuilds itself.** Pre-selected.
 
 | | |
 | --- | --- |
@@ -429,7 +429,7 @@ never a candidate.
 
 ## Cargo crate cache
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — rebuilds itself.** Pre-selected.
 
 | | |
 | --- | --- |
@@ -514,7 +514,7 @@ the split runs along a directory boundary, so it was split.
 
 ## Gradle build cache
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — rebuilds itself.** Pre-selected.
 
 | | |
 | --- | --- |
@@ -571,7 +571,7 @@ the distribution server a project already names.
 
 ## Coursier artefact cache
 
-**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+**Tier 1 — rebuilds itself, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -637,7 +637,7 @@ It is researched rather than observed, so it is not pre-selected.
 
 ## Ivy dependency cache
 
-**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+**Tier 1 — rebuilds itself, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -680,7 +680,7 @@ can be offered at Tier 1.
 
 ## Go build and module caches
 
-**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+**Tier 1 — rebuilds itself, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -737,7 +737,7 @@ regular Go build as a risk.
 
 ## Zig build cache
 
-**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+**Tier 1 — rebuilds itself, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -806,7 +806,7 @@ could depend on somebody else's server is the one Deguffer does not touch.
 
 ## Deno cache
 
-**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+**Tier 1 — rebuilds itself, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -880,7 +880,7 @@ and it is the part Deguffer leaves.
 
 ## Electron download cache
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — rebuilds itself.** Pre-selected.
 
 | | |
 | --- | --- |
@@ -930,7 +930,7 @@ project needs it.
 
 ## TypeScript typings cache
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — rebuilds itself.** Pre-selected.
 
 | | |
 | --- | --- |
@@ -982,7 +982,7 @@ project needs it.
 
 ## Nx task caches
 
-**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+**Tier 1 — rebuilds itself, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -1074,7 +1074,7 @@ not offered.
 
 ## ccache compiler cache
 
-**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+**Tier 1 — rebuilds itself, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -1121,7 +1121,7 @@ again the next time a build compiles it.
 
 ## sccache compiler cache
 
-**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+**Tier 1 — rebuilds itself, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -1174,8 +1174,8 @@ again the next time a build compiles it.
 
 ## Debugger symbol caches
 
-Two rows, one for each tier: **Debugger symbol cache** is **Tier 1 — regenerable cache**,
-pre-selected, and **Debugger symbol cache, other servers** is **Tier 2 — regenerable, with cost**,
+Two rows, one for each tier: **Debugger symbol cache** is **Tier 1 — rebuilds itself**,
+pre-selected, and **Debugger symbol cache, other servers** is **Tier 2 — costly to rebuild**,
 offered but not pre-selected.
 
 | | |
@@ -1274,7 +1274,7 @@ Sources:
 
 ## npm package cache
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — rebuilds itself.** Pre-selected.
 
 | | |
 | --- | --- |
@@ -1339,7 +1339,7 @@ install needs it.
 
 ## pnpm store
 
-**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+**Tier 1 — rebuilds itself, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -1435,7 +1435,7 @@ time a project asks for it, with no command from you and nothing to re-configure
 
 ## Yarn 1 package cache
 
-**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+**Tier 1 — rebuilds itself, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -1519,7 +1519,7 @@ again when an install needs it.
 
 ## Yarn global package cache
 
-**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
+**Tier 2 — costly to rebuild, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
@@ -1606,7 +1606,7 @@ runs again, which you have to do yourself.
 
 ## Bun install cache
 
-**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+**Tier 1 — rebuilds itself, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -1674,7 +1674,7 @@ needs it.
 
 ## Composer package cache
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — rebuilds itself.** Pre-selected.
 
 | | |
 | --- | --- |
@@ -1745,7 +1745,7 @@ already deletes the oldest of it on its own.
 
 ## Arduino downloads and build cache
 
-**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+**Tier 1 — rebuilds itself, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -1830,7 +1830,7 @@ Everything removed is a download the CLI fetches again, or a build the next comp
 
 ## ESP-IDF downloaded tool archives
 
-**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+**Tier 1 — rebuilds itself, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -1909,7 +1909,7 @@ Everything removed is a download the installer fetches again the next time it ne
 
 ## Scoop download cache
 
-**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+**Tier 1 — rebuilds itself, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -1962,7 +1962,7 @@ Every archive is a copy of what the app's manifest URL still serves.
 
 ## Maven local repository
 
-**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
+**Tier 2 — costly to rebuild, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -2038,7 +2038,7 @@ broken one".
 
 ## vcpkg build caches
 
-**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
+**Tier 2 — costly to rebuild, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -2118,7 +2118,7 @@ each directory is its own row, so you can take the scratch and leave the binary 
 
 ## Conan package cache
 
-**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+**Tier 1 — rebuilds itself, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -2177,7 +2177,7 @@ in the store that can exist nowhere else, is never touched.
 
 ## Conda package cache
 
-**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
+**Tier 2 — costly to rebuild, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -2271,7 +2271,7 @@ this is not about environments being expensive to rebuild.
 
 ## pre-commit hook environments
 
-**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+**Tier 1 — rebuilds itself, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -2350,7 +2350,7 @@ part with no other copy, and they are the part Deguffer leaves.
 
 ## PlatformIO cache and unused packages
 
-**Tier 2 — regenerable, with cost.** Not pre-selected.
+**Tier 2 — costly to rebuild.** Not pre-selected.
 
 | | |
 | --- | --- |
@@ -2432,7 +2432,7 @@ connections where that is a real cost.
 
 ## STM32Cube firmware package downloads
 
-**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
+**Tier 2 — costly to rebuild, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement. Each zip is an item that can be kept.
 
 | | |
@@ -2542,7 +2542,7 @@ Sources:
 
 ## GPU shader caches
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — rebuilds itself.** Pre-selected.
 
 | | |
 | --- | --- |
@@ -2662,7 +2662,7 @@ measured in seconds and there is no path by which anything is lost.
 
 ## Chromium application caches
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — rebuilds itself.** Pre-selected.
 
 | | |
 | --- | --- |
@@ -2873,7 +2873,7 @@ place. Any of the nine that Opera keeps beside its settings in `%APPDATA%` is re
 
 ## Chromium offline site storage
 
-**Tier 2 — regenerable, with cost.** Not pre-selected.
+**Tier 2 — costly to rebuild.** Not pre-selected.
 
 | | |
 | --- | --- |
@@ -2937,7 +2937,7 @@ editor view loads its content from the editor, and the store sells nothing witho
 
 ## VS Code editor caches
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — rebuilds itself.** Pre-selected.
 
 | | |
 | --- | --- |
@@ -3040,7 +3040,7 @@ server that served it. The editor refills all of it without being asked.
 
 ## VS Code editor logs and crash reports
 
-**Tier 3 — user data in a cache costume.** Never pre-selected.
+**Tier 3 — permanent: user data in a cache costume.** Never pre-selected.
 
 | | |
 | --- | --- |
@@ -3096,7 +3096,7 @@ logs](#windows-servicing-logs) below, for the same reason.
 
 ## VS Code C/C++ IntelliSense cache
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — rebuilds itself.** Pre-selected.
 
 | | |
 | --- | --- |
@@ -3165,7 +3165,7 @@ that everything the extension writes to this folder may be deleted.
 
 ## Claude Code MCP server logs
 
-**Tier 3 — user data in a cache costume.** Never pre-selected.
+**Tier 3 — permanent: user data in a cache costume.** Never pre-selected.
 
 | | |
 | --- | --- |
@@ -3208,7 +3208,7 @@ logs and crash reports](#vs-code-editor-logs-and-crash-reports) above, for the s
 
 ## Claude Code rewind snapshots
 
-**Tier 3 — user data.** Never pre-selected.
+**Tier 3 — permanent.** Never pre-selected.
 
 | | |
 | --- | --- |
@@ -3267,7 +3267,7 @@ Nothing re-creates a snapshot. It is the record of a file as it was, which is th
 
 ## Claude Code conversations
 
-**Tier 3 — user data.** Never pre-selected.
+**Tier 3 — permanent.** Never pre-selected.
 
 | | |
 | --- | --- |
@@ -3350,7 +3350,7 @@ for [crash dumps and error reports](#crash-dumps-and-error-reports).
 
 ## Firefox caches
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — rebuilds itself.** Pre-selected.
 
 | | |
 | --- | --- |
@@ -3464,7 +3464,7 @@ Firefox refills all of it without being asked.
 
 ## Thunderbird caches
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — rebuilds itself.** Pre-selected.
 
 | | |
 | --- | --- |
@@ -3541,7 +3541,7 @@ disk.
 
 ## Epic Games launcher web cache
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — rebuilds itself.** Pre-selected.
 
 | | |
 | --- | --- |
@@ -3630,7 +3630,7 @@ without being asked, and the folder it refills into is left standing.
 
 ## Epic Games launcher store artwork
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — rebuilds itself.** Pre-selected.
 
 | | |
 | --- | --- |
@@ -3711,7 +3711,7 @@ fetches it again on demand, and nothing else is the authority for any of it.
 
 ## Epic Games launcher logs and crash reports
 
-**Tier 3 — user data.** Never pre-selected, and confirmed as every [Tier 3](#how-to-read-the-tiers) row is: by default with a dialog that says the
+**Tier 3 — permanent.** Never pre-selected, and confirmed as every [Tier 3](#how-to-read-the-tiers) row is: by default with a dialog that says the
 loss is permanent.
 
 | | |
@@ -3766,7 +3766,7 @@ Tier 3, and the consequence column there says the loss is permanent — which is
 
 ## Battle.net launcher cache
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — rebuilds itself.** Pre-selected.
 
 | | |
 | --- | --- |
@@ -3834,7 +3834,7 @@ leaves both alone until somebody does.
 
 ## Battle.net launcher logs
 
-**Tier 3 — user data.** Never pre-selected, and confirmed as every [Tier 3](#how-to-read-the-tiers) row is: by default with a dialog that says the
+**Tier 3 — permanent.** Never pre-selected, and confirmed as every [Tier 3](#how-to-read-the-tiers) row is: by default with a dialog that says the
 loss is permanent.
 
 | | |
@@ -3876,7 +3876,7 @@ unchanged.
 
 ## Steam HTTP cache
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — rebuilds itself.** Pre-selected.
 
 | | |
 | --- | --- |
@@ -3967,7 +3967,7 @@ own: see [Steam shader pre-cache](#steam-shader-pre-cache).
 
 ## Steam library artwork
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — costly to rebuild.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -4055,7 +4055,7 @@ runs.
 
 ## Steam shader pre-cache
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — costly to rebuild.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -4154,7 +4154,7 @@ by definition.
 
 ## Emulator shader caches
 
-**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
+**Tier 2 — costly to rebuild, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -4451,7 +4451,7 @@ every Tier 3 row is.
 
 ## Unreal Engine derived data cache
 
-**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
+**Tier 2 — costly to rebuild, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -4541,7 +4541,7 @@ but only by re-indexing for minutes.
 
 ## Unity GI cache
 
-**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
+**Tier 2 — costly to rebuild, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -4625,7 +4625,7 @@ re-created, but only by re-computing for a long time.
 
 ## Spotify streaming cache
 
-**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+**Tier 1 — rebuilds itself, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -4743,7 +4743,7 @@ opposite case, which is why they are kept out entirely rather than offered at a 
 
 ## Plex Media Server transcoder files
 
-**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+**Tier 1 — rebuilds itself, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -4823,7 +4823,7 @@ one is making it again.
 
 ## Jellyfin transcoder files
 
-**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+**Tier 1 — rebuilds itself, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -4904,7 +4904,7 @@ Every segment is derived from media still on disk.
 
 ## Emby Server transcoder files
 
-**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+**Tier 1 — rebuilds itself, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -4954,7 +4954,7 @@ Every segment is derived from media still on disk.
 
 ## Affinity machine-learning models
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — costly to rebuild.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -5049,7 +5049,7 @@ Sources:
 
 ## Topaz Labs AI models
 
-**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
+**Tier 2 — costly to rebuild, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -5156,7 +5156,7 @@ Sources:
 
 ## Capture One previews and thumbnails
 
-**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
+**Tier 2 — costly to rebuild, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -5281,7 +5281,7 @@ Sources:
 
 ## DaVinci Resolve render cache
 
-**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
+**Tier 2 — costly to rebuild, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -5393,7 +5393,7 @@ Sources:
 
 ## Adobe media cache
 
-**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
+**Tier 2 — costly to rebuild, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -5518,7 +5518,7 @@ Sources:
 
 ## Redshift texture cache
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — rebuilds itself.** Pre-selected.
 
 | | |
 | --- | --- |
@@ -5620,7 +5620,7 @@ Sources:
 
 ## CapCut editing cache
 
-**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**, because nobody working
+**Tier 1 — rebuilds itself, researched.** Offered but **not pre-selected**, because nobody working
 on Deguffer has seen a CapCut installation.
 
 | | |
@@ -5689,7 +5689,7 @@ are researched rather than observed* at the top of this page.
 
 ## After Effects disk cache
 
-**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
+**Tier 2 — costly to rebuild, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -5794,7 +5794,7 @@ Sources:
 
 ## Squirrel updater leftovers
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — rebuilds itself.** Pre-selected.
 
 | | |
 | --- | --- |
@@ -5919,7 +5919,7 @@ stopped naming is one that application will never open again.
 
 ## Claude Code session leftovers
 
-**Tier 1 — regenerable cache.** Pre-selected wherever there is something to remove.
+**Tier 1 — rebuilds itself.** Pre-selected wherever there is something to remove.
 
 | | |
 | --- | --- |
@@ -6017,7 +6017,7 @@ Anthropic's diagnostics, not your data.
 
 ## Superseded application versions
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — costly to rebuild.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -6108,7 +6108,7 @@ and it asks for the extra acknowledgement Tier 2 carries.
 
 ## CapCut superseded builds
 
-**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
+**Tier 2 — costly to rebuild, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -6163,7 +6163,7 @@ rows are researched rather than observed* at the top of this page.
 
 ## Dart analysis server cache
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — rebuilds itself.** Pre-selected.
 
 | | |
 | --- | --- |
@@ -6237,7 +6237,7 @@ and which Deguffer does not offer for an unrelated reason — see
 
 ## Roslyn solution index cache
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — rebuilds itself.** Pre-selected.
 
 | | |
 | --- | --- |
@@ -6322,7 +6322,7 @@ Roslyn that rebuilds it without being asked.
 
 ## Superseded JetBrains IDE caches
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — rebuilds itself.** Pre-selected.
 
 | | |
 | --- | --- |
@@ -6409,7 +6409,7 @@ version is no longer installed. The vendor deletes them without asking, after th
 
 ## Playwright browsers
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — costly to rebuild.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -6492,7 +6492,7 @@ rather than a global install.
 
 ## Puppeteer browsers
 
-**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
+**Tier 2 — costly to rebuild, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -6575,7 +6575,7 @@ has it installed.
 
 ## VS Code extension browsers
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — rebuilds itself.** Pre-selected.
 
 | | |
 | --- | --- |
@@ -6637,7 +6637,7 @@ to prefer.
 
 ## VS Code unfinished extension installs
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — rebuilds itself.** Pre-selected.
 
 | | |
 | --- | --- |
@@ -6716,7 +6716,7 @@ nothing to prefer.
 
 ## LM Studio superseded runtimes
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — costly to rebuild.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -6788,7 +6788,7 @@ version that may not stay published, so it is offered and never ticked on your b
 
 ## Hugging Face models and datasets
 
-**Tier 3 — user data.** Offered one repository at a time, and **never pre-selected**.
+**Tier 3 — permanent.** Offered one repository at a time, and **never pre-selected**.
 
 | | |
 | --- | --- |
@@ -6857,7 +6857,7 @@ be downloaded again, so the copy in the cache may be the only one you can get.
 
 ## Vagrant superseded box versions
 
-**Tier 2 — regenerable, with cost, researched.** Not pre-selected.
+**Tier 2 — costly to rebuild, researched.** Not pre-selected.
 
 | | |
 | --- | --- |
@@ -6917,7 +6917,7 @@ Getting a version back is a download of a whole disk image.
 
 ## restic local cache
 
-**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+**Tier 1 — rebuilds itself, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -6978,7 +6978,7 @@ the repository again.
 
 ## Kopia local cache
 
-**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+**Tier 1 — rebuilds itself, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -7053,7 +7053,7 @@ job configuration. restic and Kopia use the word to mean what a cleaner needs, a
 
 ## Pulumi plugin cache
 
-**Tier 1 — regenerable cache, researched.** Not pre-selected.
+**Tier 1 — rebuilds itself, researched.** Not pre-selected.
 
 | | |
 | --- | --- |
@@ -7119,7 +7119,7 @@ a Pulumi program, the Pulumi CLI will attempt to download and install it automat
 
 ## Test browser profiles
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — rebuilds itself.** Pre-selected.
 
 | | |
 | --- | --- |
@@ -7208,7 +7208,7 @@ so each is offered once, here.
 
 ## Azure Functions Core Tools releases
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — costly to rebuild.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -7297,7 +7297,7 @@ what is left.
 
 ## Graphics driver installer files
 
-**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
+**Tier 2 — costly to rebuild, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -7406,7 +7406,7 @@ location nobody has measured out of the default selection.
 
 ## Autodesk installer files
 
-**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
+**Tier 2 — costly to rebuild, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -7507,7 +7507,7 @@ default selection.
 
 ## Local copies of cloud files
 
-**Tier 2 — regenerable, with cost.** Offered, **not pre-selected**, and confirmed with an
+**Tier 2 — costly to rebuild.** Offered, **not pre-selected**, and confirmed with an
 acknowledgement. Nothing is deleted, here or in the cloud.
 
 | | |
@@ -7579,7 +7579,7 @@ its own.
 
 ## Dropbox cache
 
-**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+**Tier 2 — costly to rebuild, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -8094,7 +8094,7 @@ cache, named with its solution.
 
 ## Git LFS old file versions
 
-**Tier 2 — regenerable, with cost.** Not pre-selected.
+**Tier 2 — costly to rebuild.** Not pre-selected.
 
 | | |
 | --- | --- |
@@ -8173,7 +8173,7 @@ server still holding it. So it is offered and never ticked on your behalf.
 
 ## Recycle Bin
 
-**Tier 3 — user data.** Offered, **never pre-selected**, and confirmed as every [Tier 3](#how-to-read-the-tiers) row is: by default with a dialog that says the
+**Tier 3 — permanent.** Offered, **never pre-selected**, and confirmed as every [Tier 3](#how-to-read-the-tiers) row is: by default with a dialog that says the
 loss is permanent.
 
 | | |
@@ -8297,7 +8297,7 @@ type the name out as well.
 
 ## Windows File History
 
-**Tier 3 — user data, researched.** Offered, **never pre-selected**, and confirmed as every [Tier 3](#how-to-read-the-tiers) row is: by default with a dialog that says the
+**Tier 3 — permanent, researched.** Offered, **never pre-selected**, and confirmed as every [Tier 3](#how-to-read-the-tiers) row is: by default with a dialog that says the
 loss is permanent.
 
 | | |
@@ -8429,7 +8429,7 @@ why its confirmation says the loss is permanent rather than costly.
 
 ## Crash dumps and error reports
 
-**Tier 3 — user data.** Offered, **never pre-selected**, and confirmed as every [Tier 3](#how-to-read-the-tiers) row is: by default with a dialog that says the
+**Tier 3 — permanent.** Offered, **never pre-selected**, and confirmed as every [Tier 3](#how-to-read-the-tiers) row is: by default with a dialog that says the
 loss is permanent.
 
 | | |
@@ -8530,7 +8530,7 @@ not the same claim, and the tier model exists to keep them apart.
 
 ## Windows servicing logs
 
-**Tier 3 — user data.** Offered, **never pre-selected**, and confirmed as every [Tier 3](#how-to-read-the-tiers) row is: by default with a dialog that says the
+**Tier 3 — permanent.** Offered, **never pre-selected**, and confirmed as every [Tier 3](#how-to-read-the-tiers) row is: by default with a dialog that says the
 loss is permanent.
 
 | | |
@@ -8605,7 +8605,7 @@ with a dialog that says the loss is permanent.
 
 ## Delivery Optimization cache
 
-**Tier 1 — regenerable cache.** Offered and pre-selected.
+**Tier 1 — rebuilds itself.** Offered and pre-selected.
 
 | | |
 | --- | --- |
@@ -8666,7 +8666,7 @@ never be needed, and nothing is lost.
 
 ## Previous Windows installation
 
-**Tier 2 — regenerable with cost.** Offered, **not pre-selected**.
+**Tier 2 — costly to rebuild.** Offered, **not pre-selected**.
 
 | | |
 | --- | --- |
@@ -8741,7 +8741,7 @@ not Tier 3, because none of it is a record of something you did.
 
 ## Files discarded by a Windows upgrade
 
-**Tier 3 — user data.** Offered, **never pre-selected**, and confirmed as every [Tier 3](#how-to-read-the-tiers) row is: by default with a dialog that says the
+**Tier 3 — permanent.** Offered, **never pre-selected**, and confirmed as every [Tier 3](#how-to-read-the-tiers) row is: by default with a dialog that says the
 loss is permanent.
 
 | | |
@@ -8792,7 +8792,7 @@ going back. This costs whatever the files were, and that is Tier 3's definition.
 
 ## Leftover Windows update folders
 
-**Tier 2 — regenerable with cost.** Offered, **not pre-selected**.
+**Tier 2 — costly to rebuild.** Offered, **not pre-selected**.
 
 | | |
 | --- | --- |
@@ -8847,7 +8847,7 @@ through that and listed under [Windows servicing logs](#windows-servicing-logs) 
 
 ## Superseded driver packages
 
-**Tier 2 — regenerable with cost.** Offered, **not pre-selected**.
+**Tier 2 — costly to rebuild.** Offered, **not pre-selected**.
 
 | | |
 | --- | --- |
@@ -8919,7 +8919,7 @@ the network works. Nothing here is a record of something you did, so it is not T
 
 ## Superseded Windows components
 
-**Tier 2 — regenerable with cost.** Offered, **not pre-selected**.
+**Tier 2 — costly to rebuild.** Offered, **not pre-selected**.
 
 | | |
 | --- | --- |
@@ -9223,7 +9223,7 @@ the profiles are kept.
 
 ## Windows temporary folders
 
-**Tier 2 — regenerable, with cost.** Offered, **not pre-selected**, and it needs an extra
+**Tier 2 — costly to rebuild.** Offered, **not pre-selected**, and it needs an extra
 acknowledgement before it runs.
 
 | | |
@@ -9436,7 +9436,7 @@ this on a schedule, Storage Sense is the right answer and Settings is where to t
 
 ## Tool caches in temporary folders
 
-**Tier 1 — regenerable cache.** Offered and pre-selected.
+**Tier 1 — rebuilds itself.** Offered and pre-selected.
 
 | | |
 | --- | --- |
@@ -9523,7 +9523,7 @@ copied from.
 
 ## Installer downloads in temporary folders
 
-**Tier 2 — regenerable, with cost.** Offered, **not pre-selected**, and it needs an extra
+**Tier 2 — costly to rebuild.** Offered, **not pre-selected**, and it needs an extra
 acknowledgement before it runs.
 
 | | |
@@ -9598,7 +9598,7 @@ the Blender case is a bake that has to be made again.
 
 ## Tool logs in temporary folders
 
-**Tier 3 — user data.** Offered, **never pre-selected**, and confirmed as every [Tier 3](#how-to-read-the-tiers) row is: by default with a dialog that says the
+**Tier 3 — permanent.** Offered, **never pre-selected**, and confirmed as every [Tier 3](#how-to-read-the-tiers) row is: by default with a dialog that says the
 loss is permanent.
 
 | | |
@@ -9652,7 +9652,7 @@ different for sitting in a temporary folder.
 
 ## Claude Code command snapshots
 
-**Tier 1 — regenerable cache.** Offered and pre-selected.
+**Tier 1 — rebuilds itself.** Offered and pre-selected.
 
 | | |
 | --- | --- |
@@ -9769,7 +9769,7 @@ For each disk the row states:
 - **The size on the drive**, read from the file system without opening the file, so a disk in use
   is measured too. A sparse disk is said to be sparse, with what it takes against the size it can
   address.
-- **What is reclaimable inside**, for Docker's data disk only, from `docker system df` sent to the
+- **What Docker could free inside**, for Docker's data disk only, from `docker system df` sent to the
   `desktop-linux` context, and only when Docker Desktop's backend is already running. Otherwise the
   row says why there is no inside figure. Unused volumes are named as holding data.
 - **The route, in order.** For a WSL distribution: delete what is no longer needed inside it, then
@@ -10127,7 +10127,7 @@ Microsoft documents it as removing "workload components that might have been lef
 previous updates and uninstallations", and it is reference-counted rather than path-matched: it drops
 a pack's installer dependency reference when that pack's `"SDK feature band … does not match any
 installed feature bands"`, and removes the pack only once nothing refers to it any more. That is what
-§5.1 asks for, and the packs are Tier 2 — regenerable, but only by a workload re-install that is a
+§5.1 asks for, and the packs are Tier 2 — rebuilt, but only by a workload re-install that is a
 large download.
 
 **It is not offered, for two reasons, and the first is disqualifying on its own.**

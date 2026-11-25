@@ -226,7 +226,7 @@ internal sealed class CommandRun(IProcessRunner runner, IProcessInspector inspec
                 Refusals.None,
                 $"{outcome.Message} (the tool did not say what its cache held "
                 + (measuredBefore is null ? "before the command" : "afterwards")
-                + ", so nothing is counted as reclaimed)");
+                + ", so nothing is counted as freed)");
         }
 
         var reclaimed = start - after;

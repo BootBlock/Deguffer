@@ -44,7 +44,7 @@ internal static class ProfileItems
             "Downloads",
             "Where a browser puts what it downloads. Installers, disk images and archives collect "
             + "here and are almost never removed afterwards, which makes it one of the largest "
-            + "folders in a profile and one of the easiest to reclaim.",
+            + "folders in a profile and one of the easiest to clear.",
 
             "It is your own files rather than a cache, and Windows leaves it alone unless asked — "
             + "Storage Sense can be set to remove downloads left untouched for a chosen number of "

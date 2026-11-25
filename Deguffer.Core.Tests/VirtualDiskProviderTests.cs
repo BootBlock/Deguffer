@@ -346,7 +346,7 @@ public sealed class VirtualDiskProviderTests : IDisposable
 
         Assert.Contains($"{FreeSpace.Format(8192)} on the drive", Text(plan), StringComparison.Ordinal);
         Assert.Contains("Docker Desktop is not running", Text(plan), StringComparison.Ordinal);
-        Assert.DoesNotContain("reclaimable (", Text(plan), StringComparison.Ordinal);
+        Assert.DoesNotContain("could be pruned (", Text(plan), StringComparison.Ordinal);
         Assert.Empty(runner.Invocations);
     }
 
@@ -363,7 +363,7 @@ public sealed class VirtualDiskProviderTests : IDisposable
         var inside = Assert.Single(plan.Notes, note => note.Message.StartsWith("Inside Docker's data disk", StringComparison.Ordinal));
 
         Assert.Contains($"{FreeSpace.Format(3_550_000_000)} in use", inside.Message, StringComparison.Ordinal);
-        Assert.Contains($"{FreeSpace.Format(2_250_000_000)} is reclaimable", inside.Message, StringComparison.Ordinal);
+        Assert.Contains($"{FreeSpace.Format(2_250_000_000)} could be pruned", inside.Message, StringComparison.Ordinal);
         Assert.Contains("Unused volumes hold data", inside.Message, StringComparison.Ordinal);
         Assert.Contains($"{FreeSpace.Format(4096)} on the drive", Text(plan), StringComparison.Ordinal);
     }

@@ -76,7 +76,7 @@ public sealed class RetroArchDownloadProvider : RetroArchProviderBase
         Publisher = "the libretro project",
         Purpose = "RetroArch's online updater downloads its shader sets and its game databases into "
             + "folders beside the program, and nothing ever removes them.",
-        Recommendation = "Remove these if you do not use RetroArch's shaders, or to reclaim the space "
+        Recommendation = "Remove these if you do not use RetroArch's shaders, or to free the space "
             + "until you next want them. Deguffer finds RetroArch where Steam installed it. For any other "
             + "copy, add its folder under Where Deguffer looks in Settings.",
     };

@@ -39,25 +39,25 @@ public sealed class DockerInsideFigure(IUserEnvironment environment, IProcessRun
         if (inspector.FindRunning([EngineProcess]).Count == 0)
         {
             return new(null, "Docker Desktop is not running, and Deguffer does not start it to ask how much of "
-                + "the disk is reclaimable inside.");
+                + "the disk it could free inside.");
         }
 
         if (environment.FindExecutable("docker") is not { } docker)
         {
             return new(null, "Docker Desktop is running, but the docker command is not on the PATH, so Docker "
-                + "could not be asked how much of the disk is reclaimable inside.");
+                + "could not be asked how much of the disk it could free inside.");
         }
 
         var outcome = await runner.RunAsync(docker, Arguments, ToolRun.Query, ct).ConfigureAwait(false);
 
         if (!outcome.Succeeded)
         {
-            return new(null, $"Docker did not say how much of the disk is reclaimable inside: {outcome.Message}");
+            return new(null, $"Docker did not say how much of the disk it could free inside: {outcome.Message}");
         }
 
         return DockerDiskUsage.Parse(outcome.StandardOutput) is { } usage
             ? new(usage, null)
             : new(null, "Docker answered in a form Deguffer does not read, so how much of the disk is "
-                + "reclaimable inside is not shown.");
+                + "Docker could free inside is not shown.");
     }
 }

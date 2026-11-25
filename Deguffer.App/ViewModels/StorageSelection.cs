@@ -73,7 +73,7 @@ public sealed partial class StorageSelection : ObservableObject
 
     /// <summary>
     /// The ceiling <see cref="Total"/> can reach: every step the user is free to tick. This is what the
-    /// info bar means by "can be reclaimed", and it is summed the same way the selected total is so that
+    /// info bar means by "can be cleaned", and it is summed the same way the selected total is so that
     /// the two figures beside each other count the same bytes. Both count space two rows share once:
     /// see <see cref="ReclaimPool"/>.
     /// </summary>

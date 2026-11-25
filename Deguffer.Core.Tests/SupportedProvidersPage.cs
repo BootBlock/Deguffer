@@ -35,7 +35,7 @@ internal static class SupportedProvidersPage
             log or leftover, the tool that writes it, and the children it recognises. Anything a provider
             does not recognise is left alone.
 
-            The tiers say what deleting costs you:
+            The tiers say what removing costs you:
 
             | Tier | Meaning |
             | --- | --- |

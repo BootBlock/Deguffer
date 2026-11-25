@@ -78,6 +78,19 @@ public class SafetyTierTests
         Assert.Contains("permanently", explanation);
     }
 
+    /// <summary>
+    /// §7 — the tiers are named in everyday words for what removing a row costs. These are the
+    /// classification every removable row is judged by, so the labels are behaviour: the Storage
+    /// badge, the clean's dialog headings and the About page all read them.
+    /// </summary>
+    [Theory]
+    [InlineData(SafetyTier.RegenerableCache, "Rebuilds itself")]
+    [InlineData(SafetyTier.RegenerableWithCost, "Costly to rebuild")]
+    [InlineData(SafetyTier.UserData, "Permanent")]
+    [InlineData(SafetyTier.DoNotTouch, "Do not touch")]
+    public void EachTierIsNamedInPlainWords(SafetyTier tier, string expected) =>
+        Assert.Equal(expected, tier.ToDisplayName());
+
     [Fact]
     public void OnlyTier3IsIrreversibleLoss()
     {

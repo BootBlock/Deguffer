@@ -730,7 +730,7 @@ public sealed class ComponentStoreProviderTests : IDisposable
 
         var step = Assert.Single(result.Steps);
         Assert.Equal(0, step.BytesReclaimed);
-        Assert.Contains("before the command, so nothing is counted as reclaimed", step.Message, StringComparison.Ordinal);
+        Assert.Contains("before the command, so nothing is counted as freed", step.Message, StringComparison.Ordinal);
     }
 
     /// <summary>

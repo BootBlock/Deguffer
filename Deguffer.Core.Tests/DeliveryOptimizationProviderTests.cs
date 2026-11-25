@@ -291,7 +291,7 @@ public sealed class DeliveryOptimizationProviderTests : IDisposable
 
         var step = Assert.Single(result.Steps);
         Assert.Equal(0, step.BytesReclaimed);
-        Assert.Contains("nothing is counted as reclaimed", step.Message);
+        Assert.Contains("nothing is counted as freed", step.Message);
     }
 
     /// <summary>
