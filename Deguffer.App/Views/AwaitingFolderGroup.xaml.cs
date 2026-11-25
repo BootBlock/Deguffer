@@ -40,7 +40,7 @@ public sealed partial class AwaitingFolderGroup
     }
 
     /// <summary>
-    /// What the header's button does: asks for a source folder and plans the group's rows again. The
+    /// What the group's button does: asks for a source folder and plans the group's rows again. The
     /// page's command, so the button is off while the page is busy, as Scan is.
     /// </summary>
     public ICommand? AddCommand

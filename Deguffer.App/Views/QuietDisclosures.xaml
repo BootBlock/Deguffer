@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!--
-    The Storage row's disclosure, stripped back to a line of text and a chevron. In its default form
-    the Expander is a filled, bordered box with a 64px header, which made the least important thing
-    in each row the loudest thing on the screen. These are the standard Expander theme resources,
-    overridden so every compact row's disclosure is quiet without restyling the control.
+    A disclosure stripped back to a line of text and a chevron. In its default form the Expander is
+    a filled, bordered box with a 64px header, which made the least important thing on a Storage
+    card the loudest thing on the screen. These are the standard Expander theme resources,
+    overridden so a disclosure is quiet without restyling the control.
 
-    Each list that draws rows takes these as its own resources: the list on the page, and the list
-    inside the group folded below it. A row's template looks its theme resources up from where it
-    is drawn, and a page's resources do not reach a list inside a control of its own.
+    Each control that draws such a disclosure takes these as its own resources: an Expander looks
+    its theme resources up from where it is drawn, and a page's resources do not reach inside a
+    control of its own.
 -->
 <ResourceDictionary
-    x:Class="Deguffer.App.Views.RowDisclosures"
+    x:Class="Deguffer.App.Views.QuietDisclosures"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 

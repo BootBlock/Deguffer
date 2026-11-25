@@ -230,6 +230,24 @@ public sealed partial class FindingViewModel : ObservableObject
         : "—";
 
     /// <summary>
+    /// What a screen reader calls the row's checkbox: its name, its figure and its tier, the facts the
+    /// decision to tick it rests on (§7). The figure and the chip are not tab stops, so a reader tabbing
+    /// down the list lands only on the checkbox, which must therefore carry them. A row with
+    /// no installation has no figure, only a dash that says nothing aloud, so its name leaves it out.
+    /// </summary>
+    public string SelectionName => Finding.IsPresent
+        ? $"{Name}, {SizeLabel}, {Facts.TierLabel}"
+        : $"{Name}, {Facts.TierLabel}";
+
+    /// <summary>
+    /// Whether the compact row's disclosure is open. Held by the row rather than by the control that
+    /// opens it, because the list recycles its containers: a state held by the control would stay
+    /// open on whichever row the container is given to next.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsDetailOpen { get; set; }
+
+    /// <summary>
     /// What the row's link to its item list says: how many items it lists, and how many are ticked where
     /// some are and some are not. On the row rather than in <see cref="Text"/>, because it moves with
     /// every tick.
@@ -467,6 +485,7 @@ public sealed partial class FindingViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(SelectedSize));
         OnPropertyChanged(nameof(SizeLabel));
+        OnPropertyChanged(nameof(SelectionName));
         OnPropertyChanged(nameof(ItemsLinkLabel));
     }
 }

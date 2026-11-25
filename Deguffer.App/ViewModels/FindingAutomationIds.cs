@@ -14,4 +14,7 @@ public sealed class FindingAutomationIds(string providerId)
 
     /// <summary>The "What is this?" link, in either view.</summary>
     public string InformationLink { get; } = $"LocationInformationLink.{providerId}";
+
+    /// <summary>The compact row's chevron, which opens its detail.</summary>
+    public string DetailToggle { get; } = $"LocationDetailToggle.{providerId}";
 }
