@@ -37,6 +37,21 @@ public sealed class AlreadyClearSwitchTests : IDisposable
         Assert.False(box.Save.Failed);
     }
 
+    /// <summary>The empty state's button ticks the box: it writes the same preference, and the box reads it.</summary>
+    [Fact]
+    public void TheEmptyStatesButtonTicksTheBox()
+    {
+        var box = new AlreadyClearSwitch(_preferences);
+        var raised = new List<string?>();
+        box.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        box.ShowCommand.Execute(null);
+
+        Assert.True(box.IsOn);
+        Assert.True(new PreferenceStore(_environment).Load().ShowAlreadyClear);
+        Assert.Contains(nameof(AlreadyClearSwitch.IsOn), raised);
+    }
+
     /// <summary>The page calls <see cref="AlreadyClearSwitch.Follow"/> when the preferences change, and the box then reads what Settings wrote.</summary>
     [Fact]
     public void TheBoxReadsWhatSettingsWrote()

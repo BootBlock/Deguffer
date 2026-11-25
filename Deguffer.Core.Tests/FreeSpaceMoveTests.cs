@@ -37,6 +37,24 @@ public sealed class FreeSpaceMoveTests
             FreeSpaceMove.Between(before: 1_000_000, after: 1_000_000)!.Text);
     }
 
+    /// <summary>
+    /// Away from the free space it describes, the move says whose space moved, and in every direction,
+    /// because nothing beside it does.
+    /// </summary>
+    [Fact]
+    public void TheSentenceNamesTheFreeSpaceInEveryDirection()
+    {
+        Assert.Equal(
+            $"Free space is up {FreeSpace.Format(23_000_000_000)} from {FreeSpace.Format(289_000_000_000)} before the clean.",
+            FreeSpaceMove.Between(before: 289_000_000_000, after: 312_000_000_000)!.Sentence);
+        Assert.Equal(
+            $"Free space is down {FreeSpace.Format(100_000)} from {FreeSpace.Format(1_000_000)} before the clean.",
+            FreeSpaceMove.Between(before: 1_000_000, after: 900_000)!.Sentence);
+        Assert.Equal(
+            $"Free space is unchanged at {FreeSpace.Format(1_000_000)}.",
+            FreeSpaceMove.Between(before: 1_000_000, after: 1_000_000)!.Sentence);
+    }
+
     /// <summary>A move from one reading alone would be a guess dressed as a measurement.</summary>
     [Fact]
     public void NeedsBothReadings()
