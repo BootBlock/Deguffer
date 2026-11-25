@@ -9,112 +9,21 @@
     Background="Transparent">
 
     <Page.Resources>
-        <!-- The compact rows' figure column, one width down the whole list. See CompactFindingRow. -->
+        <!-- The compact rows' figure column, one width down the whole list. See CompactFinding. -->
         <controls:WidthGroup x:Key="FigureWidths" />
 
-        <!--
-            The compact row: the four things the user is choosing between, on one line — is it
-            ticked, what is it, what class of thing is it, and how big is it.
-
-            A row that cannot be ticked says why, rather than leaving a greyed-out checkbox that
-            states no reason (§6.5). The reason sits beside the figure rather than in place of it,
-            because the two do not always arrive together: a row needing administrator rights has a
-            real total and still cannot be ticked, and the list is ordered by that total, so
-            replacing it left the biggest cause at the top of the list with no number against it. A
-            row with nothing to reclaim drops the figure instead — it reads "0 B" or "—", which the
-            reason beside it already says in words.
-
-            The figure sits in a column of one width on every row, and everything to its right of
-            the name is right-aligned against it. Each row builds its own Grid, so a figure column
-            left to Auto alone comes out at a different width on every row and the chips beside it
-            step raggedly down the page. The figure's cell is in a WidthGroup instead, which gives
-            every row the width of the widest figure in the list: the chip's own column can stay
-            Auto and still start at the same offset from the right on every row, which is what puts
-            the chips in a straight line. A fixed width would cut off an estimate such as "about
-            1.0 GB", and any figure under Windows text scaling.
-
-            The chip's column is not grouped, because Windows text scaling grows the chip, and a
-            fixed column would have it overflow leftwards over the status instead of pushing the
-            name.
-
-            The name never gives way. It is the row's identity, and a list of rows that no longer
-            say which row they are is not a list. So the status takes the slack, which means the
-            status is what trims when the window narrows, and it is a secondary sentence that the
-            disclosure repeats in full. Where the name and the chips cannot share a line, the chips
-            and the figure move under the name and the status trims beside it (ReflowRow). The chips
-            stay in line with the rows above because they are right-aligned on either line.
-        -->
-        <DataTemplate x:Key="CompactFindingRow" x:DataType="vm:FindingViewModel">
-            <Grid ColumnSpacing="{StaticResource ControlGap}" ColumnDefinitions="Auto,*" Padding="16,8,0,8">
-
-                <!-- §7's sentence, announced where the decision is made. A tooltip cannot serve a
-                     screen reader or a keyboard, and this is the control both of them land on to
-                     tick the row, so the answer to "what happens if I tick this" is on it. -->
-                <CheckBox Grid.Column="0"
-                          MinWidth="0"
-                          VerticalAlignment="Center"
-                          IsChecked="{x:Bind SelectionState, Mode=OneWay}"
-                          Command="{x:Bind ToggleCommand}"
-                          IsEnabled="{x:Bind CanBeSelected, Mode=OneWay}"
-                          AutomationProperties.Name="{x:Bind Name}"
-                          AutomationProperties.AutomationId="{x:Bind AutomationIds.Toggle}"
-                          AutomationProperties.HelpText="{x:Bind Facts.WhatHappensOnNextUse}" />
-
-                <controls:ReflowRow Grid.Column="1"
-                                    ColumnSpacing="{StaticResource ControlGap}"
-                                    RowSpacing="{StaticResource LabelGap}"
-                                    VerticalAlignment="Center">
-                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
-                        <!-- The same sentence for a pointer. The row has no line to write it on, so it is
-                             here, on the checkbox above, and in the disclosure below — §7 asks that it be
-                             reachable from the row by whatever the reader is using. -->
-                        <TextBlock Text="{x:Bind Name}"
-                                   Style="{StaticResource BodyStrongTextBlockStyle}"
-                                   TextWrapping="NoWrap"
-                                   VerticalAlignment="Center"
-                                   ToolTipService.ToolTip="{x:Bind Facts.WhatHappensOnNextUse}" />
-
-                        <!-- On the row line itself, unlike the "What is this?" link, which compact folds into
-                             the disclosure. For a row whose items are chosen one by one, choosing them is
-                             the decision the row is for, and a decision two levels down is one nobody
-                             finds. It shows the count because that is what says whether the list is worth
-                             opening. -->
-                        <HyperlinkButton Content="{x:Bind ItemsLinkLabel, Mode=OneWay}"
-                                         Visibility="{x:Bind OffersItems, Mode=OneWay}"
-                                         Padding="{StaticResource LinkPadding}"
-                                         VerticalAlignment="Center"
-                                         Tag="{x:Bind}"
-                                         Click="OnItemsLinkClicked"
-                                         AutomationProperties.Name="{x:Bind Text.ItemsLinkName}"
-                                         AutomationProperties.AutomationId="{x:Bind AutomationIds.ItemsLink}" />
-                    </StackPanel>
-
-                    <TextBlock Text="{x:Bind StatusLabel, Mode=OneWay}"
-                               Visibility="{x:Bind CannotBeSelected, Mode=OneWay}"
-                               Style="{StaticResource Caption}"
-                               TextWrapping="NoWrap"
-                               TextTrimming="CharacterEllipsis"
-                               TextAlignment="Right"
-                               VerticalAlignment="Center" />
-
-                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
-                        <controls:ProviderChips Facts="{x:Bind Facts}" />
-
-                        <!-- The group is on the cell rather than the figure, so a row whose figure is
-                             hidden still keeps the column's width and its chip stays in line. -->
-                        <Border MinWidth="72"
-                                controls:WidthGroup.Group="{StaticResource FigureWidths}">
-                            <TextBlock Text="{x:Bind SizeLabel, Mode=OneWay}"
-                                       Visibility="{x:Bind HasSizeToShow, Mode=OneWay}"
-                                       ToolTipService.ToolTip="{x:Bind ChangeTip, Mode=OneWay}"
-                                       Style="{StaticResource RowFigure}"
-                                       HorizontalAlignment="Right"
-                                       TextAlignment="Right"
-                                       VerticalAlignment="Center" />
-                        </Border>
-                    </StackPanel>
-                </controls:ReflowRow>
-            </Grid>
+        <!-- A row's checkbox, one definition both densities draw. It is the one stop a keyboard or a
+             screen reader makes on the row, as the figure and the chips are not tab stops, so its name
+             is the row's name, figure and tier, and its help text is §7's sentence: what happens if
+             I tick this, reachable by whatever the reader is using. A tooltip serves neither. -->
+        <DataTemplate x:Key="FindingCheckBox" x:DataType="vm:FindingViewModel">
+            <CheckBox MinWidth="0"
+                      IsChecked="{x:Bind SelectionState, Mode=OneWay}"
+                      Command="{x:Bind ToggleCommand}"
+                      IsEnabled="{x:Bind CanBeSelected, Mode=OneWay}"
+                      AutomationProperties.Name="{x:Bind SelectionName, Mode=OneWay}"
+                      AutomationProperties.AutomationId="{x:Bind AutomationIds.Toggle}"
+                      AutomationProperties.HelpText="{x:Bind Facts.WhatHappensOnNextUse}" />
         </DataTemplate>
 
         <!-- One row per named cause (§7): the checkbox, the name line with the
@@ -125,15 +34,11 @@
 
                 <Grid Grid.Row="0" ColumnSpacing="12" Padding="{StaticResource CardRowPadding}" ColumnDefinitions="Auto,*,Auto">
 
-                    <CheckBox Grid.Column="0"
-                              VerticalAlignment="Top"
-                              MinWidth="0"
-                              Margin="{StaticResource FirstLineOffset}"
-                              IsChecked="{x:Bind SelectionState, Mode=OneWay}"
-                              Command="{x:Bind ToggleCommand}"
-                              IsEnabled="{x:Bind CanBeSelected, Mode=OneWay}"
-                              AutomationProperties.Name="{x:Bind Name}"
-                              AutomationProperties.AutomationId="{x:Bind AutomationIds.Toggle}" />
+                    <ContentPresenter Grid.Column="0"
+                                      VerticalAlignment="Top"
+                                      Margin="{StaticResource FirstLineOffset}"
+                                      Content="{x:Bind}"
+                                      ContentTemplate="{StaticResource FindingCheckBox}" />
 
                     <StackPanel Grid.Column="1" Spacing="{StaticResource ControlGap}">
 
@@ -216,32 +121,126 @@
         </DataTemplate>
 
         <!--
-            The same row with the prose folded away. The whole line is the disclosure's header, so
-            the chevron lands at the end of it and the detail opens across the full card rather
-            than inside one narrow column.
+            The same row with the prose folded away: is it ticked, what is it, what class of thing,
+            how big, on one line, and a chevron ending it that opens the rest. The chevron is a button
+            beside the line's controls, never an Expander header around them, which would put them
+            inside a button (WCAG 4.1.2). See DisclosureButton.
 
             Every row gets the disclosure, including a toolchain that is not installed: what it
             holds is the sentence §7 asks each row to state, which compact hides rather than
             retires, and the link to the rest. A row with nothing else to add still has both, so
             there is no such thing here as a row with an empty disclosure.
+
+            A row that cannot be ticked says why, rather than leaving a greyed-out checkbox that
+            states no reason (§6.5). The reason sits beside the figure rather than in place of it,
+            because the two do not always arrive together: a row needing administrator rights has a
+            real total and still cannot be ticked, and the list is ordered by that total, so
+            replacing it left the biggest cause at the top of the list with no number against it. A
+            row with nothing to reclaim drops the figure instead — it reads "0 B" or "—", which the
+            reason beside it already says in words.
+
+            The figure sits in a column of one width on every row, and everything to its right of
+            the name is right-aligned against it. Each row builds its own Grid, so a figure column
+            left to Auto alone comes out at a different width on every row and the chips beside it
+            step raggedly down the page. The figure's cell is in a WidthGroup instead, which gives
+            every row the width of the widest figure in the list: the chip's own column can stay
+            Auto and still start at the same offset from the right on every row, which is what puts
+            the chips in a straight line. A fixed width would cut off an estimate such as "~1.0 GB",
+            and any figure under Windows text scaling.
+
+            The chip's column is not grouped, because Windows text scaling grows the chip, and a
+            fixed column would have it overflow leftwards over the status instead of pushing the
+            name.
+
+            The name never gives way. It is the row's identity, and a list of rows that no longer
+            say which row they are is not a list. So the status takes the slack, which means the
+            status is what trims when the window narrows, and it is a secondary sentence that the
+            disclosure repeats in full. Where the name and the chips cannot share a line, the chips
+            and the figure move under the name and the status trims beside it (ReflowRow). The chips
+            stay in line with the rows above because they are right-aligned on either line.
         -->
         <DataTemplate x:Key="CompactFinding" x:DataType="vm:FindingViewModel">
             <Grid RowDefinitions="Auto,Auto">
-                <Expander Grid.Row="0"
-                          AutomationProperties.Name="{x:Bind Text.DetailToggleName}"
-                          HorizontalAlignment="Stretch"
-                          HorizontalContentAlignment="Stretch"
-                          Background="Transparent"
-                          BorderThickness="0"
-                          Padding="0,0,0,8">
-                    <Expander.Header>
-                        <ContentPresenter Content="{x:Bind}"
-                                          ContentTemplate="{StaticResource CompactFindingRow}" />
-                    </Expander.Header>
+                <Grid Grid.Row="0"
+                      ColumnSpacing="{StaticResource ControlGap}"
+                      ColumnDefinitions="Auto,*,Auto"
+                      RowDefinitions="Auto,Auto"
+                      Padding="16,8,8,8">
 
-                    <!-- Indented to the name above it rather than to the card edge, so the
-                         disclosure reads as belonging to its row and not to the list. -->
-                    <StackPanel Spacing="{StaticResource LabelGap}" Margin="72,0,16,0">
+                    <ContentPresenter Grid.Column="0"
+                                      VerticalAlignment="Center"
+                                      Content="{x:Bind}"
+                                      ContentTemplate="{StaticResource FindingCheckBox}" />
+
+                    <controls:ReflowRow Grid.Column="1"
+                                        ColumnSpacing="{StaticResource ControlGap}"
+                                        RowSpacing="{StaticResource LabelGap}"
+                                        VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
+                            <!-- §7's sentence for a pointer. The row has no line to write it on, so it is
+                                 here, on the checkbox's help text, and in the disclosure below. -->
+                            <TextBlock Text="{x:Bind Name}"
+                                       Style="{StaticResource BodyStrongTextBlockStyle}"
+                                       TextWrapping="NoWrap"
+                                       VerticalAlignment="Center"
+                                       ToolTipService.ToolTip="{x:Bind Facts.WhatHappensOnNextUse}" />
+
+                            <!-- On the row line itself, unlike the "What is this?" link, which compact folds into
+                                 the disclosure. For a row whose items are chosen one by one, choosing them is
+                                 the decision the row is for, and a decision two levels down is one nobody
+                                 finds. It shows the count because that is what says whether the list is worth
+                                 opening. -->
+                            <HyperlinkButton Content="{x:Bind ItemsLinkLabel, Mode=OneWay}"
+                                             Visibility="{x:Bind OffersItems, Mode=OneWay}"
+                                             Padding="{StaticResource LinkPadding}"
+                                             VerticalAlignment="Center"
+                                             Tag="{x:Bind}"
+                                             Click="OnItemsLinkClicked"
+                                             AutomationProperties.Name="{x:Bind Text.ItemsLinkName}"
+                                             AutomationProperties.AutomationId="{x:Bind AutomationIds.ItemsLink}" />
+                        </StackPanel>
+
+                        <TextBlock Text="{x:Bind StatusLabel, Mode=OneWay}"
+                                   Visibility="{x:Bind CannotBeSelected, Mode=OneWay}"
+                                   Style="{StaticResource Caption}"
+                                   TextWrapping="NoWrap"
+                                   TextTrimming="CharacterEllipsis"
+                                   TextAlignment="Right"
+                                   VerticalAlignment="Center" />
+
+                        <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
+                            <controls:ProviderChips Facts="{x:Bind Facts}" />
+
+                            <!-- The group is on the cell rather than the figure, so a row whose figure is
+                                 hidden still keeps the column's width and its chip stays in line. -->
+                            <Border MinWidth="72"
+                                    controls:WidthGroup.Group="{StaticResource FigureWidths}">
+                                <TextBlock Text="{x:Bind SizeLabel, Mode=OneWay}"
+                                           Visibility="{x:Bind HasSizeToShow, Mode=OneWay}"
+                                           ToolTipService.ToolTip="{x:Bind ChangeTip, Mode=OneWay}"
+                                           Style="{StaticResource RowFigure}"
+                                           HorizontalAlignment="Right"
+                                           TextAlignment="Right"
+                                           VerticalAlignment="Center" />
+                            </Border>
+                        </StackPanel>
+                    </controls:ReflowRow>
+
+                    <controls:DisclosureButton Grid.Column="2"
+                                               Style="{StaticResource SubtleButtonStyle}"
+                                               VerticalAlignment="Center"
+                                               IsExpanded="{x:Bind IsDetailOpen, Mode=TwoWay}"
+                                               ToolTipService.ToolTip="{x:Bind Text.DetailToggleName}"
+                                               AutomationProperties.Name="{x:Bind Text.DetailToggleName}"
+                                               AutomationProperties.AutomationId="{x:Bind AutomationIds.DetailToggle}" />
+
+                    <!-- In the name's column, so the disclosure starts where the name does and reads as
+                         belonging to its row and not to the list. -->
+                    <StackPanel Grid.Row="1"
+                                Grid.Column="1"
+                                Spacing="{StaticResource LabelGap}"
+                                Margin="0,8,0,4"
+                                Visibility="{x:Bind IsDetailOpen, Mode=OneWay}">
                         <TextBlock Text="{x:Bind Facts.WhatHappensOnNextUse}"
                                    Style="{StaticResource SecondaryText}" />
 
@@ -262,7 +261,7 @@
                                          AutomationProperties.Name="{x:Bind Text.InformationLinkName}"
                                          AutomationProperties.AutomationId="{x:Bind AutomationIds.InformationLink}" />
                     </StackPanel>
-                </Expander>
+                </Grid>
 
                 <Border Grid.Row="1" Style="{StaticResource Divider}" Margin="16,0" />
             </Grid>
@@ -575,9 +574,6 @@
                                   ItemContainerStyle="{StaticResource FindingRowContainer}"
                                   TabNavigation="Local"
                                   Padding="0,4">
-                            <ListView.Resources>
-                                <views:RowDisclosures />
-                            </ListView.Resources>
                             <ListView.Footer>
                                 <views:AwaitingFolderGroup x:Name="AwaitingGroup" Group="{x:Bind ViewModel.AwaitingFolders}" AddCommand="{x:Bind ViewModel.AddSourceFolderCommand}" />
                             </ListView.Footer>

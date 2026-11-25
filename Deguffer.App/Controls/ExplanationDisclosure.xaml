@@ -4,8 +4,8 @@
     line that opens on a click, Enter or Space, and a screen reader announces as expanded or
     collapsed. What it holds is a paragraph, and a list where the explanation is a run of names.
 
-    The Storage rows' quiet Expander resources, so a disclosure reads as a line of text and a
-    chevron there and here alike, rather than a filled box louder than the sentence above it.
+    The quiet Expander resources the run's details share, so a disclosure reads as a line of text
+    and a chevron there and here alike, rather than a filled box louder than the sentence above it.
 -->
 <UserControl
     x:Class="Deguffer.App.Controls.ExplanationDisclosure"
@@ -18,7 +18,7 @@
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <views:RowDisclosures />
+                <views:QuietDisclosures />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </UserControl.Resources>

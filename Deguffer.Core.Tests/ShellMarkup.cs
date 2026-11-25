@@ -16,7 +16,16 @@ internal static class ShellMarkup
     public static readonly IReadOnlySet<string> Pressable = new HashSet<string>(StringComparer.Ordinal)
     {
         "Button", "ToggleButton", "RepeatButton", "HyperlinkButton", "DropDownButton", "SplitButton",
-        "ToggleSplitButton", "AppBarButton", "AppBarToggleButton",
+        "ToggleSplitButton", "AppBarButton", "AppBarToggleButton", "DisclosureButton",
+    };
+
+    /// <summary>
+    /// The shell's own pressable controls that draw their glyph themselves, so the markup shows no
+    /// icon inside them and nothing on screen names them.
+    /// </summary>
+    private static readonly IReadOnlySet<string> GlyphOnly = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "DisclosureButton",
     };
 
     private static readonly IReadOnlySet<string> Icons = new HashSet<string>(StringComparer.Ordinal)
@@ -69,6 +78,11 @@ internal static class ShellMarkup
         if (!IsPressable(element) || element.Attribute("Content") is not null || element.Attribute("Label") is not null)
         {
             return false;
+        }
+
+        if (GlyphOnly.Contains(element.Name.LocalName))
+        {
+            return true;
         }
 
         var content = element.Elements().Where(child => !child.Name.LocalName.Contains('.', StringComparison.Ordinal)).ToList();
