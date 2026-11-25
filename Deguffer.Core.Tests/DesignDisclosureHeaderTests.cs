@@ -7,12 +7,12 @@ namespace Deguffer.Core.Tests;
 /// button, so a checkbox, a link or a button inside it is interactive content inside a button (WCAG
 /// 4.1.2): a click in the gaps between them opens the disclosure, and a screen reader can report the
 /// header as one button holding others. A line that holds controls and opens detail ends in a
-/// <c>DisclosureButton</c> beside them instead. The compact Storage row and the group of rows waiting
-/// for a source folder both broke this when it was written, and both were rebuilt, so it holds with
-/// no exceptions.
+/// <c>DisclosureButton</c> beside them instead. The rule has no exceptions.
 ///
-/// <para>A header that draws a template or one of the shell's own controls is read through it, which
-/// is how the compact row hid its checkbox: the header held only a presenter of the row's template.</para>
+/// <para>A header is everything the Expander draws there: its <c>Expander.Header</c>, its header
+/// template, written inline or named as a resource, and every template and shell control those draw
+/// in turn. A header that holds only a presenter of a template hides the template's controls from a
+/// reading of the header's own markup.</para>
 /// </summary>
 public sealed class DesignDisclosureHeaderTests
 {
@@ -26,66 +26,107 @@ public sealed class DesignDisclosureHeaderTests
         "TimePicker",
     };
 
+    /// <summary>The attributes through which an element draws a template keyed in the resources.</summary>
+    private static readonly string[] TemplateAttributes = ["ContentTemplate", "ItemTemplate", "HeaderTemplate"];
+
     [Fact]
     public void NoControlSitsInsideADisclosureHeader()
     {
-        var found = ShellMarkup.Files.SelectMany(file => Headers(file)
-            .SelectMany(header => Inside(file, header, [])
+        var found = ShellMarkup.Files.SelectMany(file => Expanders(file)
+            .SelectMany(expander => Header(file, expander)
                 .Where(IsOperable)
-                .Select(control => file.At(header, $"<{control.Name.LocalName}> (line {ShellMarkup.LineOf(control)}) sits inside an Expander's header; end the line with a DisclosureButton beside it instead"))));
+                .Select(control => file.At(expander, $"<{control.Name.LocalName}> (line {ShellMarkup.LineOf(control)}) sits inside an Expander's header; end the line with a DisclosureButton beside it instead"))));
 
         RuleBaseline.Hold("no control sits inside a disclosure header", found, new Dictionary<string, int>());
     }
 
     /// <summary>
-    /// The rule reads through a header's template, and one that stopped doing so would pass the rule
-    /// above for the very header it was written against. A header built as the compact row's was
-    /// must be found holding its checkbox.
+    /// Each way of giving an Expander its header is read, through the templates it draws. A sweep that
+    /// read only the header's own markup would pass a header holding nothing but a presenter.
     /// </summary>
-    [Fact]
-    public void AHeaderIsReadThroughTheTemplateItDraws()
+    [Theory]
+    [InlineData("""<Expander><Expander.Header><ContentPresenter ContentTemplate="{StaticResource Row}" /></Expander.Header></Expander>""")]
+    [InlineData("""<Expander HeaderTemplate="{StaticResource Row}" />""")]
+    [InlineData("""<Expander><Expander.HeaderTemplate><DataTemplate><CheckBox /></DataTemplate></Expander.HeaderTemplate></Expander>""")]
+    [InlineData("""<Expander><Expander.Header><ItemsControl ItemTemplate="{StaticResource Row}" /></Expander.Header></Expander>""")]
+    public void EveryWayOfGivingAHeaderIsRead(string expander)
     {
-        var file = Synthetic("""
+        var file = Synthetic($"""
             <Page xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
                 <Page.Resources>
                     <DataTemplate x:Key="Row"><Grid><CheckBox /></Grid></DataTemplate>
                 </Page.Resources>
-                <Expander>
-                    <Expander.Header>
-                        <ContentPresenter ContentTemplate="{StaticResource Row}" />
-                    </Expander.Header>
-                </Expander>
+                {expander}
             </Page>
             """);
 
-        var header = Assert.Single(Headers(file));
-
-        Assert.Contains(Inside(file, header, []), element => element.Name.LocalName == "CheckBox");
+        Assert.Contains(Header(file, Assert.Single(Expanders(file))), element => element.Name.LocalName == "CheckBox");
     }
 
-    // A sweep that stopped finding the headers would pass the rule with nothing to check. The shell
-    // had four Expanders with a header when this was written.
+    /// <summary>A template the application's resources hold is followed as one the file holds is.</summary>
+    [Fact]
+    public void AHeaderTemplateFromTheApplicationResourcesIsRead()
+    {
+        var application = Synthetic("""
+            <Application xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                <Application.Resources>
+                    <DataTemplate x:Key="Row"><Grid><CheckBox /></Grid></DataTemplate>
+                </Application.Resources>
+            </Application>
+            """);
+        var file = Synthetic("""
+            <Page xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
+                <Expander HeaderTemplate="{StaticResource Row}" />
+            </Page>
+            """);
+
+        Assert.Contains(Header(file, Assert.Single(Expanders(file)), application), element => element.Name.LocalName == "CheckBox");
+    }
+
+    // A sweep that stopped finding the headers would pass the rule with nothing to check, so it must
+    // find at least the Expanders the shell draws with a header today.
     [Fact]
     public void TheSweepFindsTheDisclosureHeaders()
     {
-        var count = ShellMarkup.Files.Sum(file => Headers(file).Count());
+        var count = ShellMarkup.Files.Sum(file => Expanders(file).Count(expander => Header(file, expander).Any()));
 
         Assert.True(count >= 4, $"Only {count} Expander headers were found, so the rule is no longer reading the shell.");
     }
 
-    private static IEnumerable<XElement> Headers(MarkupFile file) =>
-        file.Elements.Where(element => element.Name.LocalName == "Expander.Header");
+    private static MarkupFile Application => Assert.Single(ShellMarkup.Files, file => file.IsApplicationResources);
+
+    private static IEnumerable<XElement> Expanders(MarkupFile file) =>
+        file.Elements.Where(element => element.Name.LocalName == "Expander");
+
+    /// <summary>Everything <paramref name="expander"/> draws in its header, however the header is given.</summary>
+    private static IEnumerable<XElement> Header(MarkupFile file, XElement expander) => Header(file, expander, Application);
+
+    private static IEnumerable<XElement> Header(MarkupFile file, XElement expander, MarkupFile application)
+    {
+        var seen = new HashSet<XElement>();
+
+        var given = expander.Elements()
+            .Where(element => element.Name.LocalName is "Expander.Header" or "Expander.HeaderTemplate")
+            .SelectMany(element => Inside(file, element, application, seen));
+
+        var named = expander.Attribute("HeaderTemplate")?.Value is { } reference && TemplateNamed(file, application, reference) is { } template
+            ? Inside(file, template, application, seen)
+            : [];
+
+        return [.. given, .. named];
+    }
 
     private static bool IsOperable(XElement element) =>
         ShellMarkup.IsPressable(element) || Operable.Contains(element.Name.LocalName);
 
     /// <summary>
     /// Everything drawn inside <paramref name="root"/>: its own descendants, the descendants of any
-    /// template it names from its file's resources, and those of any of the shell's own controls it
-    /// places, followed as far as they go.
+    /// template it names from the resources, and those of any of the shell's own controls it places,
+    /// followed as far as they go.
     /// </summary>
-    private static IEnumerable<XElement> Inside(MarkupFile file, XElement root, HashSet<XElement> seen)
+    private static IEnumerable<XElement> Inside(MarkupFile file, XElement root, MarkupFile application, HashSet<XElement> seen)
     {
         foreach (var element in root.Descendants())
         {
@@ -96,17 +137,20 @@ public sealed class DesignDisclosureHeaderTests
 
             yield return element;
 
-            if (TemplateNamed(file, element) is { } template)
+            foreach (var reference in TemplateAttributes.Select(name => element.Attribute(name)?.Value).OfType<string>())
             {
-                foreach (var drawn in Inside(file, template, seen))
+                if (TemplateNamed(file, application, reference) is { } template)
                 {
-                    yield return drawn;
+                    foreach (var drawn in Inside(file, template, application, seen))
+                    {
+                        yield return drawn;
+                    }
                 }
             }
 
-            if (ControlFile(element) is { } control)
+            if (ControlFile(element) is { } control && control.Document.Root is { } controlRoot)
             {
-                foreach (var drawn in Inside(control, control.Document.Root!, seen))
+                foreach (var drawn in Inside(control, controlRoot, application, seen))
                 {
                     yield return drawn;
                 }
@@ -114,19 +158,24 @@ public sealed class DesignDisclosureHeaderTests
         }
     }
 
-    private static XElement? TemplateNamed(MarkupFile file, XElement element)
+    /// <summary>
+    /// The template a <c>{StaticResource …}</c> reference names, looked up as the framework looks it
+    /// up for a page: in the file's own resources first, then in the application's.
+    /// </summary>
+    private static XElement? TemplateNamed(MarkupFile file, MarkupFile application, string reference)
     {
-        if (element.Attribute("ContentTemplate")?.Value is not { } reference
-            || !reference.StartsWith("{StaticResource ", StringComparison.Ordinal))
+        if (!reference.StartsWith("{StaticResource ", StringComparison.Ordinal))
         {
             return null;
         }
 
         var key = reference["{StaticResource ".Length..].TrimEnd('}').Trim();
 
-        return file.Elements.FirstOrDefault(candidate =>
-            candidate.Name.LocalName == "DataTemplate" && candidate.Attribute(Xaml + "Key")?.Value == key);
+        return KeyedTemplate(file, key) ?? KeyedTemplate(application, key);
     }
+
+    private static XElement? KeyedTemplate(MarkupFile file, string key) => file.Elements.FirstOrDefault(candidate =>
+        candidate.Name.LocalName == "DataTemplate" && candidate.Attribute(Xaml + "Key")?.Value == key);
 
     /// <summary>The XAML file whose class <paramref name="element"/> is, where it is one of the shell's own controls.</summary>
     private static MarkupFile? ControlFile(XElement element) =>

@@ -16,8 +16,7 @@ public sealed class StorageRowMarkupTests
 
     /// <summary>
     /// A keyboard or a screen reader stops on the checkbox and nowhere else on the row, so it carries
-    /// the row's figure and tier in its name and §7's sentence as its help text. Standard used to name
-    /// it after the row alone, with no help text, while compact carried the sentence.
+    /// the row's figure and tier in its name and §7's sentence as its help text.
     /// </summary>
     [Fact]
     public void TheRowCheckBoxCarriesTheFactsTheDecisionRestsOn()

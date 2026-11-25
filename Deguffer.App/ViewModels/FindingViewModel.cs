@@ -232,7 +232,7 @@ public sealed partial class FindingViewModel : ObservableObject
     /// <summary>
     /// What a screen reader calls the row's checkbox: its name, its figure and its tier, the facts the
     /// decision to tick it rests on (§7). The figure and the chip are not tab stops, so a reader tabbing
-    /// down the list lands only on the checkbox, and with the name alone heard nothing else. A row with
+    /// down the list lands only on the checkbox, which must therefore carry them. A row with
     /// no installation has no figure, only a dash that says nothing aloud, so its name leaves it out.
     /// </summary>
     public string SelectionName => Finding.IsPresent
