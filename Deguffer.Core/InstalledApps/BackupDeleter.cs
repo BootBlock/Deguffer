@@ -9,7 +9,10 @@ public sealed record BackupDeletionOutcome(RegistryBackupFile Backup, bool Delet
 
 /// <summary>What a selection of backups may delete, and what the page says about the rest.</summary>
 /// <param name="Deletable">The backups a deletion would act on.</param>
-/// <param name="Note">Why the rest will be left, or null where nothing will be.</param>
+/// <param name="Note">
+/// Why the rest will be left, or null where nothing will be. Always set where
+/// <paramref name="Deletable"/> is empty, so a page never asks to delete nothing.
+/// </param>
 public sealed record BackupDeletionSelection(IReadOnlyList<RegistryBackupFile> Deletable, string? Note);
 
 /// <summary>What one deletion of backups did, and the §5.6 check after it.</summary>
@@ -81,6 +84,7 @@ public sealed class BackupDeleter(string folder, IFileSystem fileSystem)
 
         return new BackupDeletionSelection(deletable, refused switch
         {
+            [] when deletable.Length == 0 => "No backup is selected.",
             [] => null,
 
             // Nothing else is selected, so the refusal alone says what will happen.
@@ -103,8 +107,11 @@ public sealed class BackupDeleter(string folder, IFileSystem fileSystem)
                 : await DeleteOneAsync(backup).ConfigureAwait(false));
         }
 
-        var chosenPaths = chosen.Select(b => b.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var deletedPaths = outcomes.Where(o => o.Deleted).Select(o => o.Backup.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // Ordinal, because a folder marked case-sensitive can hold two names that differ only in
+        // case, and a deleted file must not excuse its twin from the check. Both sides come from the
+        // same listing of the same folder, so their forms match exactly.
+        var chosenPaths = chosen.Select(b => b.Path).ToHashSet(StringComparer.Ordinal);
+        var deletedPaths = outcomes.Where(o => o.Deleted).Select(o => o.Backup.Path).ToHashSet(StringComparer.Ordinal);
 
         return new BackupDeletionReport(outcomes, Verify(before, deletedPaths, chosenPaths));
     }

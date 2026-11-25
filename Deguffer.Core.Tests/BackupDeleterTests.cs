@@ -203,6 +203,47 @@ public sealed class BackupDeleterTests : IDisposable
         Assert.Empty(refused.Deletable);
         Assert.Equal(deleter.MayDelete(stranger).Reason, refused.Note);
         Assert.Null(deleter.Choose([backup]).Note);
+        Assert.Equal("No backup is selected.", deleter.Choose([]).Note);
+    }
+
+    /// <summary>
+    /// In a case-sensitive folder, a file whose name differs from the deleted one only in case is a
+    /// sibling like any other: it survives, and the check names it.
+    /// </summary>
+    [Fact]
+    public async Task ACaseTwinOfTheDeletedFileIsCheckedInACaseSensitiveFolder()
+    {
+        var folder = CaseSensitiveFolder.Create(Path.Combine(_temp.Path, "exact"));
+        var chosen = Write("tool.reg", "Tool", folder);
+        var twin = Write("TOOL.reg", "Tool", folder);
+        var listed = new RegistryBackups(new FakeProcessRunner(), folder, RegExe, TimeProvider.System).List(CancellationToken.None);
+
+        var report = await new BackupDeleter(folder, WindowsFileSystem.Default)
+            .DeleteAsync([listed.Single(b => b.Path == LongPath.Display(chosen))], CancellationToken.None);
+
+        Assert.Single(report.Deleted);
+        Assert.True(File.Exists(twin));
+        Assert.Contains(report.Verification.Checks, c => c.Subject == LongPath.Display(twin) && c.Outcome == VerificationOutcome.Survived);
+    }
+
+    /// <summary>
+    /// What counts as a backup is one rule for the list and the deleter: a <c>.reg</c> file by its
+    /// long name, never a restore's dot-prefixed copy, and never a name the folder's <c>*.reg</c>
+    /// filter lets through by its short name alone.
+    /// </summary>
+    [Theory]
+    [InlineData("20260101-000000 CurrentUser Tool.reg", true)]
+    [InlineData("TOOL.REG", true)]
+    [InlineData(".restoring-0123.reg", false)]
+    [InlineData("tool.regbak", false)]
+    [InlineData("tool.reg.txt", false)]
+    public void ABackupIsNamedAsOne(string name, bool isBackup)
+    {
+        Assert.Equal(isBackup, RegistryBackupListing.IsBackupName(name));
+
+        var key = new UninstallKey(UninstallScope.CurrentUser, "Tool").PhysicalPath;
+        var file = new RegistryBackupFile(Path.Combine(Folder, name), key, "Tool", DateTimeOffset.UnixEpoch, IsConfined: true);
+        Assert.Equal(isBackup, Deleter().MayDelete(file).IsAllowed);
     }
 
     /// <summary>A file another program holds open is left, and the report says why.</summary>

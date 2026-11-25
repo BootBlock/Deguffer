@@ -146,17 +146,19 @@ public sealed partial class InstalledAppsBackups : ObservableObject
     }
 
     /// <summary>
-    /// Delete the selected backups for good, after the user confirms. A deleted backup cannot be
-    /// restored, so the question names every file and says so; the folder is listed again after.
+    /// Delete the selected backups for good, after the user confirms. Deguffer cannot restore an
+    /// entry from a deleted file, so the question names every file and says so; the folder is listed
+    /// again after.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanAct))]
     private async Task DeleteAsync()
     {
         var selection = _tools.Deleter.Choose(_selected);
 
-        if (selection.Deletable.Count == 0)
+        // Core gives a note whenever nothing may be deleted, an empty selection included.
+        if (selection is { Deletable.Count: 0, Note: { } refusal })
         {
-            _page.Show(selection.Note ?? "Nothing selected can be deleted.", InfoBarSeverity.Informational);
+            _page.Show(refusal, InfoBarSeverity.Informational);
             return;
         }
 

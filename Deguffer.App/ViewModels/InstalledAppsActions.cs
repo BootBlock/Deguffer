@@ -1,11 +1,9 @@
-using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Deguffer.App.Shell;
 using Deguffer.Core.Execution;
 using Deguffer.Core.InstalledApps;
 using Deguffer.Core.Text;
-using Deguffer.Core.Viewing;
 using Deguffer.Core.Working;
 using Microsoft.UI.Xaml.Controls;
 
