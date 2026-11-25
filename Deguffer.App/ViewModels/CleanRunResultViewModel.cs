@@ -38,11 +38,17 @@ public sealed partial class CleanRunResultViewModel(ReportOrigin origin, IUserEn
     /// against whatever the hero shows (<see cref="Track"/>), so the two never disagree when a later
     /// reading moves it.
     /// </summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasFreeSpaceMove))]
-    public partial string FreeSpaceMoveText { get; private set; } = string.Empty;
+    public string FreeSpaceMoveText => Move?.Text ?? string.Empty;
 
-    public bool HasFreeSpaceMove => !string.IsNullOrEmpty(FreeSpaceMoveText);
+    public bool HasFreeSpaceMove => Move is not null;
+
+    /// <summary>
+    /// The move itself, or null where no run's result is on screen or either reading is unknown. Read
+    /// by the Storage card's empty state as well, which states it as a sentence of its own.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FreeSpaceMoveText), nameof(HasFreeSpaceMove))]
+    public partial FreeSpaceMove? Move { get; private set; }
 
     /// <summary>
     /// A third number, for a run that had one: what sync apps were asked to release. Apart from both
@@ -131,14 +137,14 @@ public sealed partial class CleanRunResultViewModel(ReportOrigin origin, IUserEn
 
     /// <summary>Read the move again against a new reading of the free space.</summary>
     public void Track(long? freeNow) =>
-        FreeSpaceMoveText = FreeSpaceMove.Between(_freeBefore, freeNow)?.Text ?? string.Empty;
+        Move = FreeSpaceMove.Between(_freeBefore, freeNow);
 
     /// <summary>Take the card down: its figures describe a machine state the next run replaces.</summary>
     public void Clear()
     {
         RemovedLabel = string.Empty;
         _freeBefore = null;
-        FreeSpaceMoveText = string.Empty;
+        Move = null;
         RequestedLabel = string.Empty;
         ScheduledLabel = string.Empty;
         SafetyCheck.Clear();

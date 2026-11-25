@@ -269,11 +269,12 @@ public class CleanViewModelScanTests
 
     /// <summary>
     /// An empty list says which kind of empty it is. Before a scan it says what to press; after one
-    /// whose every row the filters hide, it says the filters did it. A filter change raises no change
-    /// to the list itself, so the page has to announce the empty state on its own.
+    /// whose every location is clear, it says nothing is left to clean and offers to list them. A
+    /// filter change raises no change to the list itself, so the page has to announce the empty state
+    /// on its own.
     /// </summary>
     [Fact]
-    public void AnEmptyListSaysWhetherTheFiltersEmptiedIt()
+    public void AnEmptyListSaysWhetherAnythingIsLeftToClean()
     {
         var clear = new FakeCleanupProvider("clear");
         using var page = new StoragePage([clear]);
@@ -290,7 +291,9 @@ public class CleanViewModelScanTests
         page.Scan();
 
         Assert.True(empty.IsShown);
-        Assert.Equal("Every row is hidden", empty.Title);
+        Assert.Equal("Nothing left to clean", empty.Title);
+        Assert.Equal("Nothing the scan found has anything left to remove.", empty.Message);
+        Assert.Equal("Show items that are already clear", empty.Remedy);
 
         var raised = empty.Notifications();
         page.ViewModel.ShowAlreadyClear = true;
@@ -298,6 +301,30 @@ public class CleanViewModelScanTests
         Assert.False(empty.IsShown);
         Assert.Contains(nameof(empty.IsShown), raised);
         Assert.Contains(nameof(empty.Title), raised);
+    }
+
+    /// <summary>
+    /// A scan whose every location belongs to a tool this machine lacks has nothing left to clean only
+    /// because it never had anything, so the empty state says the filter hides them, and offers no
+    /// button to list clear locations there are none of.
+    /// </summary>
+    [Fact]
+    public void AScanOfToolsNotInstalledSaysTheFilterHidesThem()
+    {
+        var absent = new FakeCleanupProvider("absent") { IsPresent = false };
+        using var page = new StoragePage([absent]);
+
+        page.Scan();
+
+        var empty = page.ViewModel.EmptyState;
+        Assert.True(empty.IsShown);
+        Assert.Equal("Every row is hidden", empty.Title);
+        Assert.Contains("Show items not installed", empty.Message);
+        Assert.Empty(empty.Remedy);
+
+        page.ViewModel.ShowNotInstalled = true;
+
+        Assert.False(empty.IsShown);
     }
 
     /// <summary>

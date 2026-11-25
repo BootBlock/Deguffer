@@ -583,13 +583,13 @@
                             </ListView.Footer>
                         </ListView>
 
-                        <!-- Says what to do next rather than leaving a blank card that reads as a failed
-                             screen, and before any scan holds the one thing to do. After the list, so it is
-                             drawn over it: an empty list still takes every click on its area. -->
+                        <!-- In place of a blank card that reads as a failed screen: what to press before a scan,
+                             or that nothing is left to clean. Over the list, which still takes every click. -->
                         <controls:EmptyState Grid.Row="1"
-                                             Glyph="&#xE721;"
+                                             Glyph="{x:Bind ViewModel.EmptyState.Glyph, Mode=OneWay}"
                                              Title="{x:Bind ViewModel.EmptyState.Title, Mode=OneWay}"
                                              Message="{x:Bind ViewModel.EmptyState.Message, Mode=OneWay}"
+                                             ActionLabel="{x:Bind ViewModel.EmptyState.Remedy, Mode=OneWay}" ActionCommand="{x:Bind AlreadyClear.ShowCommand}"
                                              Visibility="{x:Bind ViewModel.EmptyState.IsShown, Mode=OneWay}">
                             <controls:EmptyState.PrimaryAction>
                                 <views:StorageScanButtons x:Name="EmptyScanButtons"

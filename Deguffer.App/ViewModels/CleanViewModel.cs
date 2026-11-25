@@ -167,7 +167,7 @@ public sealed partial class CleanViewModel : ObservableObject
         TotalSpace = space?.Total;
         FreeSpaceNow = space?.Free;
 
-        _listed = new StorageListedRows(Findings);
+        _listed = new StorageListedRows(Findings, RunResult);
         Controls = new StoragePageControls(Findings);
 
         // Offered before anything has been scanned, so an elevated preview does not have to be
