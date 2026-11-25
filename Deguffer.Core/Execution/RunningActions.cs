@@ -15,6 +15,9 @@ public enum RunningAction
     /// <summary>A registry backup being written back on the Installed apps page.</summary>
     BackupRestore,
 
+    /// <summary>Registry backups being deleted on the Installed apps page.</summary>
+    BackupDeletion,
+
     /// <summary>Programs being uninstalled, one at a time, on the Installed apps page.</summary>
     Uninstall,
 

@@ -420,8 +420,8 @@ Over time, Windows' list of installed programs collects entries for programs tha
 there. Deguffer removes an entry only when the machine proves the program has gone, for example
 because Windows Installer reports that the product is not installed, or because its uninstaller is
 missing. By default it backs the entry up with `reg.exe` first. It removes only the registry key,
-never any files, and you can restore a backup from the same page. For programs that are still
-installed, it runs each one's own uninstaller, one at a time.
+never any files. You can restore a backup from the same page, or delete backups you no longer
+need. For programs that are still installed, it runs each one's own uninstaller, one at a time.
 
 ## Startup
 

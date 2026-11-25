@@ -122,7 +122,7 @@
 
             <CheckBox Content="Back up entries before removing them"
                       IsChecked="{x:Bind ViewModel.Actions.BackUpFirst, Mode=TwoWay}"
-                      ToolTipService.ToolTip="{x:Bind ViewModel.Actions.BackupFolder}" />
+                      ToolTipService.ToolTip="{x:Bind ViewModel.Actions.Backups.Folder}" />
         </controls:FlowRow>
 
         <InfoBar Grid.Row="3"
@@ -198,9 +198,9 @@
 
                     <ListView x:Name="BackupList" Grid.Row="1"
                               AutomationProperties.Name="Backups"
-                              SelectionMode="Single"
+                              SelectionMode="Extended"
                               SelectionChanged="OnBackupSelectionChanged"
-                              ItemsSource="{x:Bind ViewModel.Actions.Backups}">
+                              ItemsSource="{x:Bind ViewModel.Actions.Backups.Rows}">
                         <ListView.ItemTemplate>
                             <DataTemplate x:DataType="vm:BackupRow">
                                 <StackPanel Padding="0,4" Spacing="{StaticResource LabelGap}" AutomationProperties.Name="{x:Bind Title}">
@@ -213,10 +213,16 @@
                     </ListView>
 
                     <Grid Grid.Row="2" ColumnSpacing="12" ColumnDefinitions="*,Auto">
-                        <TextBlock Text="{x:Bind ViewModel.Actions.RestoreNote, Mode=OneWay}" TextWrapping="Wrap"
+                        <TextBlock Text="{x:Bind ViewModel.Actions.Backups.RestoreNote, Mode=OneWay}" TextWrapping="Wrap"
                                    VerticalAlignment="Center" />
-                        <Button Grid.Column="1" Content="Restore"
-                                Command="{x:Bind ViewModel.Actions.RestoreCommand}" />
+                        <!-- Delete is never the accent: the loss is permanent, and it asks first. -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
+                            <Button x:Name="RestoreBackupButton" Content="Restore"
+                                    Command="{x:Bind ViewModel.Actions.Backups.RestoreCommand}" />
+                            <Button x:Name="DeleteBackupsButton" Content="Delete"
+                                    Command="{x:Bind ViewModel.Actions.Backups.DeleteCommand}"
+                                    ToolTipService.ToolTip="Delete the selected backups for good. Deguffer asks first." />
+                        </StackPanel>
                     </Grid>
                 </Grid>
             </PivotItem>

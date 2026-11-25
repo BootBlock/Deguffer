@@ -22,6 +22,15 @@ internal sealed class RegistryBackupListing(string folder)
     private readonly Lock _gate = new();
 
     /// <summary>
+    /// Whether a file in the folder is named as a backup: a <c>.reg</c> file, and not the copy an
+    /// interrupted restore leaves, whose name starts with a dot. The one rule for what the list offers
+    /// and what <see cref="BackupDeleter"/> may delete. The folder's own <c>*.reg</c> filter is not
+    /// enough on its own, because Windows matches it against short names as well.
+    /// </summary>
+    internal static bool IsBackupName(string name) =>
+        name.EndsWith(".reg", StringComparison.OrdinalIgnoreCase) && !name.StartsWith('.');
+
+    /// <summary>
     /// Every file the last listing read, keyed by its extended path exactly as the folder listed it.
     /// Ordinal, because a folder marked case-sensitive can hold two names that differ only in case.
     /// </summary>
@@ -52,8 +61,7 @@ internal sealed class RegistryBackupListing(string folder)
                 {
                     ct.ThrowIfCancellationRequested();
 
-                    // A copy an interrupted restore left behind is not a backup the user took.
-                    if (file.Name.StartsWith('.'))
+                    if (!IsBackupName(file.Name))
                     {
                         continue;
                     }
