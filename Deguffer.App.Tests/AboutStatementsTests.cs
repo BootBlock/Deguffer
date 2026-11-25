@@ -64,6 +64,11 @@ public sealed class AboutStatementsTests
             sentence => Assert.Contains("Only Delete permanently", sentence, StringComparison.Ordinal));
     }
 
+    /// <summary>Deleting a backup cannot be taken back, so Installed apps says so beside its undo.</summary>
+    [Fact]
+    public void InstalledAppsSaysDeletingABackupIsPermanent() =>
+        Assert.Contains(Safeguards(Destination.InstalledApps), sentence => sentence.Contains("removes a backup file permanently", StringComparison.Ordinal));
+
     [Theory]
     [InlineData(Destination.Startup)]
     [InlineData(Destination.Memory)]

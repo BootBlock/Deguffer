@@ -44,8 +44,8 @@ public sealed record InstalledAppsPrompt(string Title, string Consequence, IRead
         backups is [{ } only]
             ? $"Delete the backup of '{only.DisplayName ?? only.KeyPath}' for good?"
             : $"Delete {Counted.Of(backups.Count, "backup", "backups")} for good?",
-        "Deguffer deletes each file permanently: it does not go to the Recycle Bin, and the entry it records can "
-        + "no longer be restored from Deguffer. Nothing in the registry changes, and no other file is touched.",
+        "Deguffer deletes each file permanently: it does not go to the Recycle Bin, and Deguffer can no longer "
+        + "restore the entry from it. Nothing in the registry changes, and no other file is touched.",
         [.. backups.Select(b => b.Path)],
         Counted.Form(backups.Count, "Delete backup", "Delete backups"));
 

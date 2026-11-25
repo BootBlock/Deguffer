@@ -1195,10 +1195,11 @@ against writing and deletion until `reg.exe` has read it.
 The user may delete backups from the list, for good, more than one at a time; restoring still takes
 one. Only a file the list offers can go: one directly in the backup folder that reads as a backup.
 The confirmation names every file by its full path and says that a deleted file does not go to the
-Recycle Bin, that the entry it records can no longer be restored from Deguffer, and that nothing in
-the registry changes. Each file is decided again immediately before it is deleted, and one written
+Recycle Bin, that Deguffer can no longer restore the entry from it, and that nothing in the
+registry changes. Each file is decided again immediately before it is deleted, and one written
 since it was listed is left and says so. **§5.6: after deleting, Deguffer asserts that the backup
-folder still stands and that every other file in it, backup or not, is still there.**
+folder still stands and that every other file in it, backup or not, is still there.** A folder
+Windows would not list before the deletion leaves those files unverified, never passed.
 
 **Uninstalling an installed program**
 

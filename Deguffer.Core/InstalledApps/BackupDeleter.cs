@@ -7,6 +7,11 @@ namespace Deguffer.Core.InstalledApps;
 /// <summary>What happened to one backup the user chose to delete.</summary>
 public sealed record BackupDeletionOutcome(RegistryBackupFile Backup, bool Deleted, string Message);
 
+/// <summary>What a selection of backups may delete, and what the page says about the rest.</summary>
+/// <param name="Deletable">The backups a deletion would act on.</param>
+/// <param name="Note">Why the rest will be left, or null where nothing will be.</param>
+public sealed record BackupDeletionSelection(IReadOnlyList<RegistryBackupFile> Deletable, string? Note);
+
 /// <summary>What one deletion of backups did, and the §5.6 check after it.</summary>
 public sealed record BackupDeletionReport(IReadOnlyList<BackupDeletionOutcome> Items, VerificationResult Verification)
 {
@@ -58,16 +63,30 @@ public sealed class BackupDeleter(string folder, IFileSystem fileSystem)
     /// </summary>
     public ActionVerdict MayDelete(RegistryBackupFile backup)
     {
-        var name = Path.GetFileName(backup.Path);
-
         if (!string.Equals(Path.GetDirectoryName(backup.Path), Path.TrimEndingDirectorySeparator(folder), StringComparison.OrdinalIgnoreCase)
-            || !name.EndsWith(".reg", StringComparison.OrdinalIgnoreCase)
-            || name.StartsWith('.'))
+            || !RegistryBackupListing.IsBackupName(Path.GetFileName(backup.Path)))
         {
             return ActionVerdict.Refuse($"This file is not a backup in {folder}, so Deguffer will not delete it.");
         }
 
         return ActionVerdict.Allow($"Deletes {backup.Path}.");
+    }
+
+    /// <summary>What <paramref name="selected"/> may delete, decided when the user presses Delete and again for each file by <see cref="DeleteAsync"/>.</summary>
+    public BackupDeletionSelection Choose(IReadOnlyList<RegistryBackupFile> selected)
+    {
+        var verdicts = selected.Select(b => (Backup: b, Verdict: MayDelete(b))).ToList();
+        RegistryBackupFile[] deletable = [.. verdicts.Where(v => v.Verdict.IsAllowed).Select(v => v.Backup)];
+        var refused = verdicts.Where(v => !v.Verdict.IsAllowed).ToList();
+
+        return new BackupDeletionSelection(deletable, refused switch
+        {
+            [] => null,
+
+            // Nothing else is selected, so the refusal alone says what will happen.
+            [var first, ..] when deletable.Length == 0 => first.Verdict.Reason,
+            [var first, ..] => $"{Counted.Of(refused.Count, "selected backup", "selected backups")} will be left. {first.Verdict.Reason}",
+        });
     }
 
     public async Task<BackupDeletionReport> DeleteAsync(IReadOnlyList<RegistryBackupFile> chosen, CancellationToken ct)
@@ -137,12 +156,19 @@ public sealed class BackupDeleter(string folder, IFileSystem fileSystem)
             : new BackupDeletionOutcome(backup, false, "Windows accepted the deletion, but the file is still there.");
     }
 
-    /// <summary>Every file directly in the folder, in display form, or none where it cannot be listed.</summary>
-    private List<string> FilesInFolder()
+    /// <summary>
+    /// Every file directly in the folder, in display form: none where the folder is not there, and
+    /// null where Windows would not list it, which leaves the check after the deletion nothing to
+    /// compare against.
+    /// </summary>
+    private List<string>? FilesInFolder()
     {
-        if (LongPath.ProbeDirectory(folder) is not PathPresence.Present)
+        switch (LongPath.ProbeDirectory(folder))
         {
-            return [];
+            case PathPresence.Absent:
+                return [];
+            case PathPresence.Refused:
+                return null;
         }
 
         try
@@ -151,14 +177,14 @@ public sealed class BackupDeleter(string folder, IFileSystem fileSystem)
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // A folder that stops listing part-way leaves nothing to compare against; the check
-            // still asserts that the folder itself stands.
-            return [];
+            // A listing that stops part-way is not a list of what was there.
+            return null;
         }
     }
 
     /// <summary>§5.6: the backup folder still stands, and every file in it beside the deleted ones is still there.</summary>
-    private VerificationResult Verify(List<string> before, IReadOnlySet<string> deleted, IReadOnlySet<string> chosen)
+    /// <param name="before">The files listed before the deletion, or null where the folder could not be listed.</param>
+    private VerificationResult Verify(List<string>? before, IReadOnlySet<string> deleted, IReadOnlySet<string> chosen)
     {
         var checks = new List<VerificationCheck>
         {
@@ -170,6 +196,16 @@ public sealed class BackupDeleter(string folder, IFileSystem fileSystem)
                 _ => new VerificationCheck(folder, "The backup folder itself", VerificationOutcome.Failed, "It is gone."),
             },
         };
+
+        if (before is null)
+        {
+            // Not a pass: nothing establishes what stood beside the deleted files, so nothing can
+            // say it survived.
+            checks.Add(new VerificationCheck(folder, "The other files in the backup folder", VerificationOutcome.Unverified,
+                "Windows would not list the folder before the deletion, so they could not be checked."));
+
+            return new VerificationResult { Checks = checks };
+        }
 
         foreach (var path in before.Where(p => !deleted.Contains(p)))
         {

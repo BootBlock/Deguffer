@@ -158,6 +158,53 @@ public sealed class BackupDeleterTests : IDisposable
         Assert.Equal(3, listed.Count);
     }
 
+    /// <summary>
+    /// A folder Windows will not list before the deletion leaves nothing to compare against, so the
+    /// files beside the deleted one are reported unverified, and the deletion is never a clean pass.
+    /// </summary>
+    [Fact]
+    public async Task AFolderThatWillNotListLeavesItsOtherFilesUnverified()
+    {
+        var chosen = Write("a.reg", "A");
+        var beside = Write("b.reg", "B");
+        var listed = ListedAs(chosen);
+
+        BackupDeletionReport report;
+
+        using (new DeniedDirectory(Folder))
+        {
+            report = await Deleter().DeleteAsync([listed], CancellationToken.None);
+        }
+
+        Assert.Single(report.Deleted);
+        Assert.True(File.Exists(beside));
+        Assert.False(report.Verification.Passed);
+        Assert.False(report.IsComplete);
+        Assert.Equal("The other files in the backup folder", Assert.Single(report.Verification.Unverified).Reason);
+    }
+
+    /// <summary>
+    /// The selection is narrowed in Core: what may be deleted goes ahead, and the rest is named in a
+    /// note, the refusal alone where nothing else was selected.
+    /// </summary>
+    [Fact]
+    public void ASelectionKeepsWhatMayBeDeletedAndSaysWhyTheRestIsLeft()
+    {
+        var backup = ListedAs(Write("a.reg", "A"));
+        var key = new UninstallKey(UninstallScope.CurrentUser, "A").PhysicalPath;
+        var stranger = new RegistryBackupFile(Path.Combine(_temp.Path, "a.reg"), key, "A", backup.Written, IsConfined: true);
+        var deleter = Deleter();
+
+        var mixed = deleter.Choose([backup, stranger]);
+        var refused = deleter.Choose([stranger]);
+
+        Assert.Equal([backup], mixed.Deletable);
+        Assert.StartsWith("1 selected backup will be left.", mixed.Note, StringComparison.Ordinal);
+        Assert.Empty(refused.Deletable);
+        Assert.Equal(deleter.MayDelete(stranger).Reason, refused.Note);
+        Assert.Null(deleter.Choose([backup]).Note);
+    }
+
     /// <summary>A file another program holds open is left, and the report says why.</summary>
     [Fact]
     public async Task AFileHeldOpenIsLeftAndSaysWhy()

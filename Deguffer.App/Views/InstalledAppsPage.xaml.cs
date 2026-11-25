@@ -48,7 +48,7 @@ public sealed partial class InstalledAppsPage : Page
         ListAnimation.Play(BackupList, SystemMotion.Current);
 
         NavigationCacheMode = NavigationCacheMode.Required;
-        BackupsIntro = $"Backups Deguffer took before removing an entry, kept in {ViewModel.Actions.BackupFolder}. "
+        BackupsIntro = $"Backups Deguffer took before removing an entry, kept in {ViewModel.Actions.Backups.Folder}. "
             + "Restoring one writes the entry back with reg.exe, and only where the entry is not already there. "
             + "Deleting one removes the file for good.";
 
@@ -70,7 +70,7 @@ public sealed partial class InstalledAppsPage : Page
         }
 
         _hasRead = true;
-        _ = ViewModel.Actions.ShowBackupsAsync();
+        _ = ViewModel.Actions.Backups.ShowAsync();
         _ = ViewModel.RefreshAsync();
     }
 
@@ -81,7 +81,7 @@ public sealed partial class InstalledAppsPage : Page
         ViewModel.Actions.SelectInstalled((InstalledEntry[])[.. InstalledList.SelectedItems.OfType<InstalledAppRow>().Select(r => r.Entry)]);
 
     private void OnBackupSelectionChanged(object sender, SelectionChangedEventArgs e) =>
-        ViewModel.Actions.SelectBackups([.. BackupList.SelectedItems.OfType<BackupRow>()]);
+        ViewModel.Actions.Backups.Select([.. BackupList.SelectedItems.OfType<BackupRow>()]);
 
     private void OnReportClosed(InfoBar sender, object args) => ViewModel.Actions.DismissReportCommand.Execute(null);
 }

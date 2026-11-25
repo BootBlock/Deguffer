@@ -85,6 +85,7 @@ public static class AboutStatements
         [
             "Removing an entry deletes only its registry key: nothing is uninstalled and no file is touched.",
             "Each entry is backed up first unless you turn that off, and you can restore a backup from the page's Backups tab.",
+            "Delete on the Backups tab removes a backup file permanently, after asking, and changes nothing in the registry.",
             "Uninstall runs the program's own uninstaller, which is the program's to undo or not.",
         ]),
         new(DestinationNames.Of(Destination.Startup),

@@ -11,34 +11,27 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace Deguffer.App.ViewModels;
 
-/// <summary>A backup as the page lists it.</summary>
-public sealed record BackupRow(RegistryBackupFile File, string Title, string Detail)
+/// <summary>What an action on the Installed apps page reported, for the page's info bar.</summary>
+/// <param name="Failed">Whether the action failed, which marks the work under way as failed.</param>
+internal readonly record struct ActionReport(string Text, InfoBarSeverity Severity, bool Failed)
 {
-    public static BackupRow For(RegistryBackupFile file) => new(
-        file,
-        file.DisplayName ?? file.KeyPath,
-        $"{file.Written.ToLocalTime():g} · {file.Path}");
+    /// <summary>A report of an action with a §5.6 check: a summary, a line for each thing left or unchecked, and a severity from both.</summary>
+    public static ActionReport Of(string summary, IReadOnlyList<string> details, bool isComplete, VerificationResult verification) => new(
+        string.Join(Environment.NewLine, [summary, .. details]),
+        isComplete ? InfoBarSeverity.Success : verification.Passed ? InfoBarSeverity.Warning : InfoBarSeverity.Error,
+        Failed: !verification.Passed);
 }
 
-/// <summary>What the Installed apps page does with the backups it kept (§7.3), and where they are.</summary>
-/// <param name="Folder">Where backups are kept, in display form.</param>
-/// <param name="List">Lists the backups in <paramref name="Folder"/>: <see cref="RegistryBackups.List"/>, which reads files, so it is called off the UI thread.</param>
-public sealed record BackupTools(
-    BackupRestorer Restorer,
-    BackupDeleter Deleter,
-    string Folder,
-    Func<CancellationToken, IReadOnlyList<RegistryBackupFile>> List);
-
 /// <summary>
-/// What the Installed apps page does to what the user selected (§7.3): remove stale entries,
-/// uninstall programs one at a time, restore or delete backups. Every decision is Core's; this carries the selection
+/// What the Installed apps page does to what the user selected (§7.3): remove stale entries and
+/// uninstall programs one at a time, with the backups the removals keep in <see cref="Backups"/>.
+/// Every decision is Core's; this carries the selection
 /// to it, asks the user, runs the action off the UI thread and keeps the report on screen until it
 /// is dismissed.
 /// </summary>
 public sealed partial class InstalledAppsActions : ObservableObject
 {
     private readonly EntryRemover _remover;
-    private readonly BackupTools _backups;
     private readonly ProgramUninstaller _uninstaller;
     private readonly UninstallQueue _queue;
     private readonly Func<IInstalledAppsConfirmation> _confirmation;
@@ -48,10 +41,8 @@ public sealed partial class InstalledAppsActions : ObservableObject
     private readonly BusyWork _work;
     private IReadOnlyList<InstalledEntry> _stale = [];
     private IReadOnlyList<InstalledEntry> _installed = [];
-    private IReadOnlyList<RegistryBackupFile> _selectedBackups = [];
     private bool _anyUninstallable;
     private CancellationTokenSource? _watching;
-    private CancellationTokenSource? _listing;
 
     /// <param name="running">What is changing the machine on every page, where each action is recorded while it runs.</param>
     public InstalledAppsActions(
@@ -65,7 +56,6 @@ public sealed partial class InstalledAppsActions : ObservableObject
         BusyWork work)
     {
         _remover = remover;
-        _backups = backups;
         _uninstaller = uninstaller;
         _queue = new UninstallQueue(uninstaller, confirmation);
         _confirmation = confirmation;
@@ -73,12 +63,14 @@ public sealed partial class InstalledAppsActions : ObservableObject
         _isElevated = isElevated;
         _running = running;
         _work = work;
+        Backups = new InstalledAppsBackups(this, backups, confirmation, isElevated);
     }
 
     /// <summary>Raised after an action changed the entries, so the page reads them again.</summary>
     public event EventHandler? EntriesChanged;
 
-    public ObservableCollection<BackupRow> Backups { get; } = [];
+    /// <summary>The Backups tab: the backups the removals keep, restored or deleted from there.</summary>
+    public InstalledAppsBackups Backups { get; }
 
     /// <summary>The backup switch, remembered between runs.</summary>
     public bool BackUpFirst
@@ -96,8 +88,6 @@ public sealed partial class InstalledAppsActions : ObservableObject
         }
     }
 
-    public string BackupFolder => _backups.Folder;
-
     /// <summary>Why some of the selected stale entries will be left, or empty.</summary>
     [ObservableProperty]
     public partial string RemovalNote { get; private set; } = string.Empty;
@@ -107,10 +97,7 @@ public sealed partial class InstalledAppsActions : ObservableObject
     public partial string UninstallNote { get; private set; } = string.Empty;
 
     [ObservableProperty]
-    public partial string RestoreNote { get; private set; } = string.Empty;
-
-    [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(RemoveCommand), nameof(UninstallCommand), nameof(RestoreCommand), nameof(DeleteBackupsCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RemoveCommand), nameof(UninstallCommand))]
     public partial bool IsActing { get; private set; }
 
     [ObservableProperty]
@@ -146,47 +133,6 @@ public sealed partial class InstalledAppsActions : ObservableObject
     /// <summary>What <paramref name="entry"/>'s row shows beside its name.</summary>
     public EntryMarks MarksFor(InstalledEntry entry) => EntryMarks.For(entry, _uninstaller.Judge(entry).Verdict, _isElevated);
 
-    public void SelectBackups(IReadOnlyList<BackupRow> selected)
-    {
-        _selectedBackups = [.. selected.Select(row => row.File)];
-        ShowRestoreNote();
-        RestoreCommand.NotifyCanExecuteChanged();
-        DeleteBackupsCommand.NotifyCanExecuteChanged();
-    }
-
-    private void ShowRestoreNote() => RestoreNote = _backups.Restorer.MayRestore(_selectedBackups, _isElevated).Reason;
-
-    /// <summary>Read the backup folder again, off the UI thread. A listing already running is abandoned for this one.</summary>
-    public async Task ShowBackupsAsync()
-    {
-        _listing?.Cancel();
-        using var listing = new CancellationTokenSource();
-        _listing = listing;
-
-        try
-        {
-            var rows = await Task.Run(() => _backups.List(listing.Token).Select(BackupRow.For).ToList(), listing.Token);
-
-            // A newer listing may have started after this one's last check, and its rows are the
-            // ones the list must show.
-            if (!listing.IsCancellationRequested)
-            {
-                LiveList.Show(Backups, rows, row => row.File.Path);
-            }
-        }
-        catch (OperationCanceledException) when (listing.IsCancellationRequested)
-        {
-            // Replaced by a newer listing, which shows its own rows.
-        }
-        finally
-        {
-            if (ReferenceEquals(_listing, listing))
-            {
-                _listing = null;
-            }
-        }
-    }
-
     private bool CanRemove() => _stale.Count > 0 && !IsActing;
 
     [RelayCommand(CanExecute = nameof(CanRemove))]
@@ -202,30 +148,46 @@ public sealed partial class InstalledAppsActions : ObservableObject
 
         var backUp = BackUpFirst;
 
-        if (!await _confirmation().AskAsync(InstalledAppsPrompt.ForRemoval(selection.Removable, backUp, BackupFolder), CancellationToken.None))
+        if (!await _confirmation().AskAsync(InstalledAppsPrompt.ForRemoval(selection.Removable, backUp, Backups.Folder), CancellationToken.None))
         {
             Show("Nothing was removed.", InfoBarSeverity.Informational);
             return;
         }
 
+        await ActAsync(RunningAction.EntryRemoval, async () =>
+        {
+            var report = await Task.Run(() => _remover.RemoveAsync(selection.Removable, backUp, _isElevated, CancellationToken.None));
+
+            return ActionReport.Of(report.Summary, report.Details, report.IsComplete, report.Verification);
+        });
+
+        // The entries are read again while the backups are listed, rather than after.
+        var listing = Backups.ShowAsync();
+        EntriesHaveChanged();
+        await listing;
+    }
+
+    /// <summary>
+    /// Run one action that changes the machine: one at a time across the page, held in
+    /// <see cref="RunningActions"/> until its report is on screen, so neither the window nor an
+    /// Elevate button ends the process before it has said what it did, and counted as work under way
+    /// until then. What follows the report, such as listing the backups again, changes nothing, so
+    /// it does not hold the window open.
+    /// </summary>
+    internal async Task ActAsync(RunningAction action, Func<Task<ActionReport>> run)
+    {
         IsActing = true;
 
-        // Each action here is held in RunningActions until its report is on screen, so neither the
-        // window nor an Elevate button ends the process before it has said what it did. The backup
-        // listing after it changes nothing, so it does not hold the window open.
-        using (_running.Begin(RunningAction.EntryRemoval))
+        using (_running.Begin(action))
         {
             var work = _work.Begin();
 
             try
             {
-                var report = await Task.Run(() => _remover.RemoveAsync(selection.Removable, backUp, _isElevated, CancellationToken.None));
+                var report = await run();
+                Show(report.Text, report.Severity);
 
-                Show(
-                    string.Join(Environment.NewLine, [report.Summary, .. report.Details]),
-                    report.IsComplete ? InfoBarSeverity.Success : report.Verification.Passed ? InfoBarSeverity.Warning : InfoBarSeverity.Error);
-
-                if (!report.Verification.Passed)
+                if (report.Failed)
                 {
                     work.Fail();
                 }
@@ -236,12 +198,10 @@ public sealed partial class InstalledAppsActions : ObservableObject
                 work.Dispose();
             }
         }
-
-        // The entries are read again while the backups are listed, rather than after.
-        var listing = ShowBackupsAsync();
-        EntriesChanged?.Invoke(this, EventArgs.Empty);
-        await listing;
     }
+
+    /// <summary>Tell the page to read the entries again, after an action changed them.</summary>
+    internal void EntriesHaveChanged() => EntriesChanged?.Invoke(this, EventArgs.Empty);
 
     private bool CanUninstall() => _anyUninstallable && !IsActing;
 
@@ -296,7 +256,7 @@ public sealed partial class InstalledAppsActions : ObservableObject
             work.Dispose();
         }
 
-        EntriesChanged?.Invoke(this, EventArgs.Empty);
+        EntriesHaveChanged();
     }
 
     private void ShowWaiting(UninstallStep step) => Show(
@@ -310,106 +270,6 @@ public sealed partial class InstalledAppsActions : ObservableObject
     [RelayCommand(CanExecute = nameof(IsWatching))]
     private void StopWatching() => _watching?.Cancel();
 
-    private bool CanRestore() => _selectedBackups.Count > 0 && !IsActing;
-
-    [RelayCommand(CanExecute = nameof(CanRestore))]
-    private async Task RestoreAsync()
-    {
-        var selected = _selectedBackups;
-        var verdict = _backups.Restorer.MayRestore(selected, _isElevated);
-
-        if (!verdict.IsAllowed || selected is not [var backup])
-        {
-            Show(verdict.Reason, InfoBarSeverity.Informational);
-            return;
-        }
-
-        if (!await _confirmation().AskAsync(InstalledAppsPrompt.ForRestore(backup), CancellationToken.None))
-        {
-            Show("Nothing was restored.", InfoBarSeverity.Informational);
-            return;
-        }
-
-        IsActing = true;
-
-        using var running = _running.Begin(RunningAction.BackupRestore);
-        var work = _work.Begin();
-
-        try
-        {
-            var outcome = await Task.Run(() => _backups.Restorer.RestoreAsync(backup, _isElevated, CancellationToken.None));
-
-            Show(outcome.Message, outcome.Succeeded ? InfoBarSeverity.Success : InfoBarSeverity.Error);
-
-            if (!outcome.Succeeded)
-            {
-                work.Fail();
-            }
-        }
-        finally
-        {
-            IsActing = false;
-            work.Dispose();
-        }
-
-        // The same backup now meets an entry that is there, so its note says so.
-        ShowRestoreNote();
-
-        EntriesChanged?.Invoke(this, EventArgs.Empty);
-    }
-
-    private bool CanDeleteBackups() => _selectedBackups.Count > 0 && !IsActing;
-
-    /// <summary>
-    /// Delete the selected backups for good, after the user confirms. A deleted backup cannot be
-    /// restored, so the question names every file and says so; the folder is listed again after.
-    /// </summary>
-    [RelayCommand(CanExecute = nameof(CanDeleteBackups))]
-    private async Task DeleteBackupsAsync()
-    {
-        RegistryBackupFile[] deletable = [.. _selectedBackups.Where(b => _backups.Deleter.MayDelete(b).IsAllowed)];
-
-        if (deletable.Length == 0)
-        {
-            Show(_backups.Deleter.MayDelete(_selectedBackups[0]).Reason, InfoBarSeverity.Informational);
-            return;
-        }
-
-        if (!await _confirmation().AskAsync(InstalledAppsPrompt.ForBackupDeletion(deletable), CancellationToken.None))
-        {
-            Show("Nothing was deleted.", InfoBarSeverity.Informational);
-            return;
-        }
-
-        IsActing = true;
-
-        using (_running.Begin(RunningAction.BackupDeletion))
-        {
-            var work = _work.Begin();
-
-            try
-            {
-                var report = await Task.Run(() => _backups.Deleter.DeleteAsync(deletable, CancellationToken.None));
-
-                Show(
-                    string.Join(Environment.NewLine, [report.Summary, .. report.Details]),
-                    report.IsComplete ? InfoBarSeverity.Success : report.Verification.Passed ? InfoBarSeverity.Warning : InfoBarSeverity.Error);
-
-                if (!report.Verification.Passed)
-                {
-                    work.Fail();
-                }
-            }
-            finally
-            {
-                IsActing = false;
-                work.Dispose();
-            }
-        }
-
-        await ShowBackupsAsync();
-    }
-
     [RelayCommand]
     private void DismissReport()
     {
@@ -417,7 +277,7 @@ public sealed partial class InstalledAppsActions : ObservableObject
         Report = string.Empty;
     }
 
-    private void Show(string report, InfoBarSeverity severity)
+    internal void Show(string report, InfoBarSeverity severity)
     {
         Report = report;
         ReportSeverity = severity;
