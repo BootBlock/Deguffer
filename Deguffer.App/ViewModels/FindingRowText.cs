@@ -44,9 +44,9 @@ public sealed class FindingRowText(string name, int stepCount, bool awaitingSour
             : "What was left alone";
 
     /// <summary>
-    /// What a screen reader calls the compact row's disclosure. The whole row is that disclosure's
-    /// header there, so it derives no name of its own and would otherwise be announced as an
-    /// unnamed button.
+    /// What a screen reader calls the compact row's disclosure, and what its tooltip says. The
+    /// disclosure is a chevron with no words on it, so it derives no name of its own and would
+    /// otherwise be announced as an unnamed button.
     ///
     /// Named for the row rather than for what is inside it, because in the compact view the
     /// disclosure always holds the sentence §7 asks each row to state, whether or not there is a
