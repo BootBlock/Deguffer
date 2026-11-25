@@ -89,7 +89,7 @@
                                    Title="Show items that are already clear"
                                    SaveFailed="{x:Bind ViewModel.ShowAlreadyClearSave.Failed, Mode=OneWay}"
                                    Default="{x:Bind ViewModel.Defaults.ShowAlreadyClear}"
-                                   Description="List locations Deguffer has nothing left to reclaim from. They are hidden by default, as they offer nothing to decide."
+                                   Description="List locations Deguffer has nothing left to clean in. They are hidden by default, as they offer nothing to decide."
                                    Details="Some rows are listed whatever this is set to: one that could not be read, one Deguffer did not look at, and one whose files are all too recent to touch, that Windows would not let Deguffer remove, on your keep list, or Outlook data files.">
                     <views:SettingsRow.Control>
                         <ToggleSwitch IsOn="{x:Bind ViewModel.ShowAlreadyClear, Mode=TwoWay}"

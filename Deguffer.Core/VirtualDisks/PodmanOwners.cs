@@ -65,5 +65,5 @@ public sealed record PodmanNetworking : DiskOwner
         "Podman makes this distribution itself for its networking, so there is nothing in it to prune.";
 
     public override string RouteInOneSentence(VirtualDisk disk) =>
-        "Podman needs it for user-mode networking and makes it itself, so there is nothing here to reclaim.";
+        "Podman needs it for user-mode networking and makes it itself, so there is nothing here to remove.";
 }

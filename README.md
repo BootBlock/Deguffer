@@ -83,11 +83,11 @@ offers anything.
 
 ## Safety tiers
 
-| Tier | What it is | What deleting it costs | Default |
+| Tier | What it is | What removing it costs | Default |
 | --- | --- | --- | --- |
-| **1. Regenerable cache** | Recreated by whatever made it, when it is next needed | A slower next use | Offered and pre-selected |
-| **2. Regenerable, at a cost** | Recreated by downloading or rebuilding, often several gigabytes | Time and bandwidth | Offered, not pre-selected |
-| **3. User data** | Logs, histories and saved sessions that *look* like a cache | It is gone for good | Offered, never pre-selected |
+| **1. Rebuilds itself** | Recreated by whatever made it, when it is next needed | A slower next use | Offered and pre-selected |
+| **2. Costly to rebuild** | Recreated by downloading or rebuilding, often several gigabytes | Time and bandwidth | Offered, not pre-selected |
+| **3. Permanent** | User data: logs, histories and saved sessions that *look* like a cache | It is gone for good | Offered, never pre-selected |
 | **4. Do not touch** | Settings, credentials and live state | Things stop working | Never shown |
 
 Some rows were written from a tool's documentation, its source code and its users' reports,

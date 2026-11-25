@@ -47,7 +47,7 @@ public sealed class PreviewSummaryTests
         var summary = For(FindingStatus.AlreadyClear, unclear, FindingStatus.ToolchainMissing);
 
         Assert.DoesNotContain("already clear", summary, StringComparison.OrdinalIgnoreCase);
-        Assert.StartsWith("Nothing to reclaim", summary, StringComparison.Ordinal);
+        Assert.StartsWith("Nothing to clean", summary, StringComparison.Ordinal);
     }
 
     /// <summary>Each of those states gets words naming its own cause when it is the only one present.</summary>
@@ -89,7 +89,7 @@ public sealed class PreviewSummaryTests
     public void StillSaysTheCachesAreClearWhenEveryRowWasExaminedAndFoundEmpty()
     {
         Assert.Equal(
-            "Nothing to reclaim — these caches are already clear.",
+            "Nothing to clean — these caches are already clear.",
             For(FindingStatus.AlreadyClear, FindingStatus.ToolchainMissing, FindingStatus.AlreadyClear));
     }
 
@@ -101,7 +101,7 @@ public sealed class PreviewSummaryTests
     public void ReportsBothTotalsWhenARowCanBeCleaned()
     {
         Assert.Equal(
-            "4.0 GB can be reclaimed, 1.5 GB selected. Review the rows, then Clean.",
+            "4.0 GB can be cleaned, 1.5 GB selected. Review the rows, then Clean.",
             For(FindingStatus.NotExamined, FindingStatus.ReadyToClean));
     }
 
@@ -120,7 +120,7 @@ public sealed class PreviewSummaryTests
             [FindingStatus.ReadyToClean], Selectable, ScanSize.Zero, Elevate, Full);
 
         Assert.Equal(
-            "4.0 GB can be reclaimed, 0 B selected. Tick the rows you want, then Clean.",
+            "4.0 GB can be cleaned, 0 B selected. Tick the rows you want, then Clean.",
             summary);
     }
 
@@ -141,7 +141,7 @@ public sealed class PreviewSummaryTests
             Full);
 
         Assert.Equal(
-            "~4.0 GB can be reclaimed, ~1.5 GB selected. Review the rows, then Clean.",
+            "~4.0 GB can be cleaned, ~1.5 GB selected. Review the rows, then Clean.",
             summary);
     }
 
@@ -156,7 +156,7 @@ public sealed class PreviewSummaryTests
         var leftovers = new ScanSize(0, 0, Entries: 428);
 
         Assert.Equal(
-            "428 items can be reclaimed, 428 items selected. Review the rows, then Clean.",
+            "428 items can be cleaned, 428 items selected. Review the rows, then Clean.",
             PreviewSummary.For([FindingStatus.ReadyToClean], leftovers, leftovers, Elevate, Full));
     }
 
@@ -169,7 +169,7 @@ public sealed class PreviewSummaryTests
     public void SaysHowManyLocationsAChosenScanMeasured()
     {
         Assert.Equal(
-            "Scanned 2 of 80 locations. Nothing to reclaim — these caches are already clear.",
+            "Scanned 2 of 80 locations. Nothing to clean — these caches are already clear.",
             PreviewSummary.For([FindingStatus.AlreadyClear], ScanSize.Zero, ScanSize.Zero, Elevate, new ScanCoverage(2, 80)));
     }
 
@@ -178,7 +178,7 @@ public sealed class PreviewSummaryTests
     public void SaysNothingAboutCoverageAfterAFullScan()
     {
         Assert.Equal(
-            "Nothing to reclaim — these caches are already clear.",
+            "Nothing to clean — these caches are already clear.",
             PreviewSummary.For([FindingStatus.AlreadyClear], ScanSize.Zero, ScanSize.Zero, Elevate, Full));
     }
 

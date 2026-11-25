@@ -17,9 +17,9 @@ four questions worth asking before deleting anything:
 
 | Tier | Meaning | Deguffer's behaviour |
 | --- | --- | --- |
-| **1 — Regenerable cache** | The tool re-creates it automatically on demand. You lose time, never data. | Offered and pre-selected. |
-| **2 — Regenerable, with cost** | Re-created only by a large re-download, a long rebuild, or an explicit command you must run yourself. | Offered, **not pre-selected**, and needs an extra acknowledgement on every run. A tick you gave it before is remembered. |
-| **3 — User data in a cache costume** | Logs, histories, saved sessions, and anything else whose loss is permanent, such as the means to uninstall updates. Deleting loses it permanently. | Offered, **never pre-selected**, and the confirmation says plainly that the loss is permanent. How hard that confirmation is to give is yours to set: up to typing the item's name out, down to none at all. |
+| **1 — Rebuilds itself** | The tool re-creates it automatically on demand. You lose time, never data. | Offered and pre-selected. |
+| **2 — Costly to rebuild** | Re-created only by a large re-download, a long rebuild, or an explicit command you must run yourself. | Offered, **not pre-selected**, and needs an extra acknowledgement on every run. A tick you gave it before is remembered. |
+| **3 — Permanent** | User data in a cache costume: logs, histories, saved sessions, and anything else whose loss is permanent, such as the means to uninstall updates. Deleting loses it permanently. | Offered, **never pre-selected**, and the confirmation says plainly that the loss is permanent. How hard that confirmation is to give is yours to set: up to typing the item's name out, down to none at all. |
 | **4 — Do not touch** | Config, credentials, live state, or anything Deguffer cannot positively identify. | Excluded entirely — not even shown as an option. |
 
 **Tier 4 is the default, not the exception.** Every provider names the children it recognises;

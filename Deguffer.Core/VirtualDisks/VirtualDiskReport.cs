@@ -96,7 +96,7 @@ public static class VirtualDiskReport
         return new PlanNote(
             PlanNoteSeverity.Information,
             $"Inside Docker's data disk, Docker reports {FreeSpace.Format(usage.Size)} in use, of which "
-            + $"{FreeSpace.Format(usage.Reclaimable)} is reclaimable ({rows}). Pruning frees it inside the disk, "
+            + $"{FreeSpace.Format(usage.Reclaimable)} could be pruned ({rows}). Pruning frees it inside the disk, "
             + "and the drive gets it back only once the disk is compacted." + volumes);
     }
 

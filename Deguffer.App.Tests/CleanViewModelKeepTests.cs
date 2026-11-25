@@ -40,7 +40,7 @@ public class CleanViewModelKeepTests
 
         Assert.True(row.Steps[0].IsKept);
         Assert.Equal("Clean 2 KB", page.ViewModel.Selection.CleanLabel);
-        Assert.Equal("2 KB can be reclaimed, 2 KB selected. Review the rows, then Clean.", page.ViewModel.Status);
+        Assert.Equal("2 KB can be cleaned, 2 KB selected. Review the rows, then Clean.", page.ViewModel.Status);
         Assert.Equal(["a"], new KeepStore(page.Environment).Load().KeysFor("cache"));
     }
 

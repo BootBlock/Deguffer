@@ -28,7 +28,7 @@ public sealed record RancherDesktopData : DiskOwner
 
     public override string Route(VirtualDisk disk, bool isSparse) =>
         "To make it smaller, remove what is no longer needed first. With the moby engine, Rancher Desktop's guide "
-        + "to reclaiming the space a storage driver change leaves behind turns Kubernetes off, stops the running "
+        + "to freeing the space a storage driver change leaves behind turns Kubernetes off, stops the running "
         + "containers and then runs 'docker container prune' and 'docker image prune --all'. Its Troubleshooting page offers Reset Kubernetes, which can remove the "
         + "images too, and Factory Reset ('rdctl reset --factory'), which removes everything."
         + VirtualDiskRoutes.WslCompaction(disk, isSparse);
@@ -61,5 +61,5 @@ public sealed record RancherDesktopSystem : DiskOwner
         + "in it to prune.";
 
     public override string RouteInOneSentence(VirtualDisk disk) =>
-        "Rancher Desktop needs it to run and makes it itself, so there is nothing here to reclaim.";
+        "Rancher Desktop needs it to run and makes it itself, so there is nothing here to remove.";
 }

@@ -16,6 +16,9 @@ namespace Deguffer.Core.Tests;
 /// <item>A size is in the units Windows itself shows, KB, MB and GB, never KiB or GiB beside them.</item>
 /// <item>A date follows the user's culture through one formatter, never a fixed pattern such as
 /// <c>d MMM yyyy</c> that puts the day first for a reader who expects the month first.</item>
+/// <item>The user's action is called one thing. Deguffer says "clean" for it and "remove" for what a
+/// clean does to files, never "reclaim" beside them, so a first-time reader does not take the words
+/// for different strengths of action (spec §7). That rule is strict, not a ratchet.</item>
 /// </list>
 ///
 /// <para>Nielsen's heuristics 4 (consistency) and 9 (error recovery). Each is
@@ -67,6 +70,52 @@ public sealed partial class DesignUserTextTests
         ["Deguffer.Core/SystemProtection/RestorePoint.cs"] = 1,
         ["Deguffer.Core/SystemProtection/ShadowCopy.cs"] = 1,
     };
+
+    /// <summary>
+    /// The literals that hold "reclaim" because a tool wrote it, not Deguffer: each one is matched
+    /// against what the tool prints or stores, so rewording it would stop Deguffer reading the tool.
+    /// </summary>
+    private static readonly IReadOnlySet<string> ToolsOwnReclaimWords = new HashSet<string>(StringComparer.Ordinal)
+    {
+        // DISM's /AnalyzeComponentStore report.
+        "Number of Reclaimable Packages",
+
+        // PlatformIO's "pio system prune" summary.
+        "Total reclaimed space:",
+
+        // Docker's "system df" JSON property.
+        "Reclaimable",
+    };
+
+    [Fact]
+    public void TheUsersActionIsNeverCalledReclaiming()
+    {
+        var markup = ShellMarkup.Files.SelectMany(file => file.Elements
+            .SelectMany(element => element.Attributes())
+            .Where(attribute => Reclaim().IsMatch(attribute.Value))
+            .Select(attribute => file.At(attribute, $"says \"reclaim\" in \"{attribute.Value}\"")));
+
+        var code = ShownSources().SelectMany(file => Lines(file)
+            .SelectMany(line => StringLiteral().Matches(line.Line)
+                .Select(literal => WordsOf(literal.Value))
+                .Where(words => Reclaim().IsMatch(words) && !ToolsOwnReclaimWords.Contains(words))
+                .Select(words => new RuleViolation(line.File, line.Number, $"says \"reclaim\" in \"{words}\""))));
+
+        RuleBaseline.Hold("the user's action is \"clean\", never \"reclaim\"", code.Concat(markup), new Dictionary<string, int>());
+    }
+
+    /// <summary>
+    /// A literal's own words: the quotes and prefix gone, and an interpolated literal's holes
+    /// removed, since a member named for what it measures, such as <c>ReclaimablePackages</c>, is
+    /// code rather than text the user reads.
+    /// </summary>
+    private static string WordsOf(string literal)
+    {
+        var start = literal.IndexOf('"') + 1;
+        var words = literal[start..^1];
+
+        return literal.StartsWith('$') ? InterpolationHole().Replace(words, string.Empty) : words;
+    }
 
     [Fact]
     public void CountsAreWrittenWithTheirRealPlural()
@@ -129,6 +178,16 @@ public sealed partial class DesignUserTextTests
 
     [GeneratedRegex(@"\$?@?""(?:[^""\\\n]|\\.)*""")]
     private static partial Regex StringLiteral();
+
+    /// <summary>
+    /// The word in any of its forms, but not inside a member name such as
+    /// <c>report.ReclaimablePackages</c>, which an interpolation hole can leave in a literal.
+    /// </summary>
+    [GeneratedRegex(@"(?<![\w.])reclaim(?:s|ed|ing|able)?\b", RegexOptions.IgnoreCase)]
+    private static partial Regex Reclaim();
+
+    [GeneratedRegex(@"\{[^{}]*\}")]
+    private static partial Regex InterpolationHole();
 
     [GeneratedRegex(@"\w\(s\)")]
     private static partial Regex Plural();

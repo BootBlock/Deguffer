@@ -28,7 +28,7 @@ public static class PreviewSummary
     /// gets in any case. Naming two of ten causes would be less true than naming none.
     /// </summary>
     private const string MixedCauses =
-        "Nothing to reclaim, and not every location here is clear. Check what each row reports.";
+        "Nothing to clean, and not every location here is clear. Check what each row reports.";
 
     /// <param name="statuses">Every row of the preview, in any order.</param>
     /// <param name="selectable">
@@ -83,7 +83,7 @@ public static class PreviewSummary
                 ? "Review the rows, then Clean."
                 : "Tick the rows you want, then Clean.";
 
-            return $"{FreeSpace.Format(selectable)} can be reclaimed, "
+            return $"{FreeSpace.Format(selectable)} can be cleaned, "
                 + $"{FreeSpace.Format(selected)} selected. {next}";
         }
 
@@ -104,7 +104,7 @@ public static class PreviewSummary
 
         return present.Count switch
         {
-            0 => "Nothing to reclaim — these caches are already clear.",
+            0 => "Nothing to clean — these caches are already clear.",
             1 => ToCause(present.First()),
             _ => MixedCauses,
         };
@@ -117,38 +117,38 @@ public static class PreviewSummary
     private static string ToCause(FindingStatus status) => status switch
     {
         FindingStatus.UnreadableRoot =>
-            "Nothing to reclaim, and Windows would not let Deguffer read some of these locations.",
+            "Nothing to clean, and Windows would not let Deguffer read some of these locations.",
         FindingStatus.NotExamined =>
-            "Nothing to reclaim, and some of these locations were not examined.",
+            "Nothing to clean, and some of these locations were not examined.",
         // Deliberately "not old enough" rather than "recently changed", which the row's own label
         // has always said and this sentence used not to. Two different ages reach this state: the
         // user's guard on recently changed files, and a command that takes an age of its own —
         // FhManagew's retention, where the files held back can be a year old. Naming the guard here
         // would describe a setting the reader may never have switched on.
         FindingStatus.RecentContentHeldBack =>
-            "Nothing to reclaim, and some of these hold only files that are not old enough to remove.",
+            "Nothing to clean, and some of these hold only files that are not old enough to remove.",
         // Neither kind of refusal is named, for the reason the row's label names neither: "would not
         // let Deguffer remove" is true of a file another program holds open as well as of one Windows
         // denies, and the rows' notes are where the difference and the sizes are.
         FindingStatus.RefusedByWindows =>
-            "Nothing to reclaim, and Windows would not let Deguffer remove what some of these hold.",
+            "Nothing to clean, and Windows would not let Deguffer remove what some of these hold.",
         FindingStatus.OnKeepList =>
-            "Nothing to reclaim, and some of these hold only items on your keep list.",
+            "Nothing to clean, and some of these hold only items on your keep list.",
         FindingStatus.MailStoresHeldBack =>
-            "Nothing to reclaim, and some of these hold Outlook data files, which Deguffer never removes.",
+            "Nothing to clean, and some of these hold Outlook data files, which Deguffer never removes.",
         FindingStatus.UpdateInProgress =>
-            "Nothing to reclaim yet: some of these were left by a Windows update that has not finished, "
+            "Nothing to clean yet: some of these were left by a Windows update that has not finished, "
             + "and are offered once it has.",
         FindingStatus.VirtualMachineKept =>
-            "Nothing to reclaim, and some of these hold a virtual machine's disk or folder, which Deguffer never "
+            "Nothing to clean, and some of these hold a virtual machine's disk or folder, which Deguffer never "
             + "removes.",
         FindingStatus.AnotherAccountKept =>
-            "Nothing to reclaim, and some of these hold only files that belong to the account Deguffer is "
+            "Nothing to clean, and some of these hold only files that belong to the account Deguffer is "
             + "running as rather than to you, which it leaves alone.",
         FindingStatus.ReportOnly =>
-            "Nothing to reclaim here. Some rows report space only the tool that owns it can free, and say how.",
+            "Nothing to clean here. Some rows report space only the tool that owns it can free, and say how.",
         FindingStatus.AwaitingSourceFolders =>
-            "Nothing to reclaim, and some of these locations need a source folder before Deguffer "
+            "Nothing to clean, and some of these locations need a source folder before Deguffer "
             + "can look.",
         _ => MixedCauses,
     };

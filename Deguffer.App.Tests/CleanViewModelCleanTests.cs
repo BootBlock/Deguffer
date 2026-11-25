@@ -1036,10 +1036,10 @@ public class CleanViewModelCleanTests
 
         page.Clean();
 
-        Assert.Equal("2 KB can be reclaimed, 0 B selected. Tick the rows you want, then Clean.", page.ViewModel.Status);
+        Assert.Equal("2 KB can be cleaned, 0 B selected. Tick the rows you want, then Clean.", page.ViewModel.Status);
 
         page.Row("cache").Steps[0].IsSelected = true;
 
-        Assert.Equal("2 KB can be reclaimed, 2 KB selected. Review the rows, then Clean.", page.ViewModel.Status);
+        Assert.Equal("2 KB can be cleaned, 2 KB selected. Review the rows, then Clean.", page.ViewModel.Status);
     }
 }

@@ -32,7 +32,7 @@ internal static class VolumeRootItems
             + "drive that has churned through millions of small files keeps a large table.",
 
             "Windows will not let this be deleted, and there is no supported way to shrink it "
-            + "either — the space a deleted file's record leaves behind is reclaimed only by "
+            + "either — the space a deleted file's record leaves behind is freed only by "
             + "reformatting the drive."),
 
         Reserved(
@@ -122,7 +122,7 @@ internal static class VolumeRootItems
             "A folder holding NTFS's optional features rather than a file: disk quotas, object "
             + "identifiers, the index of links and junctions, the change journal, and the "
             + "transaction machinery. The folder itself occupies nothing. What is inside it can be "
-            + "large, and is where nearly all of a drive's reclaimable filesystem overhead sits.",
+            + "large, and holds nearly all of the filesystem overhead a drive can ever give back.",
 
             "It cannot be deleted. Each feature inside it is turned off or reset through its own "
             + "command, never by removing a file."),

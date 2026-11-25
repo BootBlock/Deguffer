@@ -192,7 +192,7 @@ public class StorageSelectionTests
 
         Assert.Equal(1, changes);
         Assert.Equal(1, statuses);
-        Assert.Equal("3 KB can be reclaimed, 3 KB selected. Review the rows, then Clean.", page.ViewModel.Status);
+        Assert.Equal("3 KB can be cleaned, 3 KB selected. Review the rows, then Clean.", page.ViewModel.Status);
         // The cache started ticked and the entry did not touch it, so only the two it ticked are written.
         Assert.Equal(new Dictionary<string, bool> { ["sdk"] = true, ["logs"] = true }, Stored(page));
     }

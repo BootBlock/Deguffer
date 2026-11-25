@@ -17,8 +17,8 @@ public sealed class ConfirmationRequiredException(ConfirmationRequirement requir
         ArgumentNullException.ThrowIfNull(requirement);
 
         return requirement.Level == ConfirmationLevel.Refused
-            ? $"'{requirement.ProviderName}' is {requirement.Tier.ToDisplayName()} and is never executable."
-            : $"'{requirement.ProviderName}' is {requirement.Tier.ToDisplayName()} and needs " +
+            ? $"'{requirement.ProviderName}' is in the tier \"{requirement.Tier.ToDisplayName()}\" and is never executable."
+            : $"'{requirement.ProviderName}' is in the tier \"{requirement.Tier.ToDisplayName()}\" and needs " +
               $"{requirement.Level} confirmation before it can be executed.";
     }
 }

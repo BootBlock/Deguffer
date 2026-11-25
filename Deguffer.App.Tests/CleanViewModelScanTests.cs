@@ -380,11 +380,11 @@ public class CleanViewModelScanTests
         using var page = new StoragePage([cache]);
         cache.Steps = [page.Cache("a", 1024), page.Cache("b", 2048)];
         page.Scan();
-        Assert.Equal("3 KB can be reclaimed, 3 KB selected. Review the rows, then Clean.", page.ViewModel.Status);
+        Assert.Equal("3 KB can be cleaned, 3 KB selected. Review the rows, then Clean.", page.ViewModel.Status);
 
         page.Row("cache").Steps[1].IsSelected = false;
 
-        Assert.Equal("3 KB can be reclaimed, 1 KB selected. Review the rows, then Clean.", page.ViewModel.Status);
+        Assert.Equal("3 KB can be cleaned, 1 KB selected. Review the rows, then Clean.", page.ViewModel.Status);
         Assert.Equal("Clean 1 KB", page.ViewModel.Selection.CleanLabel);
     }
 
