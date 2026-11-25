@@ -88,8 +88,8 @@ public static class SafetyTierExtensions
 
     /// <summary>
     /// Short label for the UI, in everyday words that keep the tier's meaning (§7): what removing the
-    /// row costs, read at a glance. "Delete" is kept for the permanent tier alone, so the label beside
-    /// it says the same thing the confirmation's verb does.
+    /// row costs, read at a glance. "Permanent" names the one tier whose clean is confirmed with
+    /// "Delete" (<see cref="Deguffer.Core.Execution.ConfirmationVerb"/>), so the label and the verb agree.
     /// </summary>
     public static string ToDisplayName(this SafetyTier tier) => tier switch
     {

@@ -604,8 +604,8 @@ Deliberate points, and the traps that come with them:
   the Storage page's action calls it *clean*, and what a clean does to files *remove*. Deguffer
   never says "reclaim" for it: a first-time reader takes four verbs for four strengths of action,
   in a tool whose risk is deletion. *Delete* is said only where the loss is permanent (Tier 3), so
-  the word carries weight where it appears. The one "reclaim" left is a tool's own word that
-  Deguffer matches when it reads that tool's output. In the same way, the user is told *scan* where
+  the word carries weight where it appears. The only "reclaim" left is in the tools' own words that
+  Deguffer matches when it reads their output. In the same way, the user is told *scan* where
   the code says *preview*, because the code names the plan, which is still a preview of a clean
   that has not happened. The tiers (§3) are named in everyday words for what removing a row costs:
   *Rebuilds itself*, *Costly to rebuild*, *Permanent* and *Do not touch*. The code keeps

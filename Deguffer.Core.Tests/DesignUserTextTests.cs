@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
@@ -90,10 +91,13 @@ public sealed partial class DesignUserTextTests
     [Fact]
     public void TheUsersActionIsNeverCalledReclaiming()
     {
+        // Attributes and element text both reach the screen (a Run's words are its content); a
+        // comment does not, so XComment nodes are left out.
         var markup = ShellMarkup.Files.SelectMany(file => file.Elements
-            .SelectMany(element => element.Attributes())
-            .Where(attribute => Reclaim().IsMatch(attribute.Value))
-            .Select(attribute => file.At(attribute, $"says \"reclaim\" in \"{attribute.Value}\"")));
+            .SelectMany(element => element.Attributes().Select(attribute => ((XObject)attribute, attribute.Value))
+                .Concat(element.Nodes().OfType<XText>().Select(text => ((XObject)text, text.Value))))
+            .Where(shown => Reclaim().IsMatch(shown.Value))
+            .Select(shown => file.At(shown.Item1, $"says \"reclaim\" in \"{shown.Value.Trim()}\"")));
 
         var code = ShownSources().SelectMany(file => Lines(file)
             .SelectMany(line => StringLiteral().Matches(line.Line)

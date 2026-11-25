@@ -142,7 +142,7 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 ![The Storage page after a scan, listing rows such as the NuGet package cache and GPU shader caches with their sizes, tiers and what deleting each one costs](assets/screenshots/storage.png)
 
 <details>
-<summary><b>Tier 1: regenerable caches</b></summary>
+<summary><b>Tier 1: rebuilds itself</b></summary>
 
 | Source | Notes |
 | --- | --- |
@@ -214,7 +214,7 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 </details>
 
 <details>
-<summary><b>Tier 2: regenerable, at a cost</b></summary>
+<summary><b>Tier 2: costly to rebuild</b></summary>
 
 | Source | Notes |
 | --- | --- |
@@ -271,7 +271,7 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 </details>
 
 <details>
-<summary><b>Tier 3: user data, and anything else you cannot get back</b></summary>
+<summary><b>Tier 3: permanent (user data, and anything else you cannot get back)</b></summary>
 
 | Source | Notes |
 | --- | --- |
@@ -291,7 +291,7 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | Claude Code MCP server logs | |
 | Tool logs in temporary folders | The Remote Desktop client's traces, the Windows App's and ServiceHub's logs, and VS Code's updater logs; the folders they are written to stay |
 | Claude Code rewind snapshots | One folder per session, dated by the folder and never by the snapshots in it; a running session's snapshots are never offered |
-| WSL and Docker virtual disks | Reported, never acted on: each disk's size on the drive, whether it is sparse, how much Docker says can be reclaimed inside it when Docker Desktop is already running, and the vendor's commands in the order to use them. Nothing is pruned, compacted or deleted |
+| WSL and Docker virtual disks | Reported, never acted on: each disk's size on the drive, whether it is sparse, how much Docker says it could free inside it when Docker Desktop is already running, and the vendor's commands in the order to use them. Nothing is pruned, compacted or deleted |
 | Vortex and Mod Organizer 2 downloads | Reported, never acted on: the size of each manager's download folder, by game for Vortex and by what Mod Organizer 2 marks installed or uninstalled, with each manager's own way to remove downloads. A Vortex download folder moved from its default is not found. Researched |
 | Claude Code conversations | One item per session, by its title and project, for when you want one gone before Claude Code deletes it after 30 days; never one that is running, one in a project Claude Code is running in, or one used this week |
 </details>
