@@ -198,7 +198,7 @@
 
                     <ListView x:Name="BackupList" Grid.Row="1"
                               AutomationProperties.Name="Backups"
-                              SelectionMode="Single"
+                              SelectionMode="Extended"
                               SelectionChanged="OnBackupSelectionChanged"
                               ItemsSource="{x:Bind ViewModel.Actions.Backups}">
                         <ListView.ItemTemplate>
@@ -215,8 +215,14 @@
                     <Grid Grid.Row="2" ColumnSpacing="12" ColumnDefinitions="*,Auto">
                         <TextBlock Text="{x:Bind ViewModel.Actions.RestoreNote, Mode=OneWay}" TextWrapping="Wrap"
                                    VerticalAlignment="Center" />
-                        <Button Grid.Column="1" Content="Restore"
-                                Command="{x:Bind ViewModel.Actions.RestoreCommand}" />
+                        <!-- Delete is never the accent: the loss is permanent, and it asks first. -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
+                            <Button x:Name="RestoreBackupButton" Content="Restore"
+                                    Command="{x:Bind ViewModel.Actions.RestoreCommand}" />
+                            <Button x:Name="DeleteBackupsButton" Content="Delete"
+                                    Command="{x:Bind ViewModel.Actions.DeleteBackupsCommand}"
+                                    ToolTipService.ToolTip="Delete the selected backups for good. Deguffer asks first." />
+                        </StackPanel>
                     </Grid>
                 </Grid>
             </PivotItem>

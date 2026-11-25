@@ -8,6 +8,19 @@ namespace Deguffer.Core.InstalledApps;
 /// </summary>
 public sealed class BackupRestorer(IUninstallRegistry registry, RegistryBackups backups)
 {
+    /// <summary>
+    /// Whether the backups selected on the page may be restored now: exactly one, which
+    /// <see cref="MayRestore(RegistryBackupFile, bool)"/> then decides. A restore writes one entry
+    /// back and checks it, so several selected at once is a selection for deleting, not restoring.
+    /// </summary>
+    /// <returns>A refusal with no reason where nothing is selected, so the page says nothing.</returns>
+    public ActionVerdict MayRestore(IReadOnlyList<RegistryBackupFile> selected, bool isElevated) => selected switch
+    {
+        [] => ActionVerdict.Refuse(string.Empty),
+        [var only] => MayRestore(only, isElevated),
+        _ => ActionVerdict.Refuse("Restoring takes one backup at a time. Select only the one to restore."),
+    };
+
     /// <summary>Whether <paramref name="backup"/> may be restored now, decided before asking and again before importing.</summary>
     public ActionVerdict MayRestore(RegistryBackupFile backup, bool isElevated)
     {

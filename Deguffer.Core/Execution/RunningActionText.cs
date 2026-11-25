@@ -22,6 +22,7 @@ public static class RunningActionText
         RunningAction.ExploreRemoval => "a removal on the Explore page",
         RunningAction.EntryRemoval => "a removal of installed app entries",
         RunningAction.BackupRestore => "a restore of a registry backup",
+        RunningAction.BackupDeletion => "a deletion of registry backups",
         RunningAction.Uninstall => "an uninstall",
         RunningAction.DuplicateRemoval => "a removal on the Duplicates page",
         RunningAction.StartupChange => "a change on the Startup page",

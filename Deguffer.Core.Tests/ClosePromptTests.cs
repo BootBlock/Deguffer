@@ -47,6 +47,7 @@ public sealed class ClosePromptTests
     [InlineData(RunningAction.ExploreRemoval, "a removal on the Explore page")]
     [InlineData(RunningAction.EntryRemoval, "a removal of installed app entries")]
     [InlineData(RunningAction.BackupRestore, "a restore of a registry backup")]
+    [InlineData(RunningAction.BackupDeletion, "a deletion of registry backups")]
     [InlineData(RunningAction.Uninstall, "an uninstall")]
     [InlineData(RunningAction.DuplicateRemoval, "a removal on the Duplicates page")]
     [InlineData(RunningAction.StartupChange, "a change on the Startup page")]

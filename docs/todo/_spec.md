@@ -1190,6 +1190,16 @@ where every section writes the entry or a key below it, nothing is deleted, and 
 a form `reg.exe` writes; and what is imported is a copy of exactly the bytes checked, held open
 against writing and deletion until `reg.exe` has read it.
 
+**Deleting a backup**
+
+The user may delete backups from the list, for good, more than one at a time; restoring still takes
+one. Only a file the list offers can go: one directly in the backup folder that reads as a backup.
+The confirmation names every file by its full path and says that a deleted file does not go to the
+Recycle Bin, that the entry it records can no longer be restored from Deguffer, and that nothing in
+the registry changes. Each file is decided again immediately before it is deleted, and one written
+since it was listed is left and says so. **§5.6: after deleting, Deguffer asserts that the backup
+folder still stands and that every other file in it, backup or not, is still there.**
+
 **Uninstalling an installed program**
 
 - **One program at a time, with its own uninstaller, shown to the user.** More than one may be

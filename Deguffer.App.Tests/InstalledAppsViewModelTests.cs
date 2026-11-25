@@ -64,10 +64,12 @@ public sealed class InstalledAppsViewModelTests : IDisposable
             reader.Read,
             new InstalledAppsActions(
                 new EntryRemover(_registry, reader, backups),
-                new BackupRestorer(_registry, backups),
+                new BackupTools(
+                    new BackupRestorer(_registry, backups),
+                    new BackupDeleter(backups.Folder, WindowsFileSystem.Default),
+                    backups.Folder,
+                    listBackups ?? backups.List),
                 new ProgramUninstaller(reader, _launcher, @"C:\Windows\System32\msiexec.exe"),
-                backups.Folder,
-                listBackups ?? backups.List,
                 () => _prompt,
                 _preferences,
                 isElevated: false,
@@ -318,6 +320,85 @@ public sealed class InstalledAppsViewModelTests : IDisposable
         return new RegistryBackupFile(Path.Combine(_temp.Path, "backups", $"{name}.reg"), key.PhysicalPath, name, DateTimeOffset.UnixEpoch, IsConfined: true);
     }
 
+    /// <summary>Write a backup of <paramref name="name"/>'s entry into the folder the page lists, as reg.exe would.</summary>
+    private string WriteBackup(string name)
+    {
+        var key = new UninstallKey(UninstallScope.CurrentUser, name);
+        var file = Path.Combine(_temp.CreateDirectory("backups"), $"{name}.reg");
+        File.WriteAllLines(file, ["Windows Registry Editor Version 5.00", "", $"[{key.PhysicalPath}]", $"\"DisplayName\"=\"{name}\""], System.Text.Encoding.Unicode);
+        return file;
+    }
+
+    /// <summary>
+    /// The selected backups are deleted once the user confirms a question that names each file, the
+    /// one left unselected stays, and the list is read again so the deleted one leaves it.
+    /// </summary>
+    [Fact]
+    public void ConfirmedBackupsAreDeletedAndLeaveTheList() => UiThread.Run(async () =>
+    {
+        var gone = WriteBackup("Gone");
+        var kept = WriteBackup("Kept");
+        var page = Page();
+        await page.Actions.ShowBackupsAsync();
+
+        page.Actions.SelectBackups([.. page.Actions.Backups.Where(row => row.Title == "Gone")]);
+        await page.Actions.DeleteBackupsCommand.ExecuteAsync(null);
+
+        var asked = Assert.Single(_prompt.Prompts);
+        Assert.Equal("Delete the backup of 'Gone' for good?", asked.Title);
+        Assert.Equal([gone], asked.Items);
+        Assert.False(File.Exists(gone));
+        Assert.True(File.Exists(kept));
+        Assert.Equal(["Kept"], page.Actions.Backups.Select(row => row.Title));
+        Assert.StartsWith("Deleted 1 backup.", page.Actions.Report, StringComparison.Ordinal);
+        Assert.Equal(Microsoft.UI.Xaml.Controls.InfoBarSeverity.Success, page.Actions.ReportSeverity);
+        Assert.True(_running.MayEndProcess);
+    });
+
+    [Fact]
+    public void DecliningDeletesNoBackup() => UiThread.Run(async () =>
+    {
+        var file = WriteBackup("Tool");
+        var page = Page();
+        await page.Actions.ShowBackupsAsync();
+        _prompt.Answer = false;
+
+        page.Actions.SelectBackups([.. page.Actions.Backups]);
+        await page.Actions.DeleteBackupsCommand.ExecuteAsync(null);
+
+        Assert.True(File.Exists(file));
+        Assert.Single(page.Actions.Backups);
+        Assert.Equal("Nothing was deleted.", page.Actions.Report);
+    });
+
+    /// <summary>
+    /// Several backups can be selected, which Delete takes and Restore does not: the note says Restore
+    /// takes one, and pressing it imports nothing.
+    /// </summary>
+    [Fact]
+    public void SeveralSelectedBackupsCanBeDeletedButNotRestored() => UiThread.Run(async () =>
+    {
+        WriteBackup("One");
+        WriteBackup("Two");
+        var page = Page();
+        await page.Actions.ShowBackupsAsync();
+
+        page.Actions.SelectBackups([.. page.Actions.Backups]);
+
+        Assert.True(page.Actions.DeleteBackupsCommand.CanExecute(null));
+        Assert.Contains("one backup at a time", page.Actions.RestoreNote, StringComparison.Ordinal);
+
+        await page.Actions.RestoreCommand.ExecuteAsync(null);
+
+        Assert.Empty(_prompt.Prompts);
+        Assert.Empty(_runner.Invocations);
+
+        page.Actions.SelectBackups([]);
+
+        Assert.False(page.Actions.DeleteBackupsCommand.CanExecute(null));
+        Assert.Empty(page.Actions.RestoreNote);
+    });
+
     [Fact]
     public void DecliningRemovesNothing() => UiThread.Run(async () =>
     {
@@ -345,7 +426,7 @@ public sealed class InstalledAppsViewModelTests : IDisposable
         var file = Path.Combine(_temp.CreateDirectory("backups"), "tool.reg");
         File.WriteAllLines(file, ["Windows Registry Editor Version 5.00", "", $"[{key.PhysicalPath}]", "\"DisplayName\"=\"Tool\""], System.Text.Encoding.Unicode);
         var page = Page();
-        page.Actions.SelectedBackup = BackupRow.For(new RegistryBackupFile(file, key.PhysicalPath, "Tool", DateTimeOffset.UnixEpoch, IsConfined: true));
+        page.Actions.SelectBackups([BackupRow.For(new RegistryBackupFile(file, key.PhysicalPath, "Tool", DateTimeOffset.UnixEpoch, IsConfined: true))]);
 
         await page.Actions.RestoreCommand.ExecuteAsync(null);
 
@@ -562,7 +643,7 @@ public sealed class InstalledAppsViewModelTests : IDisposable
         var file = Path.Combine(_temp.CreateDirectory("backups"), "tool.reg");
         File.WriteAllLines(file, ["Windows Registry Editor Version 5.00", "", $"[{key.PhysicalPath}]", "\"DisplayName\"=\"Tool\""], System.Text.Encoding.Unicode);
         var page = Page();
-        page.Actions.SelectedBackup = BackupRow.For(new RegistryBackupFile(file, key.PhysicalPath, "Tool", DateTimeOffset.UnixEpoch, IsConfined: true));
+        page.Actions.SelectBackups([BackupRow.For(new RegistryBackupFile(file, key.PhysicalPath, "Tool", DateTimeOffset.UnixEpoch, IsConfined: true))]);
 
         await page.Actions.RestoreCommand.ExecuteAsync(null);
 
@@ -642,7 +723,7 @@ public sealed class InstalledAppsViewModelTests : IDisposable
         var file = Path.Combine(_temp.CreateDirectory("backups"), "tool.reg");
         File.WriteAllLines(file, ["Windows Registry Editor Version 5.00", "", $"[{key.PhysicalPath}]", "\"DisplayName\"=\"Tool\""], System.Text.Encoding.Unicode);
         var page = Page();
-        page.Actions.SelectedBackup = BackupRow.For(new RegistryBackupFile(file, key.PhysicalPath, "Tool", DateTimeOffset.UnixEpoch, IsConfined: true));
+        page.Actions.SelectBackups([BackupRow.For(new RegistryBackupFile(file, key.PhysicalPath, "Tool", DateTimeOffset.UnixEpoch, IsConfined: true))]);
         var failures = 0;
         _work.Failed += (_, _) => failures++;
 

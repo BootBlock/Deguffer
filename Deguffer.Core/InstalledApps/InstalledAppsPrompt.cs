@@ -35,6 +35,20 @@ public sealed record InstalledAppsPrompt(string Title, string Consequence, IRead
         [backup.KeyPath],
         "Restore");
 
+    /// <summary>
+    /// Asked before deleting backups. Each is named by its full path, and the loss is stated: a
+    /// deleted file does not go to the Recycle Bin, and an entry whose only record it was can no
+    /// longer be put back from Deguffer.
+    /// </summary>
+    public static InstalledAppsPrompt ForBackupDeletion(IReadOnlyList<RegistryBackupFile> backups) => new(
+        backups is [{ } only]
+            ? $"Delete the backup of '{only.DisplayName ?? only.KeyPath}' for good?"
+            : $"Delete {Counted.Of(backups.Count, "backup", "backups")} for good?",
+        "Deguffer deletes each file permanently: it does not go to the Recycle Bin, and the entry it records can "
+        + "no longer be restored from Deguffer. Nothing in the registry changes, and no other file is touched.",
+        [.. backups.Select(b => b.Path)],
+        Counted.Form(backups.Count, "Delete backup", "Delete backups"));
+
     public static InstalledAppsPrompt ForUninstall(IReadOnlyList<PreparedUninstall> programs) => programs is [var only]
         ? new InstalledAppsPrompt(
             $"Uninstall '{only.Entry.Name}'?",

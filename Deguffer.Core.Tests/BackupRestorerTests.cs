@@ -63,6 +63,25 @@ public sealed class BackupRestorerTests : IDisposable
         Assert.False(File.Exists(imported));
     }
 
+    /// <summary>
+    /// The page lets several backups be selected, for deleting. A restore takes exactly one, and with
+    /// none selected the page has nothing to say.
+    /// </summary>
+    [Fact]
+    public void ARestoreTakesExactlyOneSelectedBackup()
+    {
+        var one = Backup(Export(KeyOf(UninstallScope.CurrentUser)));
+        var two = Backup(Export(KeyOf(UninstallScope.CurrentUser)), "tool-2.reg");
+
+        Assert.Equal(ActionVerdict.Refuse(string.Empty), Restorer.MayRestore([], isElevated: false));
+        Assert.True(Restorer.MayRestore([one], isElevated: false).IsAllowed);
+        Assert.Equal(Restorer.MayRestore(one, isElevated: false), Restorer.MayRestore([one], isElevated: false));
+
+        var both = Restorer.MayRestore([one, two], isElevated: false);
+        Assert.False(both.IsAllowed);
+        Assert.Contains("one backup at a time", both.Reason, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task AnImportThatLeavesNoEntryIsAFailedRestore()
     {
