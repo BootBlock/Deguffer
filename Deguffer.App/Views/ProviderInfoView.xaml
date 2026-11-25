@@ -102,19 +102,21 @@
 
                         <!-- The verdict is §3's, so it arrives with the tier that produced it.
                              Tier is text on a tinted chip, never colour alone: the classification
-                             must survive a flat background and a high-contrast theme (§6.5). -->
-                        <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
+                             must survive a flat background and a high-contrast theme (§6.5).
+                             A Grid, so the advice wraps in the width the chip leaves it. -->
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource ControlGap}">
                             <ContentControl Content="{x:Bind Finding.Facts.TierLabel}"
                                             Style="{x:Bind Finding.Facts.Tier, Converter={StaticResource TierChipStyle}}"
                                             ToolTipService.ToolTip="{x:Bind Finding.Facts.TierExplanation}"
                                             AutomationProperties.Name="{x:Bind Finding.Facts.TierLabel}"
                                             AutomationProperties.HelpText="{x:Bind Finding.Facts.TierExplanation}" />
-                            <TextBlock Text="{x:Bind Finding.Facts.CleaningAdvice}"
+                            <TextBlock Grid.Column="1"
+                                       Text="{x:Bind Finding.Facts.CleaningAdvice}"
                                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                        FontWeight="SemiBold"
                                        VerticalAlignment="Center"
                                        TextWrapping="Wrap" />
-                        </StackPanel>
+                        </Grid>
 
                         <TextBlock Text="{x:Bind Finding.Facts.Description.Recommendation}"
                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
