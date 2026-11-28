@@ -216,8 +216,9 @@ public sealed class ExploreDisplayTests
         Assert.False(Display(Finished, ExploreView.Files, colouring).ShowsShortcutFolders);
         Assert.False(Display(Finished, ExploreView.List, colouring, listing: FileListing.BrokenLinks).ShowsShortcutFolders);
         Assert.False(Display(null, ExploreView.Files, colouring, listing: FileListing.BrokenLinks).ShowsShortcutFolders);
-        Assert.True(Display(Finished, ExploreView.List, colouring, listing: FileListing.BrokenLinks).ShowsGrowth
-            || Display(Finished, ExploreView.List, colouring, listing: FileListing.BrokenLinks).ShowsTypes);
+        var listed = Display(Finished, ExploreView.List, colouring, listing: FileListing.BrokenLinks);
+        Assert.Equal(colouring == ExploreColouring.Growth, listed.ShowsGrowth);
+        Assert.Equal(colouring == ExploreColouring.Type, listed.ShowsTypes);
     }
 
     private static ExploreDisplay Display(
