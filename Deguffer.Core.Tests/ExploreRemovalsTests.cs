@@ -102,6 +102,27 @@ public sealed class ExploreRemovalsTests
         Assert.True(left.Holds(left.RootNode));
     }
 
+    /// <summary>
+    /// A removal by path names what it took in the spelling it was handed, which need not be the
+    /// disk's, and NTFS does not tell the two apart, so neither does the lookup.
+    /// </summary>
+    [Fact]
+    public void ARemovalByPathIsMatchedWithoutRegardToCase()
+    {
+        var (tree, folder, _, sibling) = Tree();
+
+        var report = new ExploreRemovalReport(
+            ExploreRemovalMode.RecycleBin,
+            [new ExploreItemOutcome(tree.PathOf(folder).ToUpperInvariant(), Removed: true, Bytes: 10, "Removed.")],
+            new VerificationResult());
+
+        var left = ExploreRemovals.WithoutByPath(tree, report);
+
+        Assert.NotNull(left);
+        Assert.False(left.Holds(folder));
+        Assert.True(left.Holds(sibling));
+    }
+
     /// <summary>A removal from a folder the scan never reached leaves nothing for the page to redraw.</summary>
     [Fact]
     public void ARemovalByPathTheTreeDoesNotHoldLeavesNothingToRedraw()

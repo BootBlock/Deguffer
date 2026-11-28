@@ -4,7 +4,13 @@ namespace Deguffer.Core.Exploring;
 
 /// <summary>
 /// The node of an <see cref="ExploreTree"/> that a path names, found by descending from the tree's
-/// root one exactly matched name at a time.
+/// root one name at a time.
+///
+/// <para>A name is matched without regard to case, as the root is, because Windows does not tell two
+/// spellings of one path apart and a report can name a path in a spelling the disk does not use: a
+/// shortcut found through a profile folder registered in another case. A folder with case-sensitive
+/// names can hold two children that differ only in case, so an exact match is taken over one that
+/// differs in case.</para>
 ///
 /// <para>By path because a tree's node numbers are its own. The file table's route keeps only what
 /// its root reaches and numbers that again, so a record number says nothing about which node holds
@@ -35,10 +41,17 @@ public static class ExploreTreePaths
 
             foreach (var child in tree.ChildrenOf(node))
             {
-                if (tree.NameSpanOf(child).SequenceEqual(component))
+                var name = tree.NameSpanOf(child);
+
+                if (name.SequenceEqual(component))
                 {
                     found = child;
                     break;
+                }
+
+                if (found is null && name.Equals(component, StringComparison.OrdinalIgnoreCase))
+                {
+                    found = child;
                 }
             }
 
