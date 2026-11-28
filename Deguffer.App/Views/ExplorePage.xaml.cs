@@ -531,7 +531,7 @@ public sealed partial class ExplorePage : Page
 
     /// <summary>
     /// List the files of the kind a row of the breakdown names, in the Files layout. The filter is the
-    /// view-model's, and the view box is this page's, so the two are set here in that order.
+    /// view-model's, and the view switch is this page's, so the two are set here in that order.
     /// </summary>
     private void OnTypeRowClicked(object sender, ItemClickEventArgs e)
     {
