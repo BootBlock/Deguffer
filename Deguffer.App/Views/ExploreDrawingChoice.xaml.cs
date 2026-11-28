@@ -41,7 +41,7 @@ public sealed partial class ExploreDrawingChoice : UserControl
     /// Select <paramref name="view"/>, one of <see cref="ExploreChoice.Views"/>, in the Layout box, on
     /// the terms of <see cref="MapLayoutBox.Show"/>.
     /// </summary>
-    public void Show(ExploreView view) => LayoutBox.Show(view);
+    public void Show(ExploreView view) => LayoutBox.Show(ExploreChoice.IndexOf(view));
 
     /// <summary>Select <paramref name="colouring"/> in the Colour by box, on the terms of <see cref="Show(ExploreView)"/>.</summary>
     public void Show(ExploreColouring colouring) => ColourSelector.SelectedIndex = ExploreChoice.IndexOf(colouring);

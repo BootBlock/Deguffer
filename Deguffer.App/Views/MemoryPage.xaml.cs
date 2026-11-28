@@ -127,7 +127,7 @@ public sealed partial class MemoryPage : Page
 
         LayoutBox.Offer(MapLayoutOption.Memory);
         LayoutBox.ViewChosen += (_, view) => ShowAs(view);
-        LayoutBox.Show(ViewModel.SelectedView);
+        LayoutBox.Show(MemoryChoice.IndexOf(ViewModel.SelectedView));
 
         // Read once, as the page is built, for the reason DrawnSetting.Stored gives. Before the
         // handlers below, so putting the stored choice on the box does not write it straight back.
