@@ -212,24 +212,29 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         };
 
         StandDown();
+        DrawingOptions.Follow(Display);
     }
 
     /// <summary>The broken shortcuts in the Start menu, on the desktop and in the Startup folders. See <see cref="ExploreShortcutFolders"/>.</summary>
     public ExploreShortcutFolders ShortcutFolders { get; }
 
+    /// <summary>What the header offers beside its view switch. See <see cref="ExploreDrawingOptions"/>.</summary>
+    public ExploreDrawingOptions DrawingOptions { get; } = new();
+
     /// <summary>Whether to show that panel. See <see cref="ExploreDisplay.ShowsShortcutFolders"/>.</summary>
     public bool ShowsShortcutFolders => Display.ShowsShortcutFolders;
 
     /// <summary>
-    /// Say again which side panel is open, and open the panel of shortcut folders only while it is on
-    /// screen: it reads every folder as it opens. One place for the three, because each one's answer
-    /// depends on the others (see <see cref="ExploreDisplay.ShowsShortcutFolders"/>).
+    /// Say again which side panel is open and what the header offers, and open the panel of shortcut
+    /// folders only while it is on screen: it reads every folder as it opens. One place for them all,
+    /// because each one's answer depends on the others (see <see cref="ExploreDisplay.ShowsShortcutFolders"/>).
     /// </summary>
     private void ShowPanels()
     {
         OnPropertyChanged(nameof(ShowsGrowth));
         OnPropertyChanged(nameof(ShowsTypes));
         OnPropertyChanged(nameof(ShowsShortcutFolders));
+        DrawingOptions.Follow(Display);
 
         ShortcutFolders.IsActive = Display.ShowsShortcutFolders;
         FollowReplay();
@@ -338,6 +343,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
     partial void OnTreeChanged(ExploreTree? value)
     {
         Notes.HasViewNote = HasViewNote;
+        DrawingOptions.Follow(Display);
 
         // From nothing to something or back, which is when the panel of shortcut folders opens or
         // closes. Every snapshot of a scan is a new tree, and the panel reads the folders only as it
@@ -405,6 +411,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
     {
         ShowLegend();
         Types.IsActive = Display.MeasuresTypes;
+        DrawingOptions.Follow(Display);
         FollowReplay();
     }
 
@@ -457,7 +464,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
     /// <summary>Whether to show the panel of what kind of file fills the folder on screen. See <see cref="ExploreDisplay.ShowsTypes"/>.</summary>
     public bool ShowsTypes => Display.ShowsTypes;
 
-    /// <summary>How what is on screen differs from what the View box names, or null. See <see cref="ExploreDisplay.Note"/>.</summary>
+    /// <summary>How what is on screen differs from the view chosen, or null. See <see cref="ExploreDisplay.Note"/>.</summary>
     public string? ViewNote => Display.Note;
 
     public bool HasViewNote => ViewNote is not null;
@@ -898,16 +905,9 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
     /// </summary>
     private void ShowLeftByPath(ExploreRemovalReport report)
     {
-        if (Tree is not { } tree)
+        if (Tree is { } tree && ExploreRemovals.WithoutByPath(tree, report) is { } left)
         {
-            return;
-        }
-
-        int[] held = [.. report.Removed.Select(item => ExploreTreePaths.TryNodeAt(tree, item.Path)).OfType<int>()];
-
-        if (held.Length > 0)
-        {
-            ShowLeft(new ExploreSelection.RemovedFrom(tree, ExploreRemovals.Without(tree, held, report)));
+            ShowLeft(new ExploreSelection.RemovedFrom(tree, left));
         }
     }
 

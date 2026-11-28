@@ -81,6 +81,29 @@ public readonly record struct ExploreDisplay(
     public bool ShowsShortcutFolders => SearchesFiles && Listing == FileListing.BrokenLinks && Tree is not null;
 
     /// <summary>
+    /// Whether to offer the map appearance window: only where something on screen is drawn in the
+    /// look it changes. That is a picture, or the panel of kinds of file, whose swatches are tuned by
+    /// the look's colour style. Anywhere else the button would open a window whose every change is
+    /// invisible. The window stays reachable from Settings.
+    /// </summary>
+    public bool ShowsAppearance => DrawsPicture || ShowsTypes;
+
+    /// <summary>
+    /// What the Colour by box does with the view on screen, said where the box is described.
+    ///
+    /// <para>The box is offered in every view, the lists included. In a list, Growth and Type open
+    /// their panels, and a box hidden there would leave no way to open them from a list. A box that
+    /// hid itself when Branch was chosen in it would also vanish under the pointer. So the box stays,
+    /// and says what it changes.</para>
+    /// </summary>
+    public string ColouringHint => DrawsPicture
+        ? "What the colours on the map say."
+        : SearchesFiles && Listing == FileListing.BrokenLinks
+            ? "What the colours on the map say. While broken links are listed, it changes nothing here."
+            : "What the colours on the map say. In a list, Growth and Type open a panel beside it, and the "
+              + "others change only the map.";
+
+    /// <summary>
     /// Whether the view on screen draws a picture rather than a list, so the map is on the card.
     /// </summary>
     public bool DrawsPicture => View.DrawsPicture();
@@ -126,7 +149,7 @@ public readonly record struct ExploreDisplay(
     public bool Zooms => Tree is { } tree && ExploreSurface.Zooms(tree, View);
 
     /// <summary>
-    /// How what is on screen differs from what the View box names, or null when it does not.
+    /// How what is on screen differs from the view chosen, or null when it does not.
     ///
     /// <para>Only ever raised by a snapshot of a scan still running (<see cref="ExploreTree.IsSnapshot"/>).
     /// A snapshot comes in the order the view on screen needs (<see cref="ExploreSurface.SnapshotOrder"/>),

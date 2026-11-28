@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+    How the Explore page draws what was scanned, in its header, because that governs the whole page:
+    the map appearance window, what the colours say, and the layout. The layouts are a switch, so
+    every one of them is in sight without opening anything.
+
+    The switch is last, at the right edge. The button before it comes and goes with the view, and the
+    group growing or shrinking leftwards moves nothing the pointer has just pressed. On a window too
+    narrow for one line, the switch wraps under the options rather than running off the edge (FlowRow).
+-->
+<UserControl
+    x:Class="Deguffer.App.Views.ExploreDrawingChoice"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Deguffer.App.Controls"
+    xmlns:views="using:Deguffer.App.Views"
+    IsTabStop="False">
+
+    <controls:FlowRow ColumnSpacing="{StaticResource RegionGap}" RowSpacing="{StaticResource ControlGap}">
+        <!-- Beside the box that decides what the picture's colours say, because this decides how the
+             picture looks. It opens a window of its own, which stays open beside the map so each
+             change can be watched as it lands. Offered only where the look is on screen: see
+             ExploreDisplay.ShowsAppearance. -->
+        <Button x:Name="AppearanceButton"
+                VerticalAlignment="Center"
+                Padding="8"
+                Visibility="{x:Bind Options.ShowsAppearance, Mode=OneWay}"
+                Click="OnAppearanceClicked"
+                ToolTipService.ToolTip="Map appearance: colours, shapes and spacing"
+                AutomationProperties.Name="{x:Bind views:MapAppearanceWindow.Name}">
+            <FontIcon Glyph="&#xE790;" FontSize="{StaticResource GlyphSizeStandard}" />
+        </Button>
+
+        <!-- Beside the switch because the two are one decision to the reader, what is on screen and
+             what its colours mean, and orthogonal to it in fact: every pairing of the two is
+             meaningful. Offered in every view, and its tooltip says what it changes in this one: see
+             ExploreDisplay.ColouringHint. Mapped to ExploreColouring by ExploreChoice.Colourings. The label is Raw: the box
+             has its own name. -->
+        <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}" VerticalAlignment="Center">
+            <TextBlock Text="Colour by" Style="{StaticResource FieldLabel}" VerticalAlignment="Center"
+                       AutomationProperties.AccessibilityView="Raw" />
+            <ComboBox x:Name="ColourSelector"
+                      MinWidth="110"
+                      SelectionChanged="OnColourSelectionChanged"
+                      ToolTipService.ToolTip="{x:Bind Options.ColouringHint, Mode=OneWay}"
+                      AutomationProperties.Name="Colour by"
+                      AutomationProperties.HelpText="{x:Bind Options.ColouringHint, Mode=OneWay}">
+                <ComboBoxItem Content="Branch" />
+                <ComboBoxItem Content="Age" />
+                <ComboBoxItem Content="Growth" />
+                <ComboBoxItem Content="Type" />
+                <ComboBoxItem Content="Depth" />
+            </ComboBox>
+        </StackPanel>
+
+        <!-- Mapped to ExploreView by ExploreChoice.Views, so the order here is the order of that list:
+             the three pictures, read as a whole, then the two lists, read a row at a time. The tree is
+             Memory's alone. -->
+        <SelectorBar x:Name="ViewSelector"
+                     VerticalAlignment="Center"
+                     SelectionChanged="OnViewSelectionChanged"
+                     AutomationProperties.Name="How to draw what was scanned">
+            <SelectorBarItem x:Name="TreemapItem" Text="Treemap">
+                <SelectorBarItem.Icon>
+                    <FontIcon Glyph="&#xE80A;" />
+                </SelectorBarItem.Icon>
+            </SelectorBarItem>
+            <SelectorBarItem x:Name="IcicleItem" Text="Icicle">
+                <SelectorBarItem.Icon>
+                    <FontIcon Glyph="&#xE9D2;" />
+                </SelectorBarItem.Icon>
+            </SelectorBarItem>
+            <SelectorBarItem x:Name="SunburstItem" Text="Sunburst">
+                <SelectorBarItem.Icon>
+                    <FontIcon Glyph="&#xEB05;" />
+                </SelectorBarItem.Icon>
+            </SelectorBarItem>
+            <SelectorBarItem x:Name="ListItem" Text="List">
+                <SelectorBarItem.Icon>
+                    <FontIcon Glyph="&#xE8FD;" />
+                </SelectorBarItem.Icon>
+            </SelectorBarItem>
+            <SelectorBarItem x:Name="FilesItem" Text="Files">
+                <SelectorBarItem.Icon>
+                    <FontIcon Glyph="&#xE7C3;" />
+                </SelectorBarItem.Icon>
+            </SelectorBarItem>
+        </SelectorBar>
+    </controls:FlowRow>
+</UserControl>

@@ -249,7 +249,7 @@ public sealed record MapPreset(
 
     /// <summary>
     /// <paramref name="preferences"/> with this preset's style and spacing, and nothing else changed.
-    /// Not its colouring, which the Explore page applies and writes as a choice in its own Colour box.
+    /// Not its colouring, which the Explore page applies and writes as a choice in its own Colour by box.
     /// </summary>
     public AppPreferences Into(AppPreferences preferences)
     {

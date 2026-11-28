@@ -84,6 +84,38 @@ public sealed class ExploreRemovalsTests
         Assert.False(ExploreRemovals.Without(tree, [folder], report).Holds(folder));
     }
 
+    /// <summary>
+    /// A removal made by path is found in the tree by path, and the tree is left without it and
+    /// everything inside it. The sibling and the root survive (§5.6).
+    /// </summary>
+    [Fact]
+    public void ARemovalByPathLeavesTheTreeWithoutWhatItHolds()
+    {
+        var (tree, folder, file, sibling) = Tree();
+
+        var left = ExploreRemovals.WithoutByPath(tree, Removed(tree, folder));
+
+        Assert.NotNull(left);
+        Assert.False(left.Holds(folder));
+        Assert.False(left.Holds(file));
+        Assert.True(left.Holds(sibling));
+        Assert.True(left.Holds(left.RootNode));
+    }
+
+    /// <summary>A removal from a folder the scan never reached leaves nothing for the page to redraw.</summary>
+    [Fact]
+    public void ARemovalByPathTheTreeDoesNotHoldLeavesNothingToRedraw()
+    {
+        var (tree, _, _, _) = Tree();
+
+        var report = new ExploreRemovalReport(
+            ExploreRemovalMode.RecycleBin,
+            [new ExploreItemOutcome(@"C:\Users\testuser\Desktop\gone.lnk", Removed: true, Bytes: 1, "Removed.")],
+            new VerificationResult());
+
+        Assert.Null(ExploreRemovals.WithoutByPath(tree, report));
+    }
+
     private static ExploreRemovalReport Removed(ExploreTree tree, int node) =>
         new(
             ExploreRemovalMode.RecycleBin,

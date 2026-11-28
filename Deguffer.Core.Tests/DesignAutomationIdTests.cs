@@ -31,7 +31,7 @@ public sealed class DesignAutomationIdTests
     private static readonly Dictionary<string, int> Baseline = new(StringComparer.Ordinal)
     {
         ["Deguffer.App/Views/DuplicatesPage.xaml"] = 29,
-        ["Deguffer.App/Views/ExplorePage.xaml"] = 23,
+        ["Deguffer.App/Views/ExplorePage.xaml"] = 20,
         ["Deguffer.App/Views/HealthPage.xaml"] = 2,
         ["Deguffer.App/Views/InstalledAppsPage.xaml"] = 9,
         ["Deguffer.App/Views/ItemListView.xaml"] = 5,

@@ -293,9 +293,8 @@ public sealed record ExploreLegendBand(string Label, Color Swatch)
     /// colours moved by <paramref name="tuning"/>, needs explained, ready to bind. See
     /// <see cref="MapLegend.For"/>.
     ///
-    /// <para>A colouring no member names, which the Colour box can give while nothing in it is selected,
-    /// has no legend, as <see cref="MapLegend.For"/> says of it, rather than an index past the
-    /// table.</para>
+    /// <para>A colouring no member names has no legend, as <see cref="MapLegend.For"/> says of it,
+    /// rather than an index past the table.</para>
     ///
     /// <para>The palette's own colours come from the table. Tuned ones are made when asked, which is
     /// once for each change of look, for a legend of a few bands: a swatch in a colour the map does

@@ -11,6 +11,9 @@
     KeyboardAcceleratorPlacementMode="Hidden">
 
     <Page.Resources>
+        <!-- Scan and the Cancel that takes its place while a scan runs. -->
+        <controls:WidthGroup x:Key="ScanSlotWidths" />
+
         <!--
             A row of the List layout: one child of the folder on screen. The list is shared with the
             Files layout below, which swaps the template and the rows it is given, so that the rules
@@ -182,55 +185,7 @@
 
         <controls:PageHeader controls:ReadingColumn.Fills="True" Destination="Explore">
             <controls:PageHeader.Actions>
-                <StackPanel Orientation="Horizontal" Spacing="{StaticResource RegionGap}">
-                    <!-- Mapped to ExploreView by ExploreChoice.Views, so the order here is the order
-                         of that list. The three pictures come before the lists because that is the
-                         order they are read in, and the tree is Memory's alone. Each label is Raw:
-                         its box has its own name. -->
-                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}" VerticalAlignment="Center">
-                        <TextBlock Text="View" Style="{StaticResource FieldLabel}" VerticalAlignment="Center"
-                                   AutomationProperties.AccessibilityView="Raw" />
-                        <ComboBox x:Name="ViewSelector"
-                                  MinWidth="120"
-                                  SelectionChanged="OnViewSelectionChanged"
-                                  AutomationProperties.Name="How to draw what was scanned">
-                            <ComboBoxItem Content="Treemap" />
-                            <ComboBoxItem Content="Icicle" />
-                            <ComboBoxItem Content="Sunburst" />
-                            <ComboBoxItem Content="List" />
-                            <ComboBoxItem Content="Files" />
-                        </ComboBox>
-                    </StackPanel>
-
-                    <!-- Beside the View box because the two are one decision to the reader, what is
-                         on screen and what its colours mean, and orthogonal to it in fact: every
-                         pairing of the two is meaningful. Indexed against ExploreColouring. -->
-                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}" VerticalAlignment="Center">
-                        <TextBlock Text="Colour" Style="{StaticResource FieldLabel}" VerticalAlignment="Center"
-                                   AutomationProperties.AccessibilityView="Raw" />
-                        <ComboBox x:Name="ColourSelector"
-                                  MinWidth="110"
-                                  SelectionChanged="OnColourSelectionChanged"
-                                  AutomationProperties.Name="What the colours on the map say">
-                            <ComboBoxItem Content="Branch" />
-                            <ComboBoxItem Content="Age" />
-                            <ComboBoxItem Content="Growth" />
-                            <ComboBoxItem Content="Type" />
-                            <ComboBoxItem Content="Depth" />
-                        </ComboBox>
-                    </StackPanel>
-
-                    <!-- Beside the two boxes that decide what the picture shows, because this decides
-                         how it looks. It opens a window of its own, which stays open beside the map
-                         so each change can be watched as it lands. -->
-                    <Button VerticalAlignment="Center"
-                            Padding="8"
-                            Click="OnAppearanceClicked"
-                            ToolTipService.ToolTip="Map appearance: colours and spacing"
-                            AutomationProperties.Name="{x:Bind views:MapAppearanceWindow.Name}">
-                        <FontIcon Glyph="&#xE713;" FontSize="{StaticResource GlyphSizeStandard}" />
-                    </Button>
-                </StackPanel>
+                <views:ExploreDrawingChoice x:Name="DrawingChoice" Options="{x:Bind ViewModel.DrawingOptions}" />
             </controls:PageHeader.Actions>
         </controls:PageHeader>
 
@@ -358,15 +313,25 @@
                 </Button>
             </StackPanel>
 
-            <Button VerticalAlignment="Bottom"
-                    Style="{StaticResource AccentButtonStyle}"
-                    Content="Scan"
-                    Command="{x:Bind ViewModel.ScanCommand}" />
+            <!-- While a scan runs, Cancel takes Scan's place rather than joining the line beside
+                 it. The two share the wider of their widths (WidthGroup), as Storage's do, so the
+                 swap moves nothing after them. -->
+            <Grid VerticalAlignment="Bottom">
+                <Button x:Name="ScanButton"
+                        HorizontalAlignment="Stretch"
+                        Style="{StaticResource AccentButtonStyle}"
+                        Content="Scan"
+                        Visibility="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
+                        Command="{x:Bind ViewModel.ScanCommand}"
+                        controls:WidthGroup.Group="{StaticResource ScanSlotWidths}" />
 
-            <Button VerticalAlignment="Bottom"
-                    Content="Cancel"
-                    Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
-                    Command="{x:Bind ViewModel.ScanCancelCommand}" />
+                <Button x:Name="CancelButton"
+                        HorizontalAlignment="Stretch"
+                        Content="Cancel"
+                        Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
+                        Command="{x:Bind ViewModel.ScanCancelCommand}"
+                        controls:WidthGroup.Group="{StaticResource ScanSlotWidths}" />
+            </Grid>
             </StackPanel>
 
             <!-- The folder a scan is scoped to, beside the drive box it overrides. Here rather than
@@ -604,7 +569,7 @@
             <Grid>
                 <controls:ExploreMap x:Name="Map"
                                      Zoomable="True"
-                                     Description="A picture of what is using the space. Choose List in the View box for the same contents as a readable list. Double-click a shape to open what is inside it. The mouse's Back and Forward buttons, Backspace, Alt+Left and Alt+Right step back and forward through the folders opened and the zooms to a shape."
+                                     Description="A picture of what is using the space. Choose List at the top of the page for the same contents as a readable list. Double-click a shape to open what is inside it. The mouse's Back and Forward buttons, Backspace, Alt+Left and Alt+Right step back and forward through the folders opened and the zooms to a shape."
                                      KeyboardAcceleratorPlacementMode="Hidden">
                     <!--
                         What the thing under the pointer actually is, where the app knows. Not the
@@ -747,7 +712,7 @@
                     So they cover rather than displace, and nothing the user does to what is on
                     the card can resize it. What is left above it still can: the progress bar and
                     the breadcrumb appear and go with a scan, and the colour legend below follows
-                    the Colour and View boxes. Each of those is a deliberate act at a moment the
+                    the Colour by box and the view switch. Each of those is a deliberate act at a moment the
                     picture is being rebuilt anyway, which is the opposite of what this fixes.
 
                     The sentences let the pointer through, and only the two buttons take it. The map has no keyboard way round a shape, and the stale note stands
@@ -880,7 +845,7 @@
                                          Severity="Warning"
                                          Message="{x:Bind ViewModel.Selection.StaleNote, Mode=OneWay}" />
 
-                                <!-- Where what is on screen is not what the View box names. A scan in progress
+                                <!-- Where what is on screen is not the view chosen. A scan in progress
                                      is ordered by name so that it stays still, and a treemap cannot be drawn
                                      from that at all — so the map substitutes the icicle. A substitution
                                      nobody is told about is the kind a user reads as a bug.

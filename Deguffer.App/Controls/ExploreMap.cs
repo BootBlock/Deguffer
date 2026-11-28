@@ -640,7 +640,7 @@ public sealed class ExploreMap : UserControl
             field = value;
             DescribeControls();
         }
-    } = "A picture of what is using the space. Choose List in the View box for the same contents as a readable list.";
+    } = "A picture of what is using the space. Choose List at the top of the page for the same contents as a readable list.";
 
     /// <summary>
     /// Say what the map is and how the pointer moves it, for a screen reader on the focused map:

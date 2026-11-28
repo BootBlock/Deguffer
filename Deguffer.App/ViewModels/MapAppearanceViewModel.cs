@@ -78,7 +78,7 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
 
     /// <summary>
     /// A preset whose look is part of what its colours say was chosen, and the Explore page is to
-    /// colour its map by this and move its Colour box to it. Raised before the colouring is written,
+    /// colour its map by this and move its Colour by box to it. Raised before the colouring is written,
     /// and the colouring is written whether or not the page has been built yet, so it is what the page
     /// opens with.
     /// </summary>
@@ -104,7 +104,7 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
 
     /// <summary>
     /// The view the Explore page is showing, which is the one the scheme picker speaks for. Set by the
-    /// page whenever its View box moves, and the stored view until the page is built.
+    /// page whenever its view switch moves, and the stored view until the page is built.
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SchemeHeading))]
@@ -114,7 +114,7 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
 
     /// <summary>
     /// What the colours on the Explore page's map say, which the preview is coloured by as near as it
-    /// can be. Set by the page whenever its Colour box moves, and by a preset with a colouring of its own.
+    /// can be. Set by the page whenever its Colour by box moves, and by a preset with a colouring of its own.
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PreviewCaption))]
