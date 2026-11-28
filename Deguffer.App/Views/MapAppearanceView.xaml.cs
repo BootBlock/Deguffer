@@ -83,14 +83,14 @@ public sealed partial class MapAppearanceView : UserControl
         item == ColoursItem ? new MapColoursSection(ViewModel)
         : item == ShapesItem ? new MapShapesSection(ViewModel.Shapes)
         : item == LinesItem ? new MapLinesSection(ViewModel.Lines)
-        : item == LayoutItem ? new MapLayoutSection(ViewModel)
+        : item == DetailItem ? new MapDetailSection(ViewModel)
         : item == NamesItem ? new MapNamesSection(ViewModel.Names)
         : new MapPresetsSection(ViewModel);
 
     private void OnLookChanged(object? sender, EventArgs e) => ShowPreview();
 
     /// <summary>
-    /// The page's view switch or Colour by box moved, or a preset chose a colouring, so the scheme list and the
+    /// The page's Layout or Colour by box moved, or a preset chose a colouring, so the scheme list and the
     /// preview speak for another picture, or the preview is coloured another way.
     /// </summary>
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)

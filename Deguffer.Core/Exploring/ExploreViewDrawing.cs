@@ -12,4 +12,19 @@ public static class ExploreViewDrawing
     /// </summary>
     public static bool DrawsPicture(this ExploreView view) =>
         view is ExploreView.Treemap or ExploreView.Icicle or ExploreView.Sunburst;
+
+    /// <summary>
+    /// The name <paramref name="view"/> goes by wherever a page offers it, so the Explore and Memory
+    /// pages call each layout the same thing.
+    /// </summary>
+    public static string DisplayName(this ExploreView view) => view switch
+    {
+        ExploreView.Treemap => "Treemap",
+        ExploreView.Icicle => "Icicle",
+        ExploreView.Sunburst => "Sunburst",
+        ExploreView.List => "List",
+        ExploreView.Tree => "Tree",
+        ExploreView.Files => "Files",
+        _ => throw new ArgumentOutOfRangeException(nameof(view), view, "No layout has this number."),
+    };
 }

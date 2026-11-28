@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+    The Explore page's Path… button and the box it opens, for a folder or a share typed rather than
+    picked: one the system picker has not found on the network. Nothing confirmed a typed path, so the
+    page asks whether it is a folder before it points there, and says why where it is not. A control
+    of its own because the box, its suggestions and the network browser are one piece of work that
+    reads nothing else of the page.
+-->
+<UserControl
+    x:Class="Deguffer.App.Views.ExploreTypedPath"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:Deguffer.App.ViewModels"
+    IsTabStop="False">
+
+        <Button x:Name="TypedButton"
+                VerticalAlignment="Bottom"
+                Content="Path…"
+                ToolTipService.ToolTip="Type a folder or a network share to scan"
+                AutomationProperties.Name="Path"
+                AutomationProperties.HelpText="Type a folder or a network share to scan">
+            <Button.Flyout>
+                <Flyout x:Name="TypedFlyout"
+                        Placement="BottomEdgeAlignedLeft"
+                        Opened="OnTypedOpened"
+                        Closed="OnTypedClosed">
+                    <!-- The presenter's default MaxWidth leaves room for a 424-pixel
+                         body, which would clip the chevron beside the box. -->
+                    <Flyout.FlyoutPresenterStyle>
+                        <Style TargetType="FlyoutPresenter" BasedOn="{StaticResource DefaultFlyoutPresenterStyle}">
+                            <Setter Property="MaxWidth" Value="560" />
+                        </Style>
+                    </Flyout.FlyoutPresenterStyle>
+                    <StackPanel Width="460" Spacing="{StaticResource ControlGap}">
+                        <!-- The list under the box follows what has been typed: what this
+                             account uses while it is empty, then computers, a computer's
+                             shares, and a share's folders. The chevron opens a tree of the
+                             same places, for a share whose name is not known. -->
+                        <Grid ColumnSpacing="{StaticResource ControlGap}" ColumnDefinitions="*,Auto">
+                            <AutoSuggestBox x:Name="TypedBox"
+                                            Header="Folder or network share"
+                                            PlaceholderText="\\server\share"
+                                            Text="{x:Bind Typed.Text, Mode=TwoWay}"
+                                            ItemsSource="{x:Bind Typed.Suggestions.Rows, Mode=OneWay}"
+                                            UpdateTextOnSelect="True"
+                                            TextChanged="OnTypedTextChanged"
+                                            QuerySubmitted="OnTypedSubmitted"
+                                            SuggestionChosen="OnTypedSuggestionChosen"
+                                            GotFocus="OnTypedFocused"
+                                            PreviewKeyDown="OnTypedPreviewKeyDown"
+                                            AutomationProperties.Name="Folder or network share to scan">
+                                <AutoSuggestBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:PathSuggestionRow">
+                                        <Grid ColumnSpacing="{StaticResource ControlGap}" ColumnDefinitions="Auto,*" Padding="0,4"
+                                              AutomationProperties.Name="{x:Bind Spoken}">
+                                            <FontIcon Glyph="{x:Bind Glyph}" FontSize="{StaticResource GlyphSizeStandard}" VerticalAlignment="Center" />
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                <!-- Names from another computer, shown as text and nothing else. -->
+                                                <TextBlock Text="{x:Bind Path}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{x:Bind Path}" />
+                                                <TextBlock Text="{x:Bind Detail}"
+                                                           Visibility="{x:Bind HasDetail}"
+                                                           Style="{StaticResource SecondaryText}" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </DataTemplate>
+                                </AutoSuggestBox.ItemTemplate>
+                            </AutoSuggestBox>
+
+                            <Button x:Name="BrowseNetworkButton"
+                                    Grid.Column="1"
+                                    VerticalAlignment="Bottom"
+                                    Click="OnBrowseNetwork"
+                                    ToolTipService.ToolTip="Browse the network"
+                                    AutomationProperties.Name="Browse the network for a share">
+                                <FontIcon Glyph="&#xE70D;" FontSize="{StaticResource GlyphSizeCaption}" />
+                            </Button>
+                        </Grid>
+
+                        <!-- Why the path was not used, as a notice with its severity rather than
+                             coloured text. An InfoBar announces itself as it opens, so a screen
+                             reader hears it without leaving the box. -->
+                        <InfoBar Severity="Error"
+                                 IsClosable="False"
+                                 IsOpen="{x:Bind Typed.HasRefusal, Mode=OneWay}"
+                                 Message="{x:Bind Typed.Refusal, Mode=OneWay}" />
+
+                        <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}" HorizontalAlignment="Right">
+                            <ProgressRing Width="16"
+                                          Height="16"
+                                          IsActive="{x:Bind Typed.GoCommand.IsRunning, Mode=OneWay}"
+                                          AutomationProperties.Name="Asking whether the folder is there" />
+
+                            <Button x:Name="StopTypedButton"
+                                    Content="Stop"
+                                    Visibility="{x:Bind Typed.GoCommand.IsRunning, Mode=OneWay}"
+                                    Command="{x:Bind Typed.GoCancelCommand, Mode=OneWay}"
+                                    AutomationProperties.Name="Stop asking whether the folder is there" />
+
+                            <!-- Points the page; the scan starts from Scan, as it does
+                                 for a folder picked. -->
+                            <Button x:Name="UseTypedPathButton"
+                                    Style="{StaticResource AccentButtonStyle}"
+                                    Content="Use this path"
+                                    Command="{x:Bind Typed.GoCommand, Mode=OneWay}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Flyout>
+            </Button.Flyout>
+        </Button>
+</UserControl>

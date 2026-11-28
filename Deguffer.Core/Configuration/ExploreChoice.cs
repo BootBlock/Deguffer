@@ -2,14 +2,14 @@ namespace Deguffer.Core.Configuration;
 
 /// <summary>
 /// What the Explore page opens on: the picture it draws, and what that picture's colours say. The
-/// part of <see cref="AppPreferences"/> the page's view switch and Colour by box change, as one value.
+/// part of <see cref="AppPreferences"/> the page's Layout and Colour by boxes change, as one value.
 /// </summary>
 /// <param name="View">The picture the page draws. One of <see cref="Views"/> in a choice <see cref="From"/> made.</param>
 /// <param name="Colouring">What the colours in that picture say.</param>
 public sealed record ExploreChoice(ExploreView View, ExploreColouring Colouring)
 {
     /// <summary>
-    /// The views the Explore page offers, in the order its view switch lists them. The tree is the
+    /// The views the Explore page offers, in the order its Layout box lists them. The tree is the
     /// Memory page's alone, so this and <see cref="ExploreView"/> do not line up by number.
     /// </summary>
     public static IReadOnlyList<ExploreView> Views { get; } =

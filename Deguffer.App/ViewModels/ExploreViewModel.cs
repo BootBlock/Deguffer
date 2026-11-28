@@ -218,7 +218,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
     /// <summary>The broken shortcuts in the Start menu, on the desktop and in the Startup folders. See <see cref="ExploreShortcutFolders"/>.</summary>
     public ExploreShortcutFolders ShortcutFolders { get; }
 
-    /// <summary>What the header offers beside its view switch. See <see cref="ExploreDrawingOptions"/>.</summary>
+    /// <summary>What the header offers beside its Layout box. See <see cref="ExploreDrawingOptions"/>.</summary>
     public ExploreDrawingOptions DrawingOptions { get; } = new();
 
     /// <summary>Whether to show that panel. See <see cref="ExploreDisplay.ShowsShortcutFolders"/>.</summary>
@@ -548,8 +548,8 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
             return;
         }
 
-        // Read once, at the start. The scope can be changed while a scan runs, and a sentence
-        // written afterwards would then describe the next scan rather than this one's result.
+        // Read once, at the start. The page shown again re-reads the drives while a scan runs,
+        // and a sentence written afterwards could then describe another target than this scan's.
         var scoped = Targeting.IsScopedToFolder;
         var (scanned, volume) = Begin(target, ct);
         Targeting.Scanning();

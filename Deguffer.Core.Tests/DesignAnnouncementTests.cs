@@ -15,7 +15,7 @@ public sealed class DesignAnnouncementTests
     {
         ["Deguffer.App/Views/CleanPage.xaml"] = 2,
         ["Deguffer.App/Views/DuplicatesPage.xaml"] = 4,
-        ["Deguffer.App/Views/ExplorePage.xaml"] = 4,
+        ["Deguffer.App/Views/ExplorePage.xaml"] = 3,
         ["Deguffer.App/Views/HealthPage.xaml"] = 1,
         ["Deguffer.App/Views/MemoryPage.xaml"] = 4,
         ["Deguffer.App/Views/NetworkBrowserDialog.xaml"] = 1,

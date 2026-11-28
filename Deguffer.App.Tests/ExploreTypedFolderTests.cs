@@ -60,6 +60,27 @@ public sealed class ExploreTypedFolderTests : IDisposable
         Assert.Equal(0, accepted);
     }
 
+    /// <summary>
+    /// A refusal describes the text it was given, so editing the text takes it away rather than
+    /// leaving it under a path it was never about.
+    /// </summary>
+    [Fact]
+    public async Task EditingTheTextTakesTheRefusalAway()
+    {
+        _explore.Volumes.With(@"C:\");
+        _explore.Probe.Disconnected(@"\\?\UNC\server.test\share");
+        var page = _explore.Page();
+
+        page.Targeting.Typed.Text = Share;
+        await page.Targeting.Typed.GoCommand.ExecuteAsync(null);
+        Assert.True(page.Targeting.Typed.HasRefusal);
+
+        page.Targeting.Typed.Text = Share + @"\other";
+
+        Assert.Null(page.Targeting.Typed.Refusal);
+        Assert.False(page.Targeting.Typed.HasRefusal);
+    }
+
     /// <summary>A share Windows would not describe is refused in its own words, and is not called absent.</summary>
     [Fact]
     public async Task AShareWindowsWouldNotDescribeIsNotCalledAbsent()

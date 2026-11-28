@@ -125,7 +125,9 @@ public sealed partial class MemoryPage : Page
         RowsList.AddHandler(
             KeyDownEvent, new KeyEventHandler(OnRowsKeyDown), handledEventsToo: true);
 
-        ViewSelector.SelectedIndex = (int)ViewModel.SelectedView;
+        LayoutBox.Offer(MapLayoutOption.Memory);
+        LayoutBox.ViewChosen += (_, view) => ShowAs(view);
+        LayoutBox.Show(ViewModel.SelectedView);
 
         // Read once, as the page is built, for the reason DrawnSetting.Stored gives. Before the
         // handlers below, so putting the stored choice on the box does not write it straight back.
@@ -258,10 +260,9 @@ public sealed partial class MemoryPage : Page
         _watching = null;
     }
 
-    private void OnViewSelectionChanged(object sender, SelectionChangedEventArgs e)
+    /// <summary>Put <paramref name="view"/>, chosen in the Layout box, on screen.</summary>
+    private void ShowAs(ExploreView view)
     {
-        var view = (ExploreView)ViewSelector.SelectedIndex;
-
         ViewModel.SelectedView = view;
 
         // The list, the tree and the picture are the same contents, so exactly one is on screen. The
@@ -350,8 +351,8 @@ public sealed partial class MemoryPage : Page
         _guard.Write(() =>
         {
             // Both, though only one is on screen: the one that is hidden has to agree with what is
-            // picked before the reader switches to it, which is what OnViewSelectionChanged relies
-            // on rather than repeating.
+            // picked before the reader switches to it, which is what ShowAs relies on rather than
+            // repeating.
             RowsList.SelectedItem = listed;
             TreeList.SelectedItem = opened;
         });

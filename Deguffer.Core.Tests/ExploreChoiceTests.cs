@@ -4,7 +4,7 @@ using Deguffer.Testing;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// What the Explore page opens on. What is asserted is that a stored value the page's view switch or
+/// What the Explore page opens on. What is asserted is that a stored value the page's Layout or
 /// Colour by box cannot show is read as the default, because the page selects it there as it is built
 /// and an index past the items throws.
 /// </summary>

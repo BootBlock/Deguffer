@@ -17,7 +17,7 @@ public sealed class DesignTrimmedTextTests
         ["Deguffer.App/Controls/DriveTemplates.xaml"] = 1,
         ["Deguffer.App/Views/CleanPage.xaml"] = 1,
         ["Deguffer.App/Views/DuplicatesPage.xaml"] = 2,
-        ["Deguffer.App/Views/ExplorePage.xaml"] = 10,
+        ["Deguffer.App/Views/ExplorePage.xaml"] = 9,
         ["Deguffer.App/Views/HealthPage.xaml"] = 1,
         ["Deguffer.App/Views/InstalledAppsPage.xaml"] = 4,
         ["Deguffer.App/Views/ItemListView.xaml"] = 2,

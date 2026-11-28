@@ -47,6 +47,9 @@ public sealed partial class ExploreTypedFolder : ObservableObject
 
     public bool HasRefusal => Refusal is not null;
 
+    /// <summary>A refusal describes the text it was given, so new text takes it away.</summary>
+    partial void OnTextChanged(string value) => Refusal = null;
+
     /// <summary>
     /// Whether the page may be pointed somewhere else, which it may not while a scan runs. Set by the
     /// page from the same gate the drive box and the folder button follow.

@@ -195,144 +195,61 @@
             narrow for one line, the folder scope and the offer to elevate move to a second line, so
             the scope keeps room to name its folder and nothing is drawn off the edge (ReflowRow).
         -->
-        <controls:ReflowRow Grid.Row="1" ColumnSpacing="8" RowSpacing="{StaticResource ControlGap}" Middle="WithTail">
-            <StackPanel Orientation="Horizontal" Spacing="8">
-            <!-- Disabled while a scan runs, because choosing a drive drops a folder scope: the
-                 page would otherwise stop naming the folder it is still scanning. -->
-            <ComboBox MinWidth="88"
-                      Header="Drive"
-                      IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
-                      ItemsSource="{x:Bind ViewModel.Targeting.Drives}"
-                      SelectedItem="{x:Bind ViewModel.Targeting.SelectedDrive, Mode=TwoWay}"
-                      ItemTemplateSelector="{StaticResource DriveEntry}"
-                      DropDownOpened="OnDriveListOpened"
-                      AutomationProperties.Name="Drive to scan" />
+        <controls:ReflowRow Grid.Row="1" ColumnSpacing="{StaticResource ControlGap}" RowSpacing="{StaticResource ControlGap}" Middle="WithTail">
+            <!-- Wraps where even the first line is too narrow for the drive, the two ways to choose a
+                 folder and Scan, rather than running off the edge. Each control sits on the line's
+                 foot, beside the drive box's field rather than its header. -->
+            <controls:FlowRow ColumnSpacing="{StaticResource ControlGap}" RowSpacing="{StaticResource ControlGap}">
+                <!-- Disabled while a scan runs, because choosing a drive drops a folder scope: the
+                     page would otherwise stop naming the folder it is still scanning. -->
+                <ComboBox x:Name="DriveBox"
+                          MinWidth="88"
+                          VerticalAlignment="Bottom"
+                          Header="Drive"
+                          IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
+                          ItemsSource="{x:Bind ViewModel.Targeting.Drives}"
+                          SelectedItem="{x:Bind ViewModel.Targeting.SelectedDrive, Mode=TwoWay}"
+                          ItemTemplateSelector="{StaticResource DriveEntry}"
+                          DropDownOpened="OnDriveListOpened"
+                          AutomationProperties.Name="Drive to scan" />
 
-            <StackPanel Orientation="Horizontal"
-                        Spacing="8"
-                        VerticalAlignment="Bottom">
                 <!-- Scoping to a folder, through the system picker for the reason the source
                      folders use one: the path is then one the shell confirmed exists. -->
-                <Button Content="Folder…"
+                <Button x:Name="FolderButton"
+                        VerticalAlignment="Bottom"
+                        Content="Folder…"
                         IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
                         Click="OnChooseFolder"
-                        AutomationProperties.Name="Choose a folder to scan" />
+                        ToolTipService.ToolTip="Choose a folder to scan"
+                        AutomationProperties.Name="Folder"
+                        AutomationProperties.HelpText="Choose a folder to scan" />
 
-                <!-- Or typed, for a share the picker has not found on the network. Nothing
-                     confirmed a typed path, so the page asks whether it is a folder before it
-                     points there, and says why where it is not. -->
-                <Button x:Name="TypedButton"
-                        Content="Path…"
-                        IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
-                        ToolTipService.ToolTip="Type a folder or a network share to scan"
-                        AutomationProperties.Name="Type a folder or a network share to scan">
-                    <Button.Flyout>
-                        <Flyout x:Name="TypedFlyout"
-                                Placement="BottomEdgeAlignedLeft"
-                                Opened="OnTypedOpened"
-                                Closed="OnTypedClosed">
-                            <!-- The presenter's default MaxWidth leaves room for a 424-pixel
-                                 body, which would clip the chevron beside the box. -->
-                            <Flyout.FlyoutPresenterStyle>
-                                <Style TargetType="FlyoutPresenter" BasedOn="{StaticResource DefaultFlyoutPresenterStyle}">
-                                    <Setter Property="MaxWidth" Value="560" />
-                                </Style>
-                            </Flyout.FlyoutPresenterStyle>
-                            <StackPanel Width="460" Spacing="{StaticResource ControlGap}">
-                                <!-- The list under the box follows what has been typed: what this
-                                     account uses while it is empty, then computers, a computer's
-                                     shares, and a share's folders. The chevron opens a tree of the
-                                     same places, for a share whose name is not known. -->
-                                <Grid ColumnSpacing="{StaticResource ControlGap}" ColumnDefinitions="*,Auto">
-                                    <AutoSuggestBox x:Name="TypedBox"
-                                                    Header="Folder or network share"
-                                                    PlaceholderText="\\server\share"
-                                                    Text="{x:Bind ViewModel.Targeting.Typed.Text, Mode=TwoWay}"
-                                                    ItemsSource="{x:Bind ViewModel.Targeting.Typed.Suggestions.Rows}"
-                                                    UpdateTextOnSelect="True"
-                                                    TextChanged="OnTypedTextChanged"
-                                                    QuerySubmitted="OnTypedSubmitted"
-                                                    SuggestionChosen="OnTypedSuggestionChosen"
-                                                    GotFocus="OnTypedFocused"
-                                                    PreviewKeyDown="OnTypedPreviewKeyDown"
-                                                    AutomationProperties.Name="Folder or network share to scan">
-                                        <AutoSuggestBox.ItemTemplate>
-                                            <DataTemplate x:DataType="vm:PathSuggestionRow">
-                                                <Grid ColumnSpacing="{StaticResource ControlGap}" ColumnDefinitions="Auto,*" Padding="0,4"
-                                                      AutomationProperties.Name="{x:Bind Spoken}">
-                                                    <FontIcon Glyph="{x:Bind Glyph}" FontSize="{StaticResource GlyphSizeStandard}" VerticalAlignment="Center" />
-                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                                        <!-- Names from another computer, shown as text and nothing else. -->
-                                                        <TextBlock Text="{x:Bind Path}" TextTrimming="CharacterEllipsis" />
-                                                        <TextBlock Text="{x:Bind Detail}"
-                                                                   Visibility="{x:Bind HasDetail}"
-                                                                   Style="{StaticResource SecondaryText}" />
-                                                    </StackPanel>
-                                                </Grid>
-                                            </DataTemplate>
-                                        </AutoSuggestBox.ItemTemplate>
-                                    </AutoSuggestBox>
+                <!-- Or typed, for a share the picker has not found on the network. -->
+                <views:ExploreTypedPath x:Name="TypedPath"
+                                        VerticalAlignment="Bottom"
+                                        IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
+                                        Typed="{x:Bind ViewModel.Targeting.Typed}" />
+                <!-- While a scan runs, Cancel takes Scan's place rather than joining the line beside
+                     it. The two share the wider of their widths (WidthGroup), as Storage's do, so the
+                     swap moves nothing after them. Only a scan: a removal has no Cancel, so while one
+                     runs Scan stays where it is, unavailable. -->
+                <Grid VerticalAlignment="Bottom">
+                    <Button x:Name="ScanButton"
+                            HorizontalAlignment="Stretch"
+                            Style="{StaticResource AccentButtonStyle}"
+                            Content="Scan"
+                            Visibility="{x:Bind controls:Shown.Unless(ViewModel.ScanCommand.IsRunning), Mode=OneWay}"
+                            Command="{x:Bind ViewModel.ScanCommand}"
+                            controls:WidthGroup.Group="{StaticResource ScanSlotWidths}" />
 
-                                    <Button Grid.Column="1"
-                                            VerticalAlignment="Bottom"
-                                            Click="OnBrowseNetwork"
-                                            ToolTipService.ToolTip="Browse the network"
-                                            AutomationProperties.Name="Browse the network for a share">
-                                        <FontIcon Glyph="&#xE70D;" FontSize="{StaticResource GlyphSizeCaption}" />
-                                    </Button>
-                                </Grid>
-
-                                <!-- Live, so a screen reader hears why the path was not used
-                                     without leaving the box. -->
-                                <TextBlock Text="{x:Bind ViewModel.Targeting.Typed.Refusal, Mode=OneWay}"
-                                           Visibility="{x:Bind ViewModel.Targeting.Typed.HasRefusal, Mode=OneWay}"
-                                           TextWrapping="Wrap"
-                                           Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                           AutomationProperties.LiveSetting="Assertive" />
-
-                                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                                    <ProgressRing Width="16"
-                                                  Height="16"
-                                                  IsActive="{x:Bind ViewModel.Targeting.Typed.GoCommand.IsRunning, Mode=OneWay}"
-                                                  AutomationProperties.Name="Asking whether the folder is there" />
-
-                                    <Button Content="Stop"
-                                            Visibility="{x:Bind ViewModel.Targeting.Typed.GoCommand.IsRunning, Mode=OneWay}"
-                                            Command="{x:Bind ViewModel.Targeting.Typed.GoCancelCommand}"
-                                            AutomationProperties.Name="Stop asking whether the folder is there" />
-
-                                    <!-- Points the page; the scan starts from Scan, as it does
-                                         for a folder picked. -->
-                                    <Button Style="{StaticResource AccentButtonStyle}"
-                                            Content="Use this path"
-                                            Command="{x:Bind ViewModel.Targeting.Typed.GoCommand}" />
-                                </StackPanel>
-                            </StackPanel>
-                        </Flyout>
-                    </Button.Flyout>
-                </Button>
-            </StackPanel>
-
-            <!-- While a scan runs, Cancel takes Scan's place rather than joining the line beside
-                 it. The two share the wider of their widths (WidthGroup), as Storage's do, so the
-                 swap moves nothing after them. -->
-            <Grid VerticalAlignment="Bottom">
-                <Button x:Name="ScanButton"
-                        HorizontalAlignment="Stretch"
-                        Style="{StaticResource AccentButtonStyle}"
-                        Content="Scan"
-                        Visibility="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
-                        Command="{x:Bind ViewModel.ScanCommand}"
-                        controls:WidthGroup.Group="{StaticResource ScanSlotWidths}" />
-
-                <Button x:Name="CancelButton"
-                        HorizontalAlignment="Stretch"
-                        Content="Cancel"
-                        Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
-                        Command="{x:Bind ViewModel.ScanCancelCommand}"
-                        controls:WidthGroup.Group="{StaticResource ScanSlotWidths}" />
-            </Grid>
-            </StackPanel>
+                    <Button x:Name="CancelButton"
+                            HorizontalAlignment="Stretch"
+                            Content="Cancel"
+                            Visibility="{x:Bind ViewModel.ScanCommand.IsRunning, Mode=OneWay}"
+                            Command="{x:Bind ViewModel.ScanCancelCommand}"
+                            controls:WidthGroup.Group="{StaticResource ScanSlotWidths}" />
+                </Grid>
+            </controls:FlowRow>
 
             <!-- The folder a scan is scoped to, beside the drive box it overrides. Here rather than
                  in the status line below, because it is half of the same choice as the drive — and
@@ -354,21 +271,25 @@
                            TextTrimming="CharacterEllipsis"
                            ToolTipService.ToolTip="{x:Bind ViewModel.Targeting.ScopeFolder, Mode=OneWay}" />
 
-                <!-- This clears the folder; it does not start anything. The accessible name says
-                     so, because it is the only thing a screen reader announces. -->
-                <Button Grid.Column="2"
+                <!-- This clears the folder; it does not start anything. The help text says so, under
+                     a name that matches the words on the button. -->
+                <Button x:Name="WholeDriveButton"
+                        Grid.Column="2"
                         Content="Whole drive"
                         Command="{x:Bind ViewModel.Targeting.ScanWholeDriveCommand}"
                         ToolTipService.ToolTip="Clear the folder, so the next scan covers the whole drive"
-                        AutomationProperties.Name="Clear the folder" />
+                        AutomationProperties.Name="Whole drive"
+                        AutomationProperties.HelpText="Clear the folder, so the next scan covers the whole drive" />
             </Grid>
 
             <!-- §5.5's fallback made actionable, on the same terms the Storage page offers it, and a
                  way to scan, so it sits on the scan's line: offered from the start, and withdrawn
                  once a scan has shown that elevating would not help. -->
-            <Button Style="{StaticResource ElevateButtonStyle}"
+            <Button x:Name="ElevateButton"
+                    Style="{StaticResource ElevateButtonStyle}"
                     VerticalAlignment="Bottom"
                     Content="{x:Bind ViewModel.Elevation.ElevateLabel, Mode=OneWay}"
+                    AutomationProperties.HelpText="Restart Deguffer as administrator and scan, so it can read the volume's file table."
                     Visibility="{x:Bind ViewModel.Elevation.CanElevate, Mode=OneWay}"
                     Command="{x:Bind ViewModel.Elevation.ElevateAndRescanCommand}" />
         </controls:ReflowRow>
@@ -380,6 +301,7 @@
         -->
         <ProgressBar Grid.Row="2"
                      Height="3"
+                     AutomationProperties.Name="Scan progress"
                      Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
                      IsIndeterminate="{x:Bind ViewModel.Progress.IsIndeterminate, Mode=OneWay}"
                      Maximum="1"
@@ -569,7 +491,7 @@
             <Grid>
                 <controls:ExploreMap x:Name="Map"
                                      Zoomable="True"
-                                     Description="A picture of what is using the space. Choose List at the top of the page for the same contents as a readable list. Double-click a shape to open what is inside it. The mouse's Back and Forward buttons, Backspace, Alt+Left and Alt+Right step back and forward through the folders opened and the zooms to a shape."
+                                     Description="A picture of what is using the space. Choose List in the Layout box for the same contents as a readable list. Double-click a shape to open what is inside it. The mouse's Back and Forward buttons, Backspace, Alt+Left and Alt+Right step back and forward through the folders opened and the zooms to a shape."
                                      KeyboardAcceleratorPlacementMode="Hidden">
                     <!--
                         What the thing under the pointer actually is, where the app knows. Not the
@@ -712,7 +634,7 @@
                     So they cover rather than displace, and nothing the user does to what is on
                     the card can resize it. What is left above it still can: the progress bar and
                     the breadcrumb appear and go with a scan, and the colour legend below follows
-                    the Colour by box and the view switch. Each of those is a deliberate act at a moment the
+                    the Colour by and Layout boxes. Each of those is a deliberate act at a moment the
                     picture is being rebuilt anyway, which is the opposite of what this fixes.
 
                     The sentences let the pointer through, and only the two buttons take it. The map has no keyboard way round a shape, and the stale note stands

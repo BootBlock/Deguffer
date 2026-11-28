@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!--
     How the Explore page draws what was scanned, in its header, because that governs the whole page:
-    the map appearance window, what the colours say, and the layout. The layouts are a switch, so
-    every one of them is in sight without opening anything.
+    the map appearance window, what the colours say, and the layout.
 
-    The switch is last, at the right edge. The button before it comes and goes with the view, and the
-    group growing or shrinking leftwards moves nothing the pointer has just pressed. On a window too
-    narrow for one line, the switch wraps under the options rather than running off the edge (FlowRow).
+    The Layout box is last, at the right edge. The button before it comes and goes with the view and
+    the colouring (ExploreDisplay.ShowsAppearance), and the group growing or shrinking leftwards moves nothing the pointer has just pressed. On a window
+    too narrow for one line, the boxes wrap under one another rather than running off the edge
+    (FlowRow).
 -->
 <UserControl
     x:Class="Deguffer.App.Views.ExploreDrawingChoice"
@@ -26,12 +26,12 @@
                 Padding="8"
                 Visibility="{x:Bind Options.ShowsAppearance, Mode=OneWay}"
                 Click="OnAppearanceClicked"
-                ToolTipService.ToolTip="Map appearance: colours, shapes and spacing"
+                ToolTipService.ToolTip="Map appearance: presets, colours, shapes, lines, detail and names"
                 AutomationProperties.Name="{x:Bind views:MapAppearanceWindow.Name}">
             <FontIcon Glyph="&#xE790;" FontSize="{StaticResource GlyphSizeStandard}" />
         </Button>
 
-        <!-- Beside the switch because the two are one decision to the reader, what is on screen and
+        <!-- Beside the Layout box because the two are one decision to the reader, what is on screen and
              what its colours mean, and orthogonal to it in fact: every pairing of the two is
              meaningful. Offered in every view, and its tooltip says what it changes in this one: see
              ExploreDisplay.ColouringHint. Mapped to ExploreColouring by ExploreChoice.Colourings. The label is Raw: the box
@@ -53,38 +53,10 @@
             </ComboBox>
         </StackPanel>
 
-        <!-- Mapped to ExploreView by ExploreChoice.Views, so the order here is the order of that list:
-             the three pictures, read as a whole, then the two lists, read a row at a time. The tree is
-             Memory's alone. -->
-        <SelectorBar x:Name="ViewSelector"
-                     VerticalAlignment="Center"
-                     SelectionChanged="OnViewSelectionChanged"
-                     AutomationProperties.Name="How to draw what was scanned">
-            <SelectorBarItem x:Name="TreemapItem" Text="Treemap">
-                <SelectorBarItem.Icon>
-                    <FontIcon Glyph="&#xE80A;" />
-                </SelectorBarItem.Icon>
-            </SelectorBarItem>
-            <SelectorBarItem x:Name="IcicleItem" Text="Icicle">
-                <SelectorBarItem.Icon>
-                    <FontIcon Glyph="&#xE9D2;" />
-                </SelectorBarItem.Icon>
-            </SelectorBarItem>
-            <SelectorBarItem x:Name="SunburstItem" Text="Sunburst">
-                <SelectorBarItem.Icon>
-                    <FontIcon Glyph="&#xEB05;" />
-                </SelectorBarItem.Icon>
-            </SelectorBarItem>
-            <SelectorBarItem x:Name="ListItem" Text="List">
-                <SelectorBarItem.Icon>
-                    <FontIcon Glyph="&#xE8FD;" />
-                </SelectorBarItem.Icon>
-            </SelectorBarItem>
-            <SelectorBarItem x:Name="FilesItem" Text="Files">
-                <SelectorBarItem.Icon>
-                    <FontIcon Glyph="&#xE7C3;" />
-                </SelectorBarItem.Icon>
-            </SelectorBarItem>
-        </SelectorBar>
+        <!-- The three pictures, read as a whole, then the two lists, read a row at a time, in the order
+             of ExploreChoice.Views. The tree is Memory's alone. -->
+        <views:MapLayoutBox x:Name="LayoutBox"
+                            VerticalAlignment="Center"
+                            Hint="How to draw what was scanned: as a picture, or as a list." />
     </controls:FlowRow>
 </UserControl>
