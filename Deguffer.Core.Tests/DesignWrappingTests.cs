@@ -20,7 +20,7 @@ public sealed class DesignWrappingTests
     private static readonly Dictionary<string, int> Baseline = new(StringComparer.Ordinal)
     {
         ["Deguffer.App/Views/CleanPage.xaml"] = 1,
-        ["Deguffer.App/Views/ExplorePage.xaml"] = 4,
+        ["Deguffer.App/Views/ExplorePage.xaml"] = 3,
     };
 
     [Fact]

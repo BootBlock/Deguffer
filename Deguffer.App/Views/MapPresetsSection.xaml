@@ -20,7 +20,10 @@
                     ToolTipService.ToolTip="The Deguffer preset, standard colours for every picture, and the light and detail as the map is shipped" />
         </Grid>
 
-        <ListView SelectionMode="Single"
+        <ListView x:Name="PresetList"
+                  SelectionMode="Single"
+                  IsItemClickEnabled="True"
+                  ItemClick="OnPresetClicked"
                   ItemsSource="{x:Bind ViewModel.Presets}"
                   SelectedIndex="{x:Bind ViewModel.PresetIndex, Mode=TwoWay}"
                   AutomationProperties.Name="Presets">

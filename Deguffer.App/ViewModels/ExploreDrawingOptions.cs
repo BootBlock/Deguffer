@@ -4,7 +4,7 @@ using Deguffer.Core.Exploring.Rendering;
 namespace Deguffer.App.ViewModels;
 
 /// <summary>
-/// What the Explore page's header offers beside its view switch, as the view, the colouring, the
+/// What the Explore page's header offers beside its Layout box, as the view, the colouring, the
 /// Files listing and the tree on screen decide it. Each answer is <see cref="ExploreDisplay"/>'s.
 ///
 /// <para>Separate from <see cref="ExploreViewModel"/> because the header reads nothing else of the

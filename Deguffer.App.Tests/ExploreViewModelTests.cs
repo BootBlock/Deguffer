@@ -906,8 +906,8 @@ public sealed class ExploreViewModelTests : IDisposable
     /// <summary>
     /// Each panel round the picture follows <see cref="ExploreDisplay"/> as each of its facts changes:
     /// a running scan's tree, the finished one, the view, the colouring, the look and the contrast.
-    /// Each change is said to the page for every panel it can move, and the Files search and the
-    /// kinds of file are started and stopped with them.
+    /// Each change is said to the page for every panel it moves, whether or not the step names it,
+    /// and the Files search and the kinds of file are started and stopped with them.
     /// </summary>
     [Fact]
     public void ThePanelsFollowTheDisplayAsEachOfItsFactsChanges() => UiThread.Run(async () =>
@@ -921,11 +921,34 @@ public sealed class ExploreViewModelTests : IDisposable
         page.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
         page.DrawingOptions.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
 
+        // Every value the page hands on, so a value that moves without being said fails the step it
+        // moved in, not only one a step names.
+        var forwarded = new Dictionary<string, Func<object?>>
+        {
+            [nameof(ExploreViewModel.ShowsLegend)] = () => page.ShowsLegend,
+            [nameof(ExploreViewModel.ShowsFileFilters)] = () => page.ShowsFileFilters,
+            [nameof(ExploreViewModel.ShowsGrowth)] = () => page.ShowsGrowth,
+            [nameof(ExploreViewModel.ShowsTypes)] = () => page.ShowsTypes,
+            [nameof(ExploreViewModel.ShowsShortcutFolders)] = () => page.ShowsShortcutFolders,
+            [nameof(ExploreViewModel.ShowsMapControls)] = () => page.ShowsMapControls,
+            [nameof(ExploreViewModel.ShowsKept)] = () => page.ShowsKept,
+            [nameof(ExploreViewModel.HasNoTree)] = () => page.HasNoTree,
+            [nameof(ExploreViewModel.ViewNote)] = () => page.ViewNote,
+            [nameof(ExploreViewModel.HasViewNote)] = () => page.HasViewNote,
+            [nameof(ExploreViewModel.SelectedScheme)] = () => page.SelectedScheme,
+            [nameof(ExploreDrawingOptions.ShowsAppearance)] = () => page.DrawingOptions.ShowsAppearance,
+            [nameof(ExploreDrawingOptions.ColouringHint)] = () => page.DrawingOptions.ColouringHint,
+        };
+
         void Changes(Action change, params string[] said)
         {
+            var before = forwarded.ToDictionary(value => value.Key, value => value.Value());
             raised.Clear();
             change();
             Assert.All(said, name => Assert.Contains(name, raised));
+            Assert.All(
+                forwarded.Where(value => !Equals(before[value.Key], value.Value())),
+                moved => Assert.Contains(moved.Key, raised));
             Follows(page);
         }
 
@@ -1277,7 +1300,8 @@ public sealed class ExploreViewModelTests : IDisposable
     /// <summary>Each panel round the picture is what <see cref="ExploreDisplay"/> says of the page's facts.</summary>
     private static void Follows(ExploreViewModel page)
     {
-        var display = new ExploreDisplay(page.Tree, page.SelectedView, page.SelectedColouring, page.Look, page.MapInContrast, page.Files.Listing);
+        var display = new ExploreDisplay(
+            page.Tree, page.SelectedView, page.SelectedColouring, page.Look, page.MapInContrast, page.Files.Listing, page.KeptScan.Tree);
 
         Assert.Equal(display.ShowsLegend, page.ShowsLegend);
         Assert.Equal(display.ShowsFileFilters, page.ShowsFileFilters);
@@ -1286,6 +1310,10 @@ public sealed class ExploreViewModelTests : IDisposable
         Assert.Equal(display.ShowsShortcutFolders, page.ShowsShortcutFolders);
         Assert.Equal(display.ShowsShortcutFolders, page.ShortcutFolders.IsActive);
         Assert.Equal(display.ShowsAppearance, page.DrawingOptions.ShowsAppearance);
+        Assert.Equal(display.ShowsKept, page.ShowsKept);
+        Assert.Equal(display.ShowsEmptyState, page.HasNoTree);
+        Assert.Equal(display.Note is not null, page.HasViewNote);
+        Assert.Equal(display.ListsRows, page.Listing.IsActive);
         Assert.Equal(display.ColouringHint, page.DrawingOptions.ColouringHint);
         Assert.Equal(display.Zooms, page.ShowsMapControls);
         Assert.Equal(display.Note, page.ViewNote);

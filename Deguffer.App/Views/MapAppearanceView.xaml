@@ -86,7 +86,7 @@
                     <FontIcon Glyph="&#xED5E;" />
                 </SelectorBarItem.Icon>
             </SelectorBarItem>
-            <SelectorBarItem x:Name="LayoutItem" Text="Layout">
+            <SelectorBarItem x:Name="DetailItem" Text="Detail">
                 <SelectorBarItem.Icon>
                     <FontIcon Glyph="&#xECA5;" />
                 </SelectorBarItem.Icon>

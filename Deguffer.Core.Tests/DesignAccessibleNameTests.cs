@@ -16,7 +16,6 @@ public sealed class DesignAccessibleNameTests
     {
         ["Deguffer.App/Views/CleanPage.xaml"] = 1,
         ["Deguffer.App/Views/DuplicatesPage.xaml"] = 1,
-        ["Deguffer.App/Views/ExplorePage.xaml"] = 1,
         ["Deguffer.App/Views/HealthPage.xaml"] = 1,
         ["Deguffer.App/Views/InstalledAppsPage.xaml"] = 1,
         ["Deguffer.App/Views/StartupPage.xaml"] = 1,

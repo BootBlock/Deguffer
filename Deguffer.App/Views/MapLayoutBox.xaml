@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+    The Layout box of a page that draws a map: its label and a drop-down of the layouts it offers, each
+    with its icon beside its name. A box rather than a button for each layout, because a layout is
+    chosen seldom and kept, and five buttons in sight would cost a page's header a line for it. One
+    control for the Explore and Memory pages, so a layout looks and reads the same on both.
+-->
+<UserControl
+    x:Class="Deguffer.App.Views.MapLayoutBox"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:Deguffer.App.ViewModels"
+    IsTabStop="False">
+
+    <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}" VerticalAlignment="Center">
+        <!-- Raw: the box has its own name, which starts with these words. -->
+        <TextBlock Text="Layout" Style="{StaticResource FieldLabel}" VerticalAlignment="Center"
+                   AutomationProperties.AccessibilityView="Raw" />
+
+        <ComboBox x:Name="LayoutSelector"
+                  MinWidth="130"
+                  SelectionChanged="OnSelectionChanged"
+                  ToolTipService.ToolTip="{x:Bind Hint, Mode=OneWay}"
+                  AutomationProperties.Name="Layout"
+                  AutomationProperties.HelpText="{x:Bind Hint, Mode=OneWay}">
+            <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:MapLayoutOption">
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}">
+                        <FontIcon Glyph="{x:Bind Glyph}" FontSize="{StaticResource GlyphSizeBody}" VerticalAlignment="Center"
+                                  AutomationProperties.AccessibilityView="Raw" />
+                        <TextBlock Text="{x:Bind Name}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </DataTemplate>
+            </ComboBox.ItemTemplate>
+        </ComboBox>
+    </StackPanel>
+</UserControl>

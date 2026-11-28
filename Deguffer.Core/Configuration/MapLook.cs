@@ -8,7 +8,7 @@ namespace Deguffer.Core.Configuration;
 ///
 /// <para>A value of its own because the window applies a change before it is written. A reader
 /// trying colours wants each one on the map as they pick it, and a preferences file that could not
-/// be written is no reason to show them the old one — the order the Explore page's own view switch and
+/// be written is no reason to show them the old one — the order the Explore page's own Layout and
 /// Colour by box already take, for the same reason.</para>
 /// </summary>
 /// <param name="Spacing">How much room the treemap leaves round what each folder holds.</param>

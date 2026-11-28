@@ -15,7 +15,8 @@
              off before it lands. -->
         <controls:PageHeader controls:ReadingColumn.Fills="True" Destination="Memory">
             <controls:PageHeader.Actions>
-                <StackPanel Orientation="Horizontal" Spacing="{StaticResource RegionGap}">
+                <!-- Wraps on a window too narrow for one line rather than running off the edge. -->
+                <controls:FlowRow ColumnSpacing="{StaticResource RegionGap}" RowSpacing="{StaticResource ControlGap}">
                     <CheckBox x:Name="LiveToggle"
                               MinWidth="0"
                               VerticalAlignment="Center"
@@ -29,27 +30,13 @@
                             Command="{x:Bind ViewModel.Updates.RefreshCommand}"
                             ToolTipService.ToolTip="Read where memory is now" />
 
-                    <!-- Indexed against ExploreView, so the order here is that enum's order. There is
-                         no colour picker: a memory picture has no dates to band, so its colours say
-                         which part a shape belongs to and nothing else. -->
-                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource ControlGap}" VerticalAlignment="Center">
-                        <!-- Raw for assistive technology: the combo box has its own name. -->
-                        <TextBlock Text="View"
-                                   Style="{StaticResource FieldLabel}"
-                                   VerticalAlignment="Center"
-                                   AutomationProperties.AccessibilityView="Raw" />
-                        <ComboBox x:Name="ViewSelector"
-                                  MinWidth="120"
-                                  SelectionChanged="OnViewSelectionChanged"
-                                  AutomationProperties.Name="How to draw where memory is">
-                            <ComboBoxItem Content="Treemap" />
-                            <ComboBoxItem Content="Icicle" />
-                            <ComboBoxItem Content="Sunburst" />
-                            <ComboBoxItem Content="List" />
-                            <ComboBoxItem Content="Tree" />
-                        </ComboBox>
-                    </StackPanel>
-                </StackPanel>
+                    <!-- In the order of MemoryChoice.Views. There is no colour picker: a memory
+                         picture has no dates to band, so its colours say which part a shape belongs
+                         to and nothing else. -->
+                    <views:MapLayoutBox x:Name="LayoutBox"
+                                        VerticalAlignment="Center"
+                                        Hint="How to draw where memory is: as a picture, a list or a tree." />
+                </controls:FlowRow>
             </controls:PageHeader.Actions>
         </controls:PageHeader>
 
@@ -169,7 +156,7 @@
                 <controls:ExploreMap x:Name="Map"
                                      Zoomable="True"
                                      AutomationProperties.Name="Map of where memory is"
-                                     Description="A picture of where physical memory is. Choose List in the View box for the same contents as a readable list. Double-click a shape to open what is inside it.">
+                                     Description="A picture of where physical memory is. Choose List in the Layout box for the same contents as a readable list. Double-click a shape to open what is inside it.">
                     <!--
                         What the thing under the pointer is, and why the size it is drawn at is
                         normal (§7.2). A floating tooltip, where the readout below deliberately is

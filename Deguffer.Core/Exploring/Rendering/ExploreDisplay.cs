@@ -9,7 +9,7 @@ namespace Deguffer.Core.Exploring.Rendering;
 /// which colours the picture and its legend are in, what is measured for them, and the sentence that
 /// names a view the page could not draw as asked.
 ///
-/// <para>One value for all of them because each answers from the same five facts, and a panel that
+/// <para>One value for all of them because each answers from the same facts, and a panel that
 /// read them for itself is how the legend comes to name a scale the map is not drawn in.</para>
 /// </summary>
 /// <param name="Tree">The tree on screen, or null before anything has been scanned.</param>
@@ -59,16 +59,16 @@ public readonly record struct ExploreDisplay(
 
     /// <summary>
     /// Whether to show the panel of what grew: whenever the colours are growth and something has been
-    /// scanned, in the list view as well as the pictures, because the panel is a list of its own and
-    /// a reader in the list view has asked the same question. The replay of the comparison follows
-    /// the same answer.
+    /// scanned, unless the panel of shortcut folders takes its place, in the list view as well as the
+    /// pictures, because the panel is a list of its own and a reader in the list view has asked the
+    /// same question. The replay of the comparison follows the same answer.
     /// </summary>
     public bool ShowsGrowth => Colouring == ExploreColouring.Growth && Tree is not null && !ShowsShortcutFolders;
 
     /// <summary>
     /// Whether to show the panel of what kind of file fills the folder on screen: whenever the colours
-    /// are types and something has been scanned, in the lists as well as the pictures, as
-    /// <see cref="ShowsGrowth"/> is.
+    /// are types and something has been scanned, unless the panel of shortcut folders takes its place,
+    /// in the lists as well as the pictures, as <see cref="ShowsGrowth"/> is.
     /// </summary>
     public bool ShowsTypes => MeasuresTypes && Tree is not null && !ShowsShortcutFolders;
 
@@ -81,10 +81,11 @@ public readonly record struct ExploreDisplay(
     public bool ShowsShortcutFolders => SearchesFiles && Listing == FileListing.BrokenLinks && Tree is not null;
 
     /// <summary>
-    /// Whether to offer the map appearance window: only where something on screen is drawn in the
-    /// look it changes. That is a picture, or the panel of kinds of file, whose swatches are tuned by
-    /// the look's colour style. Anywhere else the button would open a window whose every change is
-    /// invisible. The window stays reachable from Settings.
+    /// Whether to offer the map appearance window: only in a view drawn in the look it changes. That is
+    /// a picture, scanned or not, or the panel of kinds of file, whose swatches are tuned by the look's
+    /// colour style. Over a picture with nothing scanned yet it stays, so the header does not change as
+    /// the scan's first tree arrives. Over any other list the button would open a window whose every
+    /// change is invisible. The window stays reachable from Settings.
     /// </summary>
     public bool ShowsAppearance => DrawsPicture || ShowsTypes;
 

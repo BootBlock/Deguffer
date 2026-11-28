@@ -104,7 +104,7 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
 
     /// <summary>
     /// The view the Explore page is showing, which is the one the scheme picker speaks for. Set by the
-    /// page whenever its view switch moves, and the stored view until the page is built.
+    /// page whenever its Layout box moves, and the stored view until the page is built.
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SchemeHeading))]

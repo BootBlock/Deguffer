@@ -13,7 +13,7 @@ namespace Deguffer.App.Tests;
 public sealed class TreemapSpacingSettingTests
 {
     /// <summary>The markup of each place the spacing is offered.</summary>
-    private static readonly string[] Offered = ["Deguffer.App/Views/SettingsPage.xaml", "Deguffer.App/Views/MapLayoutSection.xaml"];
+    private static readonly string[] Offered = ["Deguffer.App/Views/SettingsPage.xaml", "Deguffer.App/Views/MapDetailSection.xaml"];
 
     private const string Words = "views:TreemapSpacingSetting";
 
