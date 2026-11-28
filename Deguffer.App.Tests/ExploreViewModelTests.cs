@@ -919,6 +919,7 @@ public sealed class ExploreViewModelTests : IDisposable
 
         builder.AddChildren(ExploreTreeBuilder.RootNode, [ExploreFixture.Folder("Users")]);
         page.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+        page.DrawingOptions.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
 
         void Changes(Action change, params string[] said)
         {
@@ -959,11 +960,21 @@ public sealed class ExploreViewModelTests : IDisposable
         Changes(() => page.MapInContrast = false, nameof(ExploreViewModel.ShowsLegend));
         Changes(
             () => page.SelectedView = ExploreView.Files,
-            nameof(ExploreViewModel.ShowsFileFilters), nameof(ExploreViewModel.ShowsLegend));
+            nameof(ExploreViewModel.ShowsFileFilters), nameof(ExploreViewModel.ShowsLegend),
+            nameof(ExploreDrawingOptions.ShowsAppearance), nameof(ExploreDrawingOptions.ColouringHint));
+        Assert.False(page.DrawingOptions.ShowsAppearance);
         Changes(() => page.SelectedColouring = ExploreColouring.Growth, nameof(ExploreViewModel.ShowsGrowth));
         Changes(
             () => page.SelectedColouring = ExploreColouring.Type,
-            nameof(ExploreViewModel.ShowsGrowth), nameof(ExploreViewModel.ShowsTypes));
+            nameof(ExploreViewModel.ShowsGrowth), nameof(ExploreViewModel.ShowsTypes), nameof(ExploreDrawingOptions.ShowsAppearance));
+        Assert.True(page.DrawingOptions.ShowsAppearance);
+        Changes(
+            () => page.Files.ListingIndex = 1,
+            nameof(ExploreDrawingOptions.ShowsAppearance), nameof(ExploreDrawingOptions.ColouringHint));
+        Assert.False(page.DrawingOptions.ShowsAppearance);
+        Changes(
+            () => page.Files.ListingIndex = 0,
+            nameof(ExploreDrawingOptions.ShowsAppearance), nameof(ExploreDrawingOptions.ColouringHint));
         Changes(
             () => page.Look = MapLook.Default with { Treemap = ExploreScheme.Deep },
             nameof(ExploreViewModel.SelectedScheme), nameof(ExploreViewModel.ShowsLegend));
@@ -1274,6 +1285,8 @@ public sealed class ExploreViewModelTests : IDisposable
         Assert.Equal(display.ShowsTypes, page.ShowsTypes);
         Assert.Equal(display.ShowsShortcutFolders, page.ShowsShortcutFolders);
         Assert.Equal(display.ShowsShortcutFolders, page.ShortcutFolders.IsActive);
+        Assert.Equal(display.ShowsAppearance, page.DrawingOptions.ShowsAppearance);
+        Assert.Equal(display.ColouringHint, page.DrawingOptions.ColouringHint);
         Assert.Equal(display.Zooms, page.ShowsMapControls);
         Assert.Equal(display.Note, page.ViewNote);
         Assert.Equal(display.Scheme, page.SelectedScheme);

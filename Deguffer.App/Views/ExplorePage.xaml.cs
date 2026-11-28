@@ -61,10 +61,10 @@ public sealed partial class ExplorePage : Page
     /// <summary>Whether the reader put the notes away. See <see cref="ShowNotesDismissed"/>.</summary>
     private readonly DrawnSetting<bool> _notesDismissed;
 
-    /// <summary>The picture the page draws, chosen in the View box.</summary>
+    /// <summary>The picture the page draws, chosen in the view switch.</summary>
     private readonly DrawnSetting<ExploreView> _view;
 
-    /// <summary>What the map's colours say, chosen in the Colour box.</summary>
+    /// <summary>What the map's colours say, chosen in the Colour by box.</summary>
     private readonly DrawnSetting<ExploreColouring> _colouring;
 
     public ExplorePage()
@@ -127,6 +127,9 @@ public sealed partial class ExplorePage : Page
         FollowRows();
 
         InitializeComponent();
+
+        DrawingChoice.ViewChosen += (_, view) => _view.Choose(view);
+        DrawingChoice.ColouringChosen += (_, colouring) => _colouring.Choose(colouring);
 
         // A row's share bar comes in from nothing as the row itself arrives. Never as a row only
         // scrolls into sight.
@@ -245,7 +248,7 @@ public sealed partial class ExplorePage : Page
             ShowCurrentNode();
         };
 
-        // A preset whose colours are part of its look moves the Colour box, which applies and writes
+        // A preset whose colours are part of its look moves the Colour by box, which applies and writes
         // the colouring as a choice made in it does.
         _appearance.ColouringChosen += (_, colouring) => ColourAs(colouring);
 
@@ -265,26 +268,15 @@ public sealed partial class ExplorePage : Page
     public ExploreViewModel ViewModel { get; }
 
     /// <summary>
-    /// Open the appearance window, or bring it forward where it is already open.
-    ///
-    /// <para>Its own window rather than a dialog on this page, because the reader has to see the map
-    /// change as they choose: a dialog covers the page it belongs to. See
-    /// <see cref="MapAppearanceWindow"/>.</para>
-    /// </summary>
-    private void OnAppearanceClicked(object sender, RoutedEventArgs e) => App.ShowMapAppearance();
-
-    /// <summary>
     /// Draw the page in <paramref name="view"/>, one of <see cref="ExploreChoice.Views"/>, and leave
-    /// the selector agreeing with what is on screen.
+    /// the view switch agreeing with what is on screen.
     ///
-    /// Safe to call from the selector's own change handler: the first call moves the index off -1
-    /// and re-enters that handler once, which lands back here with the index it now holds, and
-    /// assigning an unchanged index raises nothing further.
+    /// Safe to call as the switch says a view was chosen: see <see cref="ExploreDrawingChoice.Show(ExploreView)"/>.
     /// </summary>
     private void ShowAs(ExploreView view)
     {
         ViewModel.SelectedView = view;
-        ViewSelector.SelectedIndex = ExploreChoice.IndexOf(view);
+        DrawingChoice.Show(view);
 
         // Each picture keeps its own colours, so the appearance window's picker moves to speak for
         // the new one.
@@ -355,7 +347,7 @@ public sealed partial class ExplorePage : Page
     private void ColourAs(ExploreColouring colouring)
     {
         ViewModel.SelectedColouring = colouring;
-        ColourSelector.SelectedIndex = (int)colouring;
+        DrawingChoice.Show(colouring);
         _appearance.Colouring = colouring;
 
         ShowCurrentNode();
@@ -479,16 +471,6 @@ public sealed partial class ExplorePage : Page
         _ = (dismissed ? ShowNotes : DismissNotes).Focus(FocusState.Programmatic);
     }
 
-    private void OnViewSelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (ViewSelector.SelectedIndex is not (>= 0 and var index) || index >= ExploreChoice.Views.Count)
-        {
-            return;
-        }
-
-        _view.Choose(ExploreChoice.Views[index]);
-    }
-
     /// <summary>
     /// Read the volumes again as the picker opens, where the last reading has gone stale, so its
     /// space figures describe the disk now rather than when the page was first shown. See
@@ -530,9 +512,6 @@ public sealed partial class ExplorePage : Page
             Loaded += StartRequestedScan;
         }
     }
-
-    private void OnColourSelectionChanged(object sender, SelectionChangedEventArgs e) =>
-        _colouring.Choose((ExploreColouring)ColourSelector.SelectedIndex);
 
     /// <summary>Open the folder a row of the list of what grew names. See <see cref="ExploreViewModel.ShowFolder"/>.</summary>
     private void OnGrowthRowClicked(object sender, ItemClickEventArgs e)

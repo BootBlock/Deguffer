@@ -4,9 +4,9 @@ using Deguffer.Testing;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// What the Explore page opens on. What is asserted is that a stored value the page's View or Colour
-/// box cannot show is read as the default, because the page selects it in that box as it is built
-/// and an index past the box's items throws there.
+/// What the Explore page opens on. What is asserted is that a stored value the page's view switch or
+/// Colour by box cannot show is read as the default, because the page selects it there as it is built
+/// and an index past the items throws.
 /// </summary>
 public sealed class ExploreChoiceTests
 {
@@ -22,6 +22,23 @@ public sealed class ExploreChoiceTests
         var choice = ExploreChoice.From(Load($$"""{ "Explore": {{view}}, "ExploreColours": {{colouring}} }"""));
 
         Assert.Equal(new ExploreChoice(ExploreView.Treemap, ExploreColouring.Branch), choice);
+    }
+
+    /// <summary>
+    /// The Colour by box lists every colouring, each at its own place, and a number no member names
+    /// is placed where the branch is rather than past the box's items.
+    /// </summary>
+    [Fact]
+    public void EveryColouringHasAPlaceInTheBox()
+    {
+        Assert.Equal(Enum.GetValues<ExploreColouring>().Order(), ExploreChoice.Colourings.Order());
+
+        for (var i = 0; i < ExploreChoice.Colourings.Count; i++)
+        {
+            Assert.Equal(i, ExploreChoice.IndexOf(ExploreChoice.Colourings[i]));
+        }
+
+        Assert.Equal(0, ExploreChoice.IndexOf((ExploreColouring)9));
     }
 
     /// <summary>The tree is a view the Memory page offers and this page does not.</summary>

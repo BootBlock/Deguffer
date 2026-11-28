@@ -83,6 +83,43 @@ public sealed class ExploreDisplayTests
     }
 
     /// <summary>
+    /// The map appearance window is offered over each picture, scanned or not, and in a list only
+    /// while the panel of kinds of file is open beside it, whose swatches follow the look. Over any
+    /// other list its every change would be invisible.
+    /// </summary>
+    [Fact]
+    public void TheAppearanceWindowIsOfferedOnlyWhereTheLookIsOnScreen()
+    {
+        foreach (var colouring in Enum.GetValues<ExploreColouring>())
+        {
+            Assert.True(Display(Finished, ExploreView.Treemap, colouring).ShowsAppearance);
+            Assert.True(Display(null, ExploreView.Icicle, colouring).ShowsAppearance);
+            Assert.True(Display(Finished, ExploreView.Sunburst, colouring).ShowsAppearance);
+            Assert.Equal(colouring == ExploreColouring.Type, Display(Finished, ExploreView.List, colouring).ShowsAppearance);
+            Assert.Equal(colouring == ExploreColouring.Type, Display(Finished, ExploreView.Files, colouring).ShowsAppearance);
+            Assert.False(Display(null, ExploreView.List, colouring).ShowsAppearance);
+        }
+
+        Assert.False(Display(Finished, ExploreView.Files, ExploreColouring.Type, listing: FileListing.BrokenLinks).ShowsAppearance);
+    }
+
+    /// <summary>
+    /// The Colour by box says what it changes in the view on screen: the map's colours over a
+    /// picture, the panels it opens in a list, and nothing while the broken links are listed.
+    /// </summary>
+    [Fact]
+    public void TheColouringHintSaysWhatTheBoxChangesInTheViewOnScreen()
+    {
+        Assert.Equal("What the colours on the map say.", Display(null, ExploreView.Treemap, ExploreColouring.Age).ColouringHint);
+        Assert.Contains("Growth and Type open a panel", Display(Finished, ExploreView.List, ExploreColouring.Branch).ColouringHint, StringComparison.Ordinal);
+        Assert.Contains("Growth and Type open a panel", Display(null, ExploreView.Files, ExploreColouring.Type).ColouringHint, StringComparison.Ordinal);
+        Assert.Contains(
+            "changes nothing here",
+            Display(Finished, ExploreView.Files, ExploreColouring.Growth, listing: FileListing.BrokenLinks).ColouringHint,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The largest files are searched for only in the Files layout, and kinds of file are measured
     /// only for a map coloured by type, before anything has been scanned as well as after, so each
     /// starts as the scan's first tree arrives.

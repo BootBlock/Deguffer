@@ -6,7 +6,7 @@
     xmlns:vm="using:Deguffer.App.ViewModels">
 
     <!-- A preset sets the shading, the lines, the colours' strength, the folders and the spacing at
-         once, and for a look whose colours are part of it, the page's Colour box as well. One row a
+         once, and for a look whose colours are part of it, the page's Colour by box as well. One row a
          preset, its name over what it looks like, so the whole list is read top to bottom without
          a grid of cards to scan across. -->
     <StackPanel Spacing="12">

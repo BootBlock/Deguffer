@@ -40,7 +40,7 @@ public sealed partial class ExploreNoteCard : ObservableObject
 
     public bool HasRouteNote => !string.IsNullOrEmpty(RouteNote);
 
-    /// <summary>Whether the page states how what is on screen differs from what the View box names.</summary>
+    /// <summary>Whether the page states how what is on screen differs from the view chosen.</summary>
     [ObservableProperty]
     public partial bool HasViewNote { get; internal set; }
 

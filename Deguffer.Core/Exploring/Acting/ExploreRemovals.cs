@@ -34,4 +34,19 @@ public static class ExploreRemovals
 
         return tree.Without(picked.Where(node => tree.TryPathOf(node) is { } path && gone.Contains(path)));
     }
+
+    /// <summary>
+    /// <paramref name="tree"/> without whatever of <paramref name="report"/>'s removals it holds, found
+    /// by path, or null where it holds none of them: a removal made by path rather than from a node,
+    /// such as one from a folder the scan never reached.
+    /// </summary>
+    public static ExploreTree? WithoutByPath(ExploreTree tree, ExploreRemovalReport report)
+    {
+        ArgumentNullException.ThrowIfNull(tree);
+        ArgumentNullException.ThrowIfNull(report);
+
+        int[] held = [.. report.Removed.Select(item => ExploreTreePaths.TryNodeAt(tree, item.Path)).OfType<int>()];
+
+        return held.Length > 0 ? Without(tree, held, report) : null;
+    }
 }

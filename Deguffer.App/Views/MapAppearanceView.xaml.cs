@@ -90,7 +90,7 @@ public sealed partial class MapAppearanceView : UserControl
     private void OnLookChanged(object? sender, EventArgs e) => ShowPreview();
 
     /// <summary>
-    /// The page's View or Colour box moved, or a preset chose a colouring, so the scheme list and the
+    /// The page's view switch or Colour by box moved, or a preset chose a colouring, so the scheme list and the
     /// preview speak for another picture, or the preview is coloured another way.
     /// </summary>
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
